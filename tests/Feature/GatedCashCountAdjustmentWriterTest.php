@@ -7863,6 +7863,474 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
     }
 
+    public function test_source_insert_fence_blocks_direct_documents_and_allows_later_open_period(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl();
+        $actor = $f['approver'];
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $service->postMixedResolution($actor, $f['id'], $f['proposalIds'], $ids, self::EVIDENCE, $this->nowAt());
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+        $tables = ['invoices' => 'bill_date', 'payments' => 'payment_date', 'payment_refunds' => 'disbursed_on',
+            'treasury_accounts' => 'opening_on', 'treasury_postings' => 'effective_on'];
+        $rows = [];
+        foreach ($tables as $table => $date) {
+            $rows[$table] = array_diff_key((array) DB::table($table)->orderBy('id')->first(), ['id' => true]);
+            $this->assertSame('2026-11-25', substr((string) $rows[$table][$date], 0, 10));
+        }
+        $rows['invoices']['bill_number'] = 'QA-FENCED-INVOICE';
+        $rows['payments']['receipt_number'] = 'QA-FENCED-RECEIPT';
+        $rows['payments']['sync_uuid'] = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+        $rows['payment_refunds']['disbursement_reference'] = 'QA-FENCED-REFUND';
+        $rows['treasury_accounts']['code'] = 'QA-FENCED-ACCOUNT';
+        $rows['treasury_accounts']['opening_reference'] = 'QA-FENCED-OPEN';
+        $rows['treasury_postings']['evidence_reference'] = 'QA-FENCED-POST';
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(), array_keys($tables));
+        $before = $snapshot();
+        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+        $reject = function (string $table, array $row): void {
+            try {
+                DB::table($table)->insert($row);
+                $this->fail('Source insert unexpectedly accepted: '.$table);
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertTrue(str_contains($error->getMessage(), 'Financial source period is fenced')
+                    || str_contains($error->getMessage(), 'Financial source replacement is fenced'), $error->getMessage());
+            }
+        };
+        foreach ($rows as $table => $row) {
+            $reject($table, $row);
+            $reject($table, array_replace($row, [$tables[$table] => '2026-12-01']));
+        }
+        $this->assertEquals($before, $snapshot());
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        foreach ($rows as $table => $row) $reject($table, $row);
+        $this->assertEquals($before, $snapshot());
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $subscriber = Subscriber::query()->findOrFail($rows['payments']['subscriber_id']);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.30',
+            'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', $later)['payment'];
+        $this->assertSame('2026-12-02', $receipt->payment_date->toDateString());
+        $this->assertDatabaseHas('financial_posting_operations', ['operation_uuid' => 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            'effective_on' => '2026-12-02']);
+        $this->assertSame(1, DB::table('payment_refunds')->count());
+    }
+
+    public function test_source_mutation_fence_preserves_closed_documents_and_allows_later_collection(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl();
+        $actor = $f['approver'];
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $service->postMixedResolution($actor, $f['id'], $f['proposalIds'], $ids, self::EVIDENCE, $this->nowAt());
+        $protection = app(\App\Services\FinancialSourceInsertProtection::class);
+        $this->assertTrue($protection->active());
+        $tables = ['invoices' => 'bill_date', 'payments' => 'payment_date', 'payment_refunds' => 'disbursed_on',
+            'treasury_accounts' => 'opening_on', 'treasury_postings' => 'effective_on'];
+        $rows = [];
+        foreach ($tables as $table => $date) {
+            $rows[$table] = DB::table($table)->orderBy('id')->first();
+            $this->assertSame('2026-11-25', substr((string) $rows[$table]->$date, 0, 10));
+        }
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(), array_keys($tables));
+        $before = $snapshot();
+        $reject = function (callable $mutation): void {
+            try {
+                $mutation();
+                $this->fail('Fenced financial source mutation unexpectedly accepted');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial source mutation is fenced', $error->getMessage());
+            }
+        };
+        // Test only, on the freshly migrated disposable database: other
+        // BEFORE triggers may reject first on MySQL (creation order), whereas
+        // SQLite does not promise the same order. Isolate this fence without
+        // weakening the integrated later-collection control.
+        $competing = [];
+        if (DB::getDriverName() === 'sqlite') {
+            foreach (DB::table('sqlite_master')->where('type', 'trigger')->whereIn('tbl_name', array_keys($tables))->get() as $trigger) {
+                if (str_starts_with($trigger->name, 'fin_source_') ||
+                    ! preg_match('/\bBEFORE\s+(UPDATE|DELETE)\b/i', $trigger->sql)) continue;
+                $competing[$trigger->name] = $trigger->sql;
+            }
+        } else {
+            foreach (\App\Services\FinancialTriggerMetadata::query() as $trigger) {
+                if (str_starts_with($trigger->TRIGGER_NAME, 'fin_source_') ||
+                    ! isset($tables[$trigger->EVENT_OBJECT_TABLE]) || $trigger->ACTION_TIMING !== 'BEFORE' ||
+                    ! in_array($trigger->EVENT_MANIPULATION, ['UPDATE', 'DELETE'], true)) continue;
+                $competing[$trigger->TRIGGER_NAME] = "CREATE TRIGGER {$trigger->TRIGGER_NAME} BEFORE {$trigger->EVENT_MANIPULATION} ON {$trigger->EVENT_OBJECT_TABLE} FOR EACH ROW {$trigger->ACTION_STATEMENT}";
+            }
+        }
+        $this->assertNotEmpty($competing);
+        $isolated = function (callable $check) use ($competing, $protection): void {
+            foreach ($competing as $name => $sql) {
+                $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]+$/', $name);
+                DB::unprepared('DROP TRIGGER '.$name);
+            }
+            try {
+                $this->assertTrue($protection->active());
+                $check();
+            } finally {
+                foreach ($competing as $sql) DB::unprepared($sql);
+            }
+        };
+        $isolated(function () use ($tables, $rows, $reject, $before, $snapshot): void {
+            $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+            DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
+            DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+            foreach ($tables as $table => $date) {
+                $id = $rows[$table]->id;
+                $reject(fn () => DB::table($table)->where('id', $id)->update([$date => '2026-12-02']));
+                $reject(fn () => DB::table($table)->where('id', $id)->delete());
+            }
+            $this->assertEquals($before, $snapshot());
+            DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+            DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+            DB::table('financial_periods')->insert([
+                'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+                'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+            ]);
+            foreach ($tables as $table => $date) {
+                $id = $rows[$table]->id;
+                $reject(fn () => DB::table($table)->where('id', $id)->update([$date => '2026-12-02']));
+                $reject(fn () => DB::table($table)->where('id', $id)->delete());
+            }
+            $reject(fn () => DB::table('invoices')->where('id', $rows['invoices']->id)->update(['total_amount' => '999.00']));
+            $reject(fn () => DB::table('payments')->where('id', $rows['payments']->id)->update(['amount' => '999.00']));
+            foreach (['invoices', 'payments'] as $table) {
+                $reject(fn () => DB::table($table)->where('id', $rows[$table]->id)->update(['deleted_at' => '2026-12-02 08:30:00']));
+            }
+            $this->assertEquals($before, $snapshot());
+        });
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $subscriber = Subscriber::query()->findOrFail($rows['payments']->subscriber_id);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.30',
+            'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', $later)['payment'];
+        $this->assertSame('2026-12-02', $receipt->payment_date->toDateString());
+        $after = $snapshot();
+        $isolated(fn () => $reject(fn () => DB::table('payments')->where('id', $receipt->id)->update(['payment_date' => '2026-11-25'])));
+        $this->assertEquals($after, $snapshot());
+        DB::unprepared('DROP TRIGGER fin_source_payments_update');
+        $this->assertFalse($protection->active());
+        $protection->install();
+        $this->assertTrue($protection->active());
+    }
+
+    public function test_source_replacement_fence_and_treasury_opening_evidence(): void
+    {
+        [, , $account] = $this->fixture();
+        $table = DB::table('treasury_accounts');
+        $id = $account['id'];
+        $old = (array) DB::table('treasury_accounts')->where('id', $id)->sole();
+        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $reject = function (string $message, callable $write): void {
+            try {
+                $write();
+                $this->fail('Fenced opening evidence mutation unexpectedly accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString($message, $error->getMessage());
+            }
+        };
+        foreach (['opening_minor' => 9000, 'channel' => 'bank', 'opening_evidence' => 'Altered opening evidence',
+            'opened_by' => $this->actor()->id, 'created_at' => '2026-12-02 08:30:00'] as $field => $value) {
+            $reject('Treasury opening evidence is fenced', fn () => DB::table('treasury_accounts')->where('id', $id)->update([$field => $value]));
+        }
+        $this->assertEquals($old, (array) DB::table('treasury_accounts')->where('id', $id)->sole());
+        $open = array_replace(array_diff_key($old, ['id' => true]), [
+            'code' => 'QA-LATER-ACCOUNT', 'opening_reference' => 'QA-LATER-OPEN', 'opening_on' => '2026-12-02',
+        ]);
+        $openId = DB::table('treasury_accounts')->insertGetId($open);
+        $this->assertSame(1, DB::table('treasury_accounts')->where('id', $openId)->update(['name' => 'Later treasury display name']));
+        if (DB::getDriverName() === 'sqlite') {
+            $before = $table->orderBy('id')->get()->toArray();
+            $replace = function (array $row): void {
+                $columns = implode(', ', array_keys($row));
+                $params = implode(', ', array_fill(0, count($row), '?'));
+                DB::statement("INSERT OR REPLACE INTO treasury_accounts ({$columns}) VALUES ({$params})", array_values($row));
+            };
+            $this->assertSame(0, (int) DB::selectOne('PRAGMA recursive_triggers')->recursive_triggers);
+            $reject('Financial source replacement is fenced', fn () => $replace(array_replace($open, ['id' => $id])));
+            $reject('Financial source replacement is fenced', fn () => $replace(array_replace($open, ['code' => $old['code']])));
+            $reject('Financial source replacement is fenced', fn () => $replace(array_replace($open, ['opening_reference' => $old['opening_reference']])));
+            $reject('Financial source replacement is fenced', fn () => DB::statement('UPDATE OR REPLACE treasury_accounts SET code = ? WHERE id = ?', [$old['code'], $openId]));
+            $reject('Financial source replacement is fenced', fn () => DB::statement('UPDATE OR REPLACE treasury_accounts SET opening_reference = ? WHERE id = ?', [$old['opening_reference'], $openId]));
+            $this->assertEquals($before, DB::table('treasury_accounts')->orderBy('id')->get()->toArray());
+        }
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+    }
+
+    public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 20);
+        $authorizer = $this->actor();
+        $executor = $this->actor();
+        $service = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $this->authorizeHeld($authorizer, $executor, 15);
+        $firstId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $diagnostic = app(\App\Services\FinancialHeldLiabilityPeriodDiagnostic::class);
+        $inspect = fn (int $id) => DB::transaction(fn () => $diagnostic->inspect($id));
+        $first = $inspect($firstId);
+        $this->assertSame(15, $first['totals']['authorized_minor']);
+        $this->assertSame(15, $first['totals']['recorded_closing_pending_payout_minor']);
+        $this->assertSame(20, $first['totals']['recorded_closing_identified_minor']);
+        $this->assertSame(5, $first['totals']['recorded_closing_unidentified_minor']);
+        $this->assertSame(0, $first['totals']['paid_minor']);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $nextId = DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $this->assertTrue($service->cancelPayoutAuthorization($authorizer, self::OTHER, self::EVIDENCE,
+            '2026-12-02', $later)['created']);
+        $this->assertSame($first, $inspect($firstId));
+        $cancelled = $inspect((int) $nextId);
+        $this->assertSame(15, $cancelled['totals']['recorded_opening_pending_payout_minor']);
+        $this->assertSame(15, $cancelled['totals']['cancelled_authorization_minor']);
+        $this->assertSame(0, $cancelled['totals']['recorded_closing_pending_payout_minor']);
+        $this->assertSame(20, $cancelled['totals']['recorded_closing_identified_minor']);
+        $this->assertSame(0, $cancelled['totals']['paid_minor']);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $this->assertTrue($service->authorizePayout($authorizer, $executor, self::NEXT, 15,
+            'QA-DEC-AUTH', self::EVIDENCE, $uuid, '2026-12-02', $later)['created']);
+        $pay = fn () => $service->payout($executor, self::NEXT, 15, 'QA-DEC-PAYOUT', self::EVIDENCE,
+            $uuid, '2026-12-02', $later);
+        $this->assertTrue($pay()['created']);
+        $this->assertFalse($pay()['created']);
+        $this->assertSame($first, $inspect($firstId));
+        $second = $inspect((int) $nextId);
+        $this->assertSame(15, $second['totals']['recorded_opening_pending_payout_minor']);
+        $this->assertSame(15, $second['totals']['authorized_minor']);
+        $this->assertSame(15, $second['totals']['cancelled_authorization_minor']);
+        $this->assertSame(15, $second['totals']['paid_minor']);
+        $this->assertSame(0, $second['totals']['recorded_closing_pending_payout_minor']);
+        $this->assertSame(5, $second['totals']['recorded_closing_identified_minor']);
+        $this->assertSame(5, $second['totals']['recorded_closing_unidentified_minor']);
+        $this->assertSame(15, $second['rows'][0]['owners'][0]['recorded_opening_pending_payout_minor']);
+        $this->assertSame(0, $second['rows'][0]['owners'][0]['recorded_closing_pending_payout_minor']);
+        $this->assertDatabaseCount('treasury_held_cash_payouts', 1);
+        $this->assertDatabaseHas('treasury_postings', ['treasury_account_id' => $account['id'],
+            'held_cash_payout_uuid' => $uuid, 'amount_minor' => -15, 'effective_on' => '2026-12-02']);
+        $this->assertFalse($second['closure_authorized']);
+    }
+
+    public function test_close_evidence_rejects_orphan_batch_approval_even_without_any_request(): void
+    {
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $this->gate(function () use ($actor, $service): void {
+            $this->assertSame(0, $service->verifyBatchAuditCoverage()['groups']);
+            app(\App\Services\AuditLogger::class)->recordRequired($service::BATCH_APPROVED, [
+                'entity_type' => 'completed_cash_refund_request', 'entity_id' => '999999',
+                'actor_user_id' => $actor->id, 'source' => 'internal',
+                'after' => ['count_id' => 999999, 'incident_count' => 1,
+                    'proposal_ids_json' => json_encode(['88888888-8888-4888-8888-888888888888' => 999999], JSON_THROW_ON_ERROR)],
+            ]);
+        });
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $this->assertSame(0, AuditEvent::query()->where('event', $service::EVENT)->count());
+        $this->rejects('completed_refund_batch_conflict', fn () => $this->gate(fn () => $service->verifyBatchAuditCoverage()));
+        $this->rejects('completed_refund_batch_conflict', fn () =>
+            app(\App\Services\FinancialCloseEvidenceDiagnostic::class)->inspect($actor, $periodId, $this->nowAt()));
+        $this->assertSame(1, AuditEvent::query()->where('event', $service::BATCH_APPROVED)->count());
+        $this->assertDatabaseCount('payment_refunds', 0);
+        $this->assertDatabaseCount('financial_close_commands', 0);
+    }
+
+    public function test_held_period_rollforward_preserves_prior_cutoff_and_owner_carry(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $firstId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $diagnostic = app(\App\Services\FinancialHeldLiabilityPeriodDiagnostic::class);
+        $inspect = fn (int $id) => DB::transaction(fn () => $diagnostic->inspect($id));
+        $first = $inspect($firstId);
+        $row = $first['rows'][0];
+        $this->assertSame($lot, $row['liability_id']);
+        $this->assertSame((int) $account['id'], $row['account_id']);
+        $this->assertSame(25, $row['recognized_minor']);
+        $this->assertSame(25, $row['assigned_minor']);
+        $this->assertSame(20, $row['credited_minor']);
+        $this->assertSame(0, $row['paid_minor']);
+        $this->assertSame(0, $row['recorded_opening_identified_minor']);
+        $this->assertSame(0, $row['recorded_closing_unidentified_minor']);
+        $this->assertSame(5, $row['recorded_closing_identified_minor']);
+        $this->assertSame([['assignment_uuid' => self::NEXT, 'subscriber_id' => (int) $subscriber->id,
+            'recorded_opening_minor' => 0, 'recorded_closing_minor' => 5,
+            'recorded_opening_pending_payout_minor' => 0, 'recorded_closing_pending_payout_minor' => 0]], $row['owners']);
+        $nextId = DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        app(\App\Services\TreasuryHeldCashLiabilityService::class)->credit($this->actor(), self::NEXT, 5,
+            'QA-NEXT-MONTH-CREDIT', self::EVIDENCE, '88888888-8888-4888-8888-888888888888', '2026-12-02', $later);
+        $tables = ['treasury_held_cash_liabilities', 'treasury_held_cash_assignments', 'treasury_held_cash_credits',
+            'transactions', 'treasury_postings', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $this->assertSame($first, $inspect($firstId));
+        $second = $inspect((int) $nextId);
+        $this->assertSame(5, $second['totals']['recorded_opening_identified_minor']);
+        $this->assertSame(0, $second['totals']['recognized_minor']);
+        $this->assertSame(0, $second['totals']['assigned_minor']);
+        $this->assertSame(5, $second['totals']['credited_minor']);
+        $this->assertSame(0, $second['totals']['recorded_closing_identified_minor']);
+        $this->assertSame(5, $second['rows'][0]['owners'][0]['recorded_opening_minor']);
+        $this->assertSame(0, $second['rows'][0]['owners'][0]['recorded_closing_minor']);
+        $this->assertTrue($second['registered_held_subledger_rollforward_verified']);
+        $this->assertFalse($second['independent_opening_verified']);
+        $this->assertFalse($second['all_liabilities_verified']);
+        $this->assertFalse($second['closure_authorized']);
+        $this->assertEquals($before, $snapshot());
+    }
+
+    public function test_period_movements_preserve_owner_gross_effects_and_do_not_invent_balances(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($issuer, [
+            'code' => 'QA-MOVEMENT-BANK', 'name' => 'Synthetic bank',
+            'channel' => 'bank', 'opening_on' => '2026-11-25', 'opening_amount' => '5.00',
+            'opening_reference' => 'QA-MOVEMENT-BANK-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '55555555-5555-4555-8555-555555555555', $this->nowAt())['account'];
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.30',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $destination = Subscriber::create(['name' => 'Synthetic movement recipient',
+            'square_id' => $subscriber->square_id, 'status' => 'active']);
+        app(\App\Services\GatedInvoiceTransferWriter::class)->transfer($reviewer, (int) $receipt->id,
+            (int) $destination->id, 'Independent documented transfer', self::EVIDENCE,
+            '77777777-7777-4777-8777-777777777777', $this->nowAt());
+        $tables = ['transactions', 'treasury_postings', 'financial_posting_operations', 'financial_posting_events',
+            'audit_events', 'financial_period_closures'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $inspect = fn () => $this->gate(fn (array $context) =>
+            app(\App\Services\FinancialPeriodMovementDiagnostic::class)->inspect($context['period_id']));
+        $result = $inspect();
+        $this->assertTrue($result['recorded_movements_verified']);
+        $this->assertFalse($result['opening_verified']);
+        $this->assertFalse($result['period_closing_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertFalse($result['liability_rollforward_verified']);
+        $rows = collect($result['rows'])->keyBy(fn ($row) => $row['sector'].':'.$row['key']);
+        $this->assertSame(50, $rows['subscriber:'.$subscriber->id]['incoming_minor']);
+        $this->assertSame(30, $rows['subscriber:'.$subscriber->id]['outgoing_minor']);
+        $this->assertSame(20, $rows['subscriber:'.$subscriber->id]['net_movement_minor']);
+        $this->assertSame(30, $rows['subscriber:'.$destination->id]['net_movement_minor']);
+        $this->assertSame(10000, $rows['cash:'.$account['id']]['recorded_opening_document_minor']);
+        $this->assertSame(25, $rows['cash:'.$account['id']]['net_movement_minor']);
+        $this->assertSame(500, $rows['bank:'.$bank['id']]['recorded_opening_document_minor']);
+        $this->assertSame(0, $rows['bank:'.$bank['id']]['net_movement_minor']);
+        $this->assertSame(-25, $rows['held_liability_effect:lot-'.$lot]['net_movement_minor']);
+        $this->assertSame(5, $rows['held_liability_effect:assignment-'.self::NEXT]['net_movement_minor']);
+        $this->assertSame(50, $result['sector_totals']['subscriber']['net_movement_minor']);
+        $this->assertSame(-20, $result['sector_totals']['held_liability_effect']['net_movement_minor']);
+        foreach ($result['rows'] as $row) {
+            $this->assertNull($row['opening_minor']);
+            $this->assertNull($row['closing_minor']);
+        }
+        $this->assertSame(DB::table('financial_posting_events')->count(), $result['registry_events']);
+        $this->assertSame($result, $inspect());
+        $this->assertEquals($before, $snapshot());
+    }
+
+    public function test_period_movements_with_missing_registry_source_publish_no_partial_totals(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, '0.30');
+        $entry = DB::table('transactions')->where('reference_type', Payment::class)
+            ->where('reference_id', $receipt->id)->sole();
+        $result = $this->gate(fn (array $context) =>
+            app(\App\Services\FinancialPeriodMovementDiagnostic::class)->inspect($context['period_id']));
+        $this->assertFalse($result['recorded_movements_verified']);
+        $this->assertSame([], $result['rows']);
+        $this->assertSame([], $result['sector_totals']);
+        $this->assertNull($result['movement_hash']);
+        $this->assertContains(['code' => 'required_registry_leg_missing_or_duplicate', 'source' => 'ledger_transaction',
+            'id' => $entry->id.':subscriber'], $result['source_issues']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseHas('payments', ['id' => $receipt->id]);
+    }
+
+    public function test_close_evidence_unresolved_cash_claims_remain_visible_until_signed_settlement(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'keys' => $keys, 'service' => $service] = $this->mixedAtomicControl();
+        $actor = $f['approver'];
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $tables = ['financial_scopes', 'financial_periods', 'financial_posting_operations', 'financial_posting_events',
+            'payment_refunds', 'transactions', 'treasury_postings', 'audit_events', 'financial_period_closures'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $result = $diagnostic->inspect($actor, $periodId, $this->nowAt());
+        $this->assertSame(0, $result['refund_batch_coverage']['groups']);
+        $this->assertSame(2, $result['refund_incidents']['count']);
+        $this->assertSame(10, $result['refund_incidents']['claimed_minor']);
+        $this->assertSame(0, $result['refund_incidents']['unposted_cash_refund_minor']);
+        $this->assertContains('unresolved_refund_incidents', $result['blockers']);
+        $this->assertContains('period_not_ended', $result['blockers']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame($result, $diagnostic->inspect($actor, $periodId, $this->nowAt()));
+        $service->postMixedResolution($actor, $f['id'], $f['proposalIds'], $ids, self::EVIDENCE, $this->nowAt());
+        $after = $snapshot();
+        $resolved = $diagnostic->inspect($actor, $periodId, $this->nowAt());
+        $this->assertSame(1, $resolved['refund_batch_coverage']['groups']);
+        $this->assertSame(2, $resolved['refund_batch_coverage']['members']);
+        $this->assertTrue($resolved['refund_batch_coverage']['batch_audits_verified']);
+        $this->assertSame(0, $resolved['refund_incidents']['count']);
+        $this->assertSame(0, $resolved['refund_incidents']['claimed_minor']);
+        $this->assertNotContains('unresolved_refund_incidents', $resolved['blockers']);
+        $this->assertFalse($resolved['source_coverage_verified']);
+        $this->assertFalse($resolved['closure_authorized']);
+        $this->assertEquals($after, $snapshot());
+    }
+
+    public function test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure(): void
+    {
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T08:00:00+03:00'));
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $result = $diagnostic->inspect($actor, $periodId, now()->toDateTimeImmutable());
+        $this->assertTrue($result['period_ended']);
+        $this->assertSame('2026-11-30', $result['settlement_through']);
+        $this->assertNull($result['current_subscriber_diagnostic']);
+        $this->assertNull($result['snapshot_continuity']);
+        $this->assertContains('independent_opening_source_unverified', $result['blockers']);
+        $this->assertContains('period_end_balances_unverified', $result['blockers']);
+        $this->assertContains('complete_writer_coverage_unverified', $result['blockers']);
+        $this->assertFalse($result['period_end_balances_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseCount('financial_close_commands', 0);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+        $this->rejects('close_evidence_requires_outer_gate', fn () => DB::transaction(fn () =>
+            $diagnostic->inspect($actor, $periodId, now()->toDateTimeImmutable())));
+    }
+
     public function test_round140_registered_documents_match_both_directions_without_authorizing_close(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
@@ -7941,13 +8409,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $reviewer = $this->actor();
         $receipt = app(PaymentService::class)->collectPayment($subscriber, '10.00');
         $entry = DB::table('transactions')->where('reference_type', Payment::class)->where('reference_id', $receipt->id)->sole();
+        // Create the deliberately legacy synthetic refund before registering its receipt.
+        // Once registered, the ordinary refund path must reject; do not weaken that guard.
+        $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $reviewer, '1.00',
+            'QA-R140-REFUND', 'treasury_cash', '2026-11-25', 'Independent documented excess credit refund', self::EVIDENCE);
+        $posting = app(TreasuryRegisterService::class)->post($reviewer, (int) $account['id'], 'payment_refund', (int) $refund->id);
         app(FinancialWriteGate::class)->withinOpenPeriod('water', '2026-11-24', $this->nowAt(), function (array $context) use ($entry): void {
             $leg = app(\App\Services\FinancialLedgerEvidence::class)->leg((int) $entry->id);
             $this->assertTrue(app(FinancialPostingRegistry::class)->record($context, '66666666-6666-4666-8666-666666666666', [$leg], $this->nowAt()));
         });
-        $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $reviewer, '1.00',
-            'QA-R140-REFUND', 'treasury_cash', '2026-11-25', 'Independent documented excess credit refund', self::EVIDENCE);
-        $posting = app(TreasuryRegisterService::class)->post($reviewer, (int) $account['id'], 'payment_refund', (int) $refund->id);
         $refundEntry = DB::table('transactions')->where('reference_type', \App\Models\PaymentRefund::class)->where('reference_id', $refund->id)->sole();
         $this->gate(function (array $context) use ($refundEntry, $posting): void {
             $registry = app(FinancialPostingRegistry::class);
