@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify concurrency and focused actor-deletion test retry at 366ac1bab049bb891b8472888a6026748668ffca exact CI; then mixed classifications and refreshed evidence, all-writer protection, closure, Flutter and production.",
+  "next": "Verify mixed readiness candidate 47a2bb1b0d35639589ecd2d6d74afd028f9e8ff2 exact CI; then claim-specific evidence, atomic mixed settlement, refreshed aggregate evidence, all-writer protection, closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2789,7 +2789,7 @@
     ]
   },
   "release_refund_incident_batch_controls": {
-    "status": "TARGETED_SQLITE_PASS_MYSQL_ASSERTION_FAILURE",
+    "status": "TARGETED_BOTH_ENGINES_PASS_WITH_FOCUSED_MYSQL_RETRY",
     "base": "71e484f8feaf2d573bc65217d49efb9899fd0889",
     "branch": "release/prospective-refund-incident-batch-controls",
     "source": "6c10d1f265cdaca2f27e9d70a99b9bf31ffdbb4c",
@@ -2814,17 +2814,38 @@
         "exit": 1
       }
     ],
-    "finding": "MySQL cumulative receipt rollback passed. Actor deletion was correctly rejected by preexisting identity guard (User identity cannot be deleted), but the test incorrectly required the batch-specific audit guard message. Remaining replay assertions not reached. No product failure established."
+    "finding": "MySQL cumulative receipt rollback passed. Actor deletion was correctly rejected by preexisting identity guard (User identity cannot be deleted), but the test incorrectly required the batch-specific audit guard message. Remaining replay assertions not reached. No product failure established.",
+    "retry_source": "366ac1bab049bb891b8472888a6026748668ffca",
+    "retry_run": 45748409501
   },
   "release_refund_incident_batch_concurrency": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_MYSQL_PASS",
     "base": "6c10d1f265cdaca2f27e9d70a99b9bf31ffdbb4c",
     "branch": "release/prospective-refund-incident-batch-concurrency",
     "initial_source": "a5e2eb6ca521032572f3600a09dab20da0678d0e",
     "initial_run": 45748363652,
     "source": "366ac1bab049bb891b8472888a6026748668ffca",
     "scope": "Test-only: two genuine concurrent MySQL batch settlements, same reviewer retry and competing reviewers. Three distinct connections; verify actual lock contention before releasing coordinator; exact four legs, one group approval, correct balances and zero unresolved claims. Correct affected immutable audit test: only actor deletion accepts existing exact identity guard diagnostic, assert batch protection active and actor remains; all audit mutations still require original guard message. Focused MySQL retry plus two races.",
-    "limits": "CI not yet verified; no product changes. SQLite prior tests passed; mixed classifications, refreshed aggregate evidence, broader entrypoint and closure, Flutter and deployment remain open.",
-    "next": "Verify final exact SHA CI, preserve accepted cumulative limit rollback; then mixed classification settlement and remaining entrypoint protection."
+    "limits": "Exact MySQL logs verified for both races and corrected immutable evidence test; no product changes. SQLite prior tests passed; mixed classifications, refreshed aggregate evidence, broader entrypoint and closure, Flutter and deployment remain open.",
+    "next": "Verify final exact SHA CI, preserve accepted cumulative limit rollback; then mixed classification settlement and remaining entrypoint protection.",
+    "run": 45748409501,
+    "jobs": [
+      {
+        "engine": "mysql",
+        "id": 139669987009,
+        "tests": 3,
+        "assertions": 114,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_mixed_readiness": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "366ac1bab049bb891b8472888a6026748668ffca",
+    "branch": "release/prospective-refund-incident-mixed-readiness",
+    "source": "47a2bb1b0d35639589ecd2d6d74afd028f9e8ff2",
+    "scope": "Internal read-only mixed and zero-posting group review; separate claimed total from posting-required total; validate exact current proposals, independent reviewer, common accepted current count, aggregate shortage equal only to posting-required subtotal; zero projected financial delta for other classifications. Explicitly not authorization, not evidence of individual nonposting facts and not closure. Existing operative all-posting path remains restricted. Three new cases and one affected batch posting regression per engine.",
+    "limits": "CI unverified. Cash-count equality alone cannot establish individual non-disbursement or returned cash. Need independently verifiable claim-specific evidence, then atomic mixed execution, aggregate revision handling, remaining entrypoint/direct-write protection, closure, Flutter and production.",
+    "next": "Verify exact CI; design claim-specific evidence with verifiable source identity and independent review, avoid treating classification or aggregate arithmetic as proof; only then authorize mixed group execution."
   }
 }
