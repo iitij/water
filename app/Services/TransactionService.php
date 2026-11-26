@@ -112,17 +112,23 @@ class TransactionService
         ?string $description = null,
         ?Model $reference = null,
         ?\App\Models\Meter $meter = null,
-        ?GatedInvoiceTransferWriter $invoiceWriter = null
+        ?GatedInvoiceTransferWriter $invoiceWriter = null,
+        ?PaymentService $receiptService = null
     ): Transaction {
         $amount = FinancialAmount::validated($amount, 'transaction')->decimal();
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter, $invoiceWriter) {
-            if ($reference instanceof Invoice || in_array($type, ['invoice', 'invoice_reversal'], true)) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter, $invoiceWriter, $receiptService) {
+            if ($reference instanceof Invoice || in_array($type, ['invoice', 'invoice_reversal', 'payment'], true)) {
                 if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Financial issuance lock is missing.');
                 }
             }
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             $reference = $this->validateDocument($subscriber, $type, $amount, $reference, $meter);
+            if ($reference instanceof Payment && $type === 'payment') {
+                Transaction::assertReceiptPostingService($reference, $receiptService);
+            } elseif ($receiptService !== null) {
+                throw new \DomainException('gated_receipt_ledger_writer_required');
+            }
             if ($reference instanceof Invoice) {
                 Transaction::assertInvoicePostingWriter($reference, $type, $invoiceWriter);
             } elseif ($invoiceWriter !== null) {
@@ -164,7 +170,7 @@ class TransactionService
             if ($reference instanceof Invoice || $reference instanceof Payment) {
                 $transaction->forceFill(['retired_meter_id' => $reference->retired_meter_id, 'retired_meter_code' => $reference->retired_meter_code]);
             }
-            if (! $transaction->save(['financial_invoice_writer' => $invoiceWriter]) || ! $transaction->exists || $transaction->getKey() === null) {
+            if (! $transaction->save(['financial_invoice_writer' => $invoiceWriter, 'financial_receipt_service' => $receiptService]) || ! $transaction->exists || $transaction->getKey() === null) {
                 throw new \RuntimeException('Ledger posting was not persisted.');
             }
 
