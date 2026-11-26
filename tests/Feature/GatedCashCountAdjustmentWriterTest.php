@@ -1236,6 +1236,88 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_credits', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+    public function test_release_completed_refund_lifecycle_preserves_rejected_and_withdrawn_incidents(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $requester = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic lifecycle tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-REFUND-LIFECYCLE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\GatedInvoiceTransferWriter::class)->issue($issuer, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt());
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $id = (int) $account['id'];
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $release = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '77777777-7777-4777-8777-777777777777';
+        $release->propose($issuer, $id, (int) $credit->id, 10, $proposal, 'QA-LIFECYCLE-RELEASE', self::EVIDENCE, $this->nowAt());
+        config(['financial_candidate.active_held_release' => true, 'financial_candidate.completed_cash_refund' => true]);
+        $release->recordActiveRelease($reviewer, $id, $proposal, '88888888-8888-4888-8888-888888888888', self::EVIDENCE, $this->nowAt());
+        $other = Subscriber::create(['name' => 'Synthetic lifecycle refund recipient', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $other->id, '1.00',
+            '99999999-9999-4999-8999-999999999999', $this->nowAt())['payment'];
+        $submit = '/api/payments/'.$receipt->id.'/completed-cash-refund-requests';
+        $root = '/api/completed-cash-refund-requests/';
+        $data = ['account_id' => $id, 'amount' => '0.06', 'reference' => 'QA-LIFECYCLE-1', 'date' => '2026-11-25',
+            'reason' => 'Independent evidence of completed cash disbursement', 'evidence' => self::EVIDENCE,
+            'operation_uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'disbursement_confirmed' => true];
+        $first = $data['operation_uuid'];
+        $second = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $third = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+        $reason = 'The evidence needs independent further reconciliation';
+        $confirm = 'Independent signed confirmation of cash already received';
+        $snapshot = fn ($table) => DB::table($table)->orderBy('id')->get()->toArray();
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'payment_allocations', 'payment_allocation_revisions'];
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        \Laravel\Sanctum\Sanctum::actingAs($requester);
+        $this->postJson($submit, $data)->assertOk()->assertJsonPath('status', 'pending');
+        $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])->assertConflict();
+        \Laravel\Sanctum\Sanctum::actingAs($issuer);
+        $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])->assertConflict();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($root.$first.'/close', ['decision' => 'withdrawn', 'reason' => $reason])->assertConflict();
+        $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])
+            ->assertOk()->assertJsonPath('created', true)->assertJsonPath('status', 'rejected')->assertJsonPath('incident_unresolved', true);
+        $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])->assertOk()->assertJsonPath('created', false);
+        $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason.' changed'])->assertConflict();
+        $this->postJson($root.$first.'/approve', ['confirmation' => $confirm])->assertConflict();
+        $this->getJson($root.$first)->assertOk()->assertJsonPath('status', 'rejected')
+            ->assertJsonPath('operation_exists', false)->assertJsonPath('incident_unresolved', true);
+        \Laravel\Sanctum\Sanctum::actingAs($requester);
+        $this->postJson($submit, $data)->assertOk()->assertJsonPath('created', false)->assertJsonPath('status', 'rejected');
+        $this->postJson($submit, array_replace($data, ['operation_uuid' => $second]))->assertConflict();
+        $this->postJson($submit, array_replace($data, ['operation_uuid' => $second, 'reference' => 'QA-LIFECYCLE-2']))->assertOk();
+        $this->postJson($root.$second.'/close', ['decision' => 'withdrawn', 'reason' => $reason])
+            ->assertOk()->assertJsonPath('status', 'withdrawn')->assertJsonPath('incident_unresolved', true);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($root.$second.'/approve', ['confirmation' => $confirm])->assertConflict();
+        foreach ($before as $table => $rows) $this->assertEquals($rows, $snapshot($table), $table);
+        $this->assertSame(2, AuditEvent::query()->where('event', 'financial.completed_cash_refund_closed')->count());
+        $closed = DB::table('audit_events')->where('event', 'financial.completed_cash_refund_closed')->where('entity_id', $first)->sole();
+        foreach ([fn () => DB::table('audit_events')->where('id', $closed->id)->delete(),
+            fn () => DB::table('audit_events')->where('id', $closed->id)->update(['after' => '{}'])] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Closed request evidence was mutable.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial approval audit is immutable or invalid', $error->getMessage());
+            }
+        }
+        \Laravel\Sanctum\Sanctum::actingAs($requester);
+        $this->postJson($submit, array_replace($data, ['operation_uuid' => $third, 'reference' => 'QA-LIFECYCLE-3']))->assertOk();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($root.$third.'/approve', ['confirmation' => $confirm])->assertOk()->assertJsonPath('registry_created', true);
+        $this->postJson($root.$third.'/close', ['decision' => 'rejected', 'reason' => $reason])->assertConflict();
+        $this->getJson($root.$third)->assertOk()->assertJsonPath('status', 'posting_recorded_unverified')
+            ->assertJsonPath('operation_exists', true)->assertJsonPath('completion_verified', false);
+        $this->assertDatabaseCount('payment_refunds', 1);
+    }
+
     public function test_release_completed_cash_refund_preserves_factual_deficit_and_exact_identity(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();

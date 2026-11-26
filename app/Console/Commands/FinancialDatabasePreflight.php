@@ -52,6 +52,7 @@ final class FinancialDatabasePreflight extends Command
                 'held_active_release' => fn () => app(\App\Services\ActiveHeldCashRelease::class)->protectionActive(),
                 'financial_approval_audit' => fn () => app(\App\Services\FinancialApprovalAuditProtection::class)->active(),
                 'completed_refund_request' => fn () => app(\App\Services\CompletedCashRefundRequestProtection::class)->active(),
+                'completed_refund_decision' => fn () => app(\App\Services\CompletedCashRefundDecisionProtection::class)->active(),
                 'correction_documents' => fn () => app(FinancialCorrectionDocumentProtection::class)->active(),
                 'registered_documents' => fn () => app(RegisteredDocumentProtection::class)->active(),
                 'invoice_projection' => fn () => app(InvoiceProjectionProtection::class)->active(),
