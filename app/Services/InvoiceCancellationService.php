@@ -54,14 +54,14 @@ final class InvoiceCancellationService
                 'reading_ids' => $readings->modelKeys(),
                 'readings' => $readings->toArray(),
             ];
-            app(TransactionService::class)->reverseDocument($subscriber, $invoice, 'invoice');
+            app(TransactionService::class)->reverseDocument($subscriber, $invoice, 'invoice', $gatedWriter);
             $invoice->forceFill([
                 'status' => 'cancelled',
                 'voided_at' => now(),
                 'void_reason' => $reason,
                 'voided_by' => $actorId,
                 'amount_paid' => 0,
-            ])->saveQuietly();
+            ])->saveQuietly(['financial_invoice_writer' => $gatedWriter]);
 
             // Original payment references remain intact. Allocation ignores
             // cancelled invoices, freeing credit for other invoices or future use.
