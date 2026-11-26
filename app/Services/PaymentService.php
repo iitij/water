@@ -69,6 +69,7 @@ class PaymentService
             }
             // Shadow evidence and invoice allocations commit or roll back together.
             app(HeldCashShadowReinstatement::class)->synchronize($subscriber, $revisionId, $createdRevision);
+            app(ActiveHeldCashRelease::class)->afterAllocation($subscriber, $revisionId, $createdRevision);
         });
     }
 

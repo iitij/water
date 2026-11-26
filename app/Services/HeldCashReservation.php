@@ -28,7 +28,7 @@ final class HeldCashReservation
         if ($account->channel !== 'cash') return;
 
         $held = $this->protectedForAccount($accountId);
-        if ($held === 0) return;
+        if ($held === 0 && ! app(ActiveHeldCashRelease::class)->hasAccount($accountId)) return;
 
         $pending = $this->unpostedCashRefundMinor($postingRefundId, $minor);
         $balance = app(HeldCashRecordedLiquidityEvidence::class)->balance($accountId, $date);
@@ -101,6 +101,14 @@ final class HeldCashReservation
     }
 
     public function protectedForAccount(int $accountId): int
+    {
+        $full = $this->conservativeProtectedForAccount($accountId);
+        $released = app(ActiveHeldCashRelease::class)->amount($accountId);
+        if ($released < 0 || $released > $full) throw new DomainException('active_held_release_evidence');
+        return SignedMinor::subtract($full, $released);
+    }
+
+    public function conservativeProtectedForAccount(int $accountId): int
     {
         return SignedMinor::add(SignedMinor::add($this->outstandingForAccount($accountId), $this->subscriberCreditReserveForAccount($accountId)),
             app(HandoverSurplusReservation::class)->forAccount($accountId));

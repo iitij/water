@@ -1,7 +1,7 @@
-name: Prospective mixed reserve liquidity
+name: Prospective active held release candidate
 on:
   push:
-    branches: ['release/prospective-mixed-reserve-liquidity']
+    branches: ['release/prospective-active-held-release']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify mixed reserve and shadow liquidity
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_mixed_reserve_|test_release_preview_distinguishes_applied_credit_from_authorized_cash|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending|test_release_policy_restores_per_credit_and_never_nets_unrelated_allocations' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify active release and optional reinstatement liquidity
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_active_reserve_|test_release_mixed_reserve_|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify mixed reserve and shadow liquidity
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_mixed_reserve_|test_release_preview_distinguishes_applied_credit_from_authorized_cash|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending|test_release_policy_restores_per_credit_and_never_nets_unrelated_allocations' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify active release and optional reinstatement liquidity
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_active_reserve_|test_release_mixed_reserve_|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending' tests/Feature/GatedCashCountAdjustmentWriterTest.php

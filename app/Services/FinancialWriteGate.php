@@ -17,6 +17,17 @@ use Illuminate\Support\Facades\DB;
  */
 final class FinancialWriteGate
 {
+    private static ?array $current = null;
+
+    public static function currentContext(): array
+    {
+        if (self::$current === null || DB::transactionLevel() <= 0
+            || self::$current['pdo'] !== spl_object_id(DB::connection()->getPdo())) {
+            throw new DomainException('active_held_release_requires_gate');
+        }
+        return self::$current['context'];
+    }
+
     public function __construct(private readonly FinancialClosePolicy $policy)
     {
     }
@@ -66,8 +77,15 @@ final class FinancialWriteGate
                 throw new DomainException('invalid_financial_destination');
             }
 
-            return $writer(['period_id' => $id, 'scope' => $scope, 'effective_on' => $effectiveOn,
-                'epoch' => $epoch, 'version' => $version]);
+            $context = ['period_id' => $id, 'scope' => $scope, 'effective_on' => $effectiveOn,
+                'epoch' => $epoch, 'version' => $version];
+            if (self::$current !== null) throw new DomainException('financial_gate_context_conflict');
+            self::$current = ['context' => $context, 'pdo' => spl_object_id(DB::connection()->getPdo())];
+            try {
+                return $writer($context);
+            } finally {
+                self::$current = null;
+            }
         }, 1);
     }
 

@@ -1236,6 +1236,62 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_credits', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+    public function test_release_active_reserve_rejects_optional_cancellation_after_cash_spent(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic active reserve tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-ACTIVE-RESERVE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoiceWriter = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $invoice = $invoiceWriter->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $id = (int) $account['id'];
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $service = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '77777777-7777-4777-8777-777777777777';
+        $service->propose($actor, $id, (int) $credit->id, 10, $proposal, 'QA-ACTIVE-RELEASE', self::EVIDENCE, $this->nowAt());
+        $activate = fn () => $service->recordActiveRelease($reviewer, $id, $proposal,
+            '88888888-8888-4888-8888-888888888888', self::EVIDENCE, $this->nowAt());
+        $this->rejects('active_held_release_disabled', $activate);
+        config(['financial_candidate.active_held_release' => true]);
+        $postings = DB::table('treasury_postings')->get()->toArray();
+        $this->assertTrue($activate()['active_release_recorded']);
+        $this->assertEquals($postings, DB::table('treasury_postings')->get()->toArray());
+        $reserve = app(\App\Services\HeldCashReservation::class);
+        $this->assertSame(15, $this->gate(fn () => $reserve->protectedForAccount($id)));
+        config(['financial_candidate.active_held_release' => false]);
+        $this->assertSame(15, $this->gate(fn () => $reserve->protectedForAccount($id)));
+        $this->rejects('active_held_release_requires_gate', fn () => DB::transaction(fn () => $reserve->protectedForAccount($id)));
+        $date = '2026-11-25';
+        $destination = app(GatedTreasuryOpeningFundingWriter::class)->open($reviewer, [
+            'code' => 'QA-ACTIVE-DEST', 'name' => 'Synthetic active reserve destination', 'channel' => 'cash',
+            'opening_on' => $date, 'opening_amount' => '1.00',
+            'opening_reference' => 'QA-ACTIVE-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '99999999-9999-4999-8999-999999999999', $this->nowAt())['account'];
+        $transfer = app(\App\Services\GatedTreasuryTransferWriter::class);
+        $data = ['from_account_id' => $id, 'to_account_id' => (int) $destination['id'], 'amount' => '100.10',
+            'reference' => 'QA-ACTIVE-DISPATCH', 'dispatched_on' => $date, 'evidence' => self::EVIDENCE];
+        $this->rejects('held_cash_reserved', fn () => $transfer->dispatch($actor, array_replace($data, ['amount' => '100.11']),
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $this->nowAt()));
+        $this->assertTrue($transfer->dispatch($actor, $data, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $this->nowAt())['registry_created']);
+        $tables = ['invoices', 'transactions', 'payment_allocation_revisions', 'payment_allocations',
+            'held_cash_shadow_reinstatements', 'held_cash_active_releases', 'financial_posting_events',
+            'financial_posting_operations', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        $this->rejects('active_held_release_reinstatement_liquidity', fn () => $invoiceWriter->cancel($actor, (int) $invoice->id,
+            'Independent documented cancellation', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', $this->nowAt()));
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertNotSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame(15, $this->gate(fn () => $reserve->protectedForAccount($id)));
+    }
+
     public function test_release_mixed_reserve_keeps_handover_cash_protected_and_reports_shadow_liquidity(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
