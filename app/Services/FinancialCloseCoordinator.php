@@ -49,6 +49,7 @@ final class FinancialCloseCoordinator
             $this->need(app(FinancialCloseJournalProtection::class)->active(), 'close_journal_protection_missing');
             $this->need(app(FinancialPostingRegistryProtection::class)->active(), 'close_registry_protection_missing');
             $this->need(app(FinancialSourceInsertProtection::class)->active(), 'close_source_insert_protection_missing');
+            $this->need(app(LedgerProtection::class)->active(), 'close_ledger_protection_missing');
             $epoch = $this->counter($gate->fence_epoch);
             $base = $this->policy->open($scope, $month, $gate->timezone);
             $period = DB::table('financial_periods')->where('scope_key', $scope)
