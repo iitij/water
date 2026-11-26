@@ -1,4 +1,4 @@
-name: Financial approved custody period evidence
+name: Financial pending custody funding evidence
 on:
   pull_request:
     branches: ['main']
@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-approved-custody'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-pending-funding'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -43,7 +43,7 @@ jobs:
         run: |
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_approved_custody_period_|test_custody_period_funding_and_handover_|test_round137_handover_|test_release_shortage_handover_|test_release_surplus_handover_|test_round141_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-approved-custody'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-pending-funding'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:

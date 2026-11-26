@@ -9269,7 +9269,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             ->inspect($reviewer, $id, now()->toDateTimeImmutable());
         $november = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
         $nov = $inspect($november);
+        $funding = $nov['approved_counted_custody_period']['unapproved_at_closing'][0]['funding'];
+        $this->assertSame(self::OTHER, $funding['operation_uuid']);
+        $this->assertSame(425, $funding['funded_minor']);
+        $this->assertSame((string) $account['id'], $funding['account_id']);
+        $this->assertSame('2026-11-25', $funding['issued_on']);
         $expected = [['session_id' => (string) $closed->id, 'collector_id' => (string) $closed->user_id,
+            'funding' => $funding, 'funding_issue' => null,
             'closed_at_cutoff' => true]];
         $this->assertSame($expected, $nov['approved_counted_custody_period']['unapproved_at_closing']);
         $this->assertContains('collector_custody_outside_approved_counts', $nov['blockers']);
@@ -9282,6 +9288,24 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame([], $dec['unapproved_at_closing']);
         $this->assertSame(425, $dec['totals']['approved_minor']);
         $this->assertSame(425, $dec['totals']['closing_minor']);
+    }
+
+    public function test_approved_custody_period_flags_pending_funding_without_registry(): void
+    {
+        [$issuer, $reviewer, $account] = $this->fixture();
+        $session = app(CashSessionService::class)->openFunded($this->actor(), $issuer, (int) $account['id'],
+            '2.75', 'QA-PENDING-UNREGISTERED', self::EVIDENCE);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-30T21:00:00Z'));
+        $id = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $result = app(\App\Services\FinancialCloseEvidenceDiagnostic::class)
+            ->inspect($reviewer, $id, now()->toDateTimeImmutable());
+        $item = $result['approved_counted_custody_period']['unapproved_at_closing'][0];
+        $this->assertSame((string) $session->id, $item['session_id']);
+        $this->assertFalse($item['closed_at_cutoff']);
+        $this->assertNull($item['funding']);
+        $this->assertSame('gated_handover_prerequisite_unregistered', $item['funding_issue']);
+        $this->assertContains('collector_custody_outside_approved_counts', $result['blockers']);
     }
 
     public function test_approved_custody_period_detects_an_orphan_physical_approval(): void

@@ -76,17 +76,31 @@ final class FinancialApprovedCustodyPeriodDiagnostic
     /** Reconstruct approval status at the cutoff even after a later decision. */
     private function unapprovedAt(string $cutoffUtc, string $localDate): array
     {
-        $sessions = DB::table('cash_sessions')
+        $sessions = CashSession::query()
             ->where(fn ($q) => $q->where('opened_at', '<', $cutoffUtc)
                 ->orWhere(fn ($q) => $q->whereNull('opened_at')->where('session_date', '<', $localDate)))
             ->where(fn ($q) => $q->whereNull('approved_at')->orWhere('approved_at', '>=', $cutoffUtc)
                 ->orWhere('state', '!=', CashSession::STATE_APPROVED)
                 ->orWhereNull('settlement_basis')->orWhere('settlement_basis', '!=', 'physical_cash'))
-            ->orderBy('id')->lockForUpdate()->get(['id', 'user_id', 'opened_at', 'closed_at']);
+            ->orderBy('id')->lockForUpdate()->get(['id', 'user_id', 'opened_at', 'closed_at', 'opening_amount']);
         $items = [];
         foreach ($sessions as $session) {
+            $funding = null;
+            $issue = null;
+            try {
+                $funding = $this->handovers->verifiedSessionFunding($session);
+                if ($funding !== null && $funding['issued_on'] >= $localDate) {
+                    throw new DomainException('custody_funding_outside_cutoff');
+                }
+            } catch (DomainException $error) {
+                $funding = null;
+                $issue = $error->getMessage();
+            } catch (InvalidArgumentException|OverflowException) {
+                $issue = 'custody_funding_amount_invalid';
+            }
             $items[] = ['session_id' => (string) $session->id, 'collector_id' => (string) $session->user_id,
-                'closed_at_cutoff' => $session->closed_at !== null && $session->closed_at < $cutoffUtc];
+                'funding' => $funding, 'funding_issue' => $issue,
+                'closed_at_cutoff' => $session->getRawOriginal('closed_at') !== null && $session->getRawOriginal('closed_at') < $cutoffUtc];
         }
 
         return $items;

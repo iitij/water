@@ -1827,6 +1827,18 @@
  "owner_acceptance": "not_tested",
  "issue_url": "https://github.com/iitij/water/issues/57",
  "evidence": "رصد مستقل لكل جلسة عند تاريخ الاعتماد ومطابقة تسليماتها الجزئية قبل القطع مع سجل الترحيل."
+},
+{
+ "id": "WATER-G1B-PENDING-CUSTODY-FUNDING",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "إثبات مصدر تمويل العهد غير المعتمدة عند تاريخ القطع",
+ "files": "app/Services/GatedCashHandoverWriter.php; app/Services/FinancialApprovedCustodyPeriodDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "see_exact_head_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "اختبار تمويل صالح وتمويل غير مسجل عند نهاية الفترة."
 }
 ]
 }

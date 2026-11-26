@@ -85,18 +85,7 @@ final class GatedCashHandoverWriter
                 && ($approval->after['expected_amount'] ?? null) === SignedMinor::decimal($expected)
                 && ($approval->after['counted_amount'] ?? null) === SignedMinor::decimal($counted)
                 && ($approval->after['variance_amount'] ?? null) === SignedMinor::decimal($variance), 'gated_handover_approval');
-            $fundings = DB::table('cash_session_fundings')->where('cash_session_id', $sessionId)->orderBy('id')->lockForUpdate()->get();
-            $this->need($fundings->count() === ($openingMinor === 0 ? 0 : 1), 'gated_handover_funding_unverified');
-            if ($openingMinor > 0) {
-                $funding = $fundings->first();
-                $source = DB::table('treasury_accounts')->where('id', $funding->treasury_account_id)->lockForUpdate()->first();
-                $posting = DB::table('treasury_postings')->where('cash_session_funding_id', $funding->id)->lockForUpdate()->first();
-                $this->need($source !== null && $posting !== null, 'gated_handover_funding_unverified');
-                $this->registered($this->opening->opening((int) $source->id, $source->opening_on), $source->opening_on);
-                $leg = $this->opening->funding((int) $posting->id, $funding->issued_on);
-                $this->need($leg['amount_minor'] === -$openingMinor, 'gated_handover_funding_unverified');
-                $this->registered($leg, $funding->issued_on);
-            }
+            $this->verifiedSessionFunding($session);
             $total = $openingMinor;
             $payments = Payment::withTrashed()->where('cash_session_id', $sessionId)->orderBy('id')->lockForUpdate()->get();
             foreach ($payments as $payment) {
@@ -199,6 +188,28 @@ final class GatedCashHandoverWriter
         return ['handover_id' => (string) $handover->id, 'posting_id' => (string) $posted->id,
             'posted_by' => (int) $posted->posted_by, 'operation_uuid' => $operation->operation_uuid,
             'received_on' => $posted->effective_on, 'amount_minor' => $leg['amount_minor']];
+    }
+
+    /** Funding is a recorded outflow of the treasury, independent of the later session count. */
+    public function verifiedSessionFunding(CashSession $session): ?array
+    {
+        $this->need(DB::transactionLevel() > 0, 'gated_handover_requires_transaction');
+        $openingMinor = Cash::stored($session->getRawOriginal('opening_amount'), $session->getConnection()->getDriverName());
+        $fundings = DB::table('cash_session_fundings')->where('cash_session_id', $session->id)->orderBy('id')->lockForUpdate()->get();
+        $this->need($fundings->count() === ($openingMinor === 0 ? 0 : 1), 'gated_handover_funding_unverified');
+        if ($openingMinor === 0) return null;
+
+        $funding = $fundings->first();
+        $source = DB::table('treasury_accounts')->where('id', $funding->treasury_account_id)->lockForUpdate()->first();
+        $posting = DB::table('treasury_postings')->where('cash_session_funding_id', $funding->id)->lockForUpdate()->first();
+        $this->need($source !== null && $posting !== null, 'gated_handover_funding_unverified');
+        $this->registered($this->opening->opening((int) $source->id, $source->opening_on), $source->opening_on);
+        $leg = $this->opening->funding((int) $posting->id, $funding->issued_on);
+        $this->need($leg['amount_minor'] === -$openingMinor, 'gated_handover_funding_unverified');
+        $operation = $this->registered($leg, $funding->issued_on);
+        return ['account_id' => (string) $source->id, 'funding_id' => (string) $funding->id,
+            'posting_id' => (string) $posting->id, 'operation_uuid' => $operation->operation_uuid,
+            'issued_on' => $funding->issued_on, 'funded_minor' => $openingMinor];
     }
 
     private function registered(array $leg, string $date): object
