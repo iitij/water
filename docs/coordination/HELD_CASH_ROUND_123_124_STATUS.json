@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify mixed controls candidate 39c980518df0a45c05800f8a65e72b51d4b3a851 exact CI; then mixed concurrency, renewed evidence, all-writer protection, closure, Flutter and production.",
+  "next": "Verify mixed concurrency candidate 9eb9d40889a0803b3b8da0ebcfb368d6aab7e782 exact CI; then renewed evidence, aggregate revisions, all-writer protection, closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -3022,12 +3022,38 @@
     ]
   },
   "release_refund_incident_mixed_controls": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "4a2dd43bbd060f9fc4494d5d7e7f9ad26719be01",
     "branch": "release/prospective-refund-incident-mixed-controls",
     "source": "39c980518df0a45c05800f8a65e72b51d4b3a851",
     "scope": "Test-only: final group approval failure after two exact posting legs and completed refund audit exist, confirm original 14-table snapshots, ledger and cash balances, both unresolved claims and fence; retry and exact replay. Revoke nonposting member's current key after readiness, retain archive key, reject entire group; reject omitted, duplicate and swapped attestations at writer; verify no mutations, restore trust and retry.",
-    "limits": "CI unverified. No product changes. Real issuer provisioning and factual corroboration remain operational prerequisites. Mixed concurrency, renewed evidence, aggregate revisions, earlier operative authenticity review, all-writer protection, closure, Flutter and production remain open.",
-    "next": "Verify exact CI then add real independent MySQL mixed settlement races, continue remaining entrypoint and evidence lifecycle work."
+    "limits": "Exact targeted CI logs verified on both engines. No product changes. Real issuer provisioning and factual corroboration remain operational prerequisites. Mixed concurrency, renewed evidence, aggregate revisions, earlier operative authenticity review, all-writer protection, closure, Flutter and production remain open.",
+    "next": "Verify exact CI then add real independent MySQL mixed settlement races, continue remaining entrypoint and evidence lifecycle work.",
+    "run": 45872325887,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 140090657022,
+        "tests": 2,
+        "assertions": 46,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 140090657345,
+        "tests": 2,
+        "assertions": 46,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_mixed_concurrency": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "39c980518df0a45c05800f8a65e72b51d4b3a851",
+    "branch": "release/prospective-refund-incident-mixed-concurrency",
+    "source": "9eb9d40889a0803b3b8da0ebcfb368d6aab7e782",
+    "scope": "Test-only three real MySQL races under existing scope-row contention barrier: identical signed mixed settlement retries, competing reviewers for mixed settlement, competing reviewers for zero-posting settlement. Verify one winner, exact balances and posting subset, unique durable group audit, binding hashes and exact attestation selection, historical verification after current and archive key removal. Three independent DB connections in each case.",
+    "limits": "CI unverified. No product changes. Real trust issuer provisioning and factual verification operational prerequisites; renewed evidence, aggregate revisions, earlier operative authenticity review, all-writer protection, closure, Flutter and production remain open.",
+    "next": "Verify exact MySQL results; then review source renewal and aggregate proposal revisions; continue remaining entrypoint and release gates."
   }
 }
