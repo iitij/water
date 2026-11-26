@@ -1,44 +1,11 @@
-name: Prospective refund incident mixed settlement controls
+name: Prospective refund incident mixed MySQL concurrency
 on:
   push:
-    branches: ['release/prospective-refund-incident-mixed-controls']
+    branches: ['release/prospective-refund-incident-mixed-concurrency']
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  sqlite:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 15
-    env:
-      APP_ENV: testing
-      DB_CONNECTION: sqlite
-      DB_DATABASE: ':memory:'
-      DB_URL: ''
-      CACHE_STORE: array
-      SESSION_DRIVER: array
-      QUEUE_CONNECTION: sync
-      MAIL_MAILER: array
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: sodium, mbstring, pdo_sqlite, sqlite3, dom, curl, fileinfo, gd, intl, zip, bcmath
-          coverage: none
-      - name: Verify source and install locked dependencies
-        run: |
-          set -euo pipefail
-          git rev-parse HEAD
-          sha256sum composer.lock
-          test ! -e .env
-          test ! -e .env.testing
-          mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
-          composer install --no-interaction --no-progress --prefer-dist
-          git diff --exit-code -- composer.lock
-      - name: Verify mixed late-audit rollback and revoked nonposting source fence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_mixed_controls_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +64,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify mixed late-audit rollback and revoked nonposting source fence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_mixed_controls_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify real mixed settlement lock contention and zero-posting race
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_mixed_concurrency_' tests/Feature/GatedCashCountAdjustmentWriterTest.php

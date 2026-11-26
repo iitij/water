@@ -1334,6 +1334,88 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         return compact('f', 'ids', 'keys', 'service');
     }
 
+    private function assertMixedSettlementRace(bool $differentReviewer, bool $zeroPosting = false): void
+    {
+        if (DB::getDriverName() !== 'mysql') {
+            $this->markTestSkipped('Independent shared-database connections require the MySQL QA runner.');
+        }
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $zeroPosting
+            ? $this->mixedAtomicControl(0, ['no_disbursement', 'cash_returned'])
+            : $this->mixedAtomicControl();
+        $request = AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')
+            ->where('entity_id', $f['uuid'])->sole();
+        $subscriber = Subscriber::findOrFail(Payment::findOrFail($request->after['payment_id'])->subscriber_id);
+        $ledger = app(\App\Services\TransactionService::class);
+        $beforeCredit = $ledger->accountBalanceMinor($subscriber);
+        $cash = fn () => $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)
+            ->balance($f['id'], '2026-11-25'));
+        $beforeCash = $cash();
+        $results = $this->refundResolutionRace($f, $differentReviewer, true, $ids);
+        $success = array_values(array_filter($results, fn ($r) => $r['ok']));
+        $this->assertCount($differentReviewer ? 1 : 2, $success, json_encode($results));
+        $this->assertCount(1, array_filter($success, fn ($r) => $r['created']), json_encode($results));
+        if ($differentReviewer) {
+            $rejected = collect($results)->firstWhere('ok', false);
+            $this->assertSame(DomainException::class, $rejected['error'], json_encode($results));
+            $this->assertSame('completed_refund_batch_conflict', $rejected['message']);
+        }
+        $winner = collect($success)->firstWhere('created', true);
+        $minor = $zeroPosting ? 0 : 6;
+        $this->assertSame($beforeCredit - $minor, $ledger->accountBalanceMinor($subscriber->fresh()));
+        $this->assertSame($beforeCash - $minor, $cash());
+        $this->assertSame($f['counted'], $cash());
+        $this->assertSame($zeroPosting ? 0 : 1, DB::table('payment_refunds')->count());
+        $this->assertSame($zeroPosting ? 0 : 1, DB::table('financial_posting_operations')
+            ->whereIn('operation_uuid', array_keys($ids))->count());
+        $this->assertSame($zeroPosting ? 0 : 2, DB::table('financial_posting_events')
+            ->whereIn('operation_uuid', array_keys($ids))->count());
+        $this->assertSame(0, DB::table('financial_posting_operations')->where('operation_uuid', $f['second'])->count());
+        if (! $zeroPosting) {
+            $legs = DB::table('financial_posting_events')->where('operation_uuid', $f['uuid'])->orderBy('leg')->get();
+            $this->assertSame(['subscriber', 'treasury'], $legs->pluck('leg')->all());
+            $this->assertSame([-6, -6], $legs->map(fn ($leg) => (int) $leg->amount_minor)->all());
+        }
+        $approval = AuditEvent::query()->where('event', 'financial.completed_cash_refund_batch_approved')->sole();
+        $this->assertSame($winner['actor'], (int) $approval->actor_user_id);
+        $this->assertSame('mixed-v1', $approval->after['format']);
+        $this->assertSame(10, $approval->after['total_claimed_minor']);
+        $this->assertSame($minor, $approval->after['posting_required_minor']);
+        $this->assertSame(! $zeroPosting, $approval->after['financial_posting_created']);
+        $binding = json_decode($approval->after['source_binding_json'], true, 512, JSON_THROW_ON_ERROR);
+        $this->assertSame($winner['actor'], $binding['reviewer_id']);
+        ksort($ids);
+        $this->assertSame($ids, array_column($binding['sources'], 'attestation_id', 'operation_uuid'));
+        $this->assertSame(hash('sha256', $approval->after['source_binding_json']), $approval->after['source_binding_sha256']);
+        $this->assertSame($zeroPosting ? 0 : 1, AuditEvent::query()->where('event', 'financial.completed_cash_refund')->count());
+        $this->assertSame(0, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_approved')->count());
+        $this->assertSame(['count' => 0, 'claimed_minor' => 0], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        \Laravel\Sanctum\Sanctum::actingAs(User::findOrFail($winner['actor']));
+        // The completed group remains verifiable even when neither live nor
+        // archive configuration retains its original public keys.
+        config(['financial_candidate.refund_source_public_keys' => [], 'financial_candidate.refund_source_archived_public_keys' => []]);
+        foreach (array_keys($ids) as $uuid) {
+            $this->getJson($f['root'].$uuid)->assertOk()->assertJsonPath('status', 'rejected')
+                ->assertJsonPath('completion_verified', ! $zeroPosting && $uuid === $f['uuid'])
+                ->assertJsonPath('incident_unresolved', false);
+        }
+        $this->assertSame(['count' => 0, 'claimed_minor' => 0], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+    }
+
+    public function test_release_refund_mixed_concurrency_identical_retries_commit_once(): void
+    {
+        $this->assertMixedSettlementRace(false);
+    }
+
+    public function test_release_refund_mixed_concurrency_competing_reviewers_commit_once(): void
+    {
+        $this->assertMixedSettlementRace(true);
+    }
+
+    public function test_release_refund_mixed_concurrency_zero_posting_competing_reviewers_close_once(): void
+    {
+        $this->assertMixedSettlementRace(true, true);
+    }
+
     public function test_release_refund_mixed_controls_final_audit_failure_rolls_back_posting_and_keeps_both_incidents_open(): void
     {
         ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl();
@@ -2118,7 +2200,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     }
 
     /** MySQL only: independent sessions, observed contention on the same scope lock. */
-    private function refundResolutionRace(array $f, bool $differentReviewer, bool $batch = false): array
+    private function refundResolutionRace(array $f, bool $differentReviewer, bool $batch = false, ?array $attestationIds = null): array
     {
         $this->assertSame('mysql', DB::getDriverName());
         $this->assertSame('water_test', DB::getDatabaseName());
@@ -2150,11 +2232,16 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                         $wait("$dir/start");
                         touch("$dir/enter-$i");
                         $service = app(\App\Services\CompletedCashRefundRequest::class);
-                        $result = $batch
-                            ? $service->postBatchResolution(User::findOrFail($actorId), $f['id'], $f['proposalIds'],
-                                'Independent proof confirms both original cash refunds were disbursed', $this->nowAt())
-                            : $service->postResolution(User::findOrFail($actorId), $f['uuid'],
+                        if ($attestationIds !== null) {
+                            $result = $service->postMixedResolution(User::findOrFail($actorId), $f['id'], $f['proposalIds'],
+                                $attestationIds, 'Independent verified evidence supports the complete mixed cash settlement', $this->nowAt());
+                        } elseif ($batch) {
+                            $result = $service->postBatchResolution(User::findOrFail($actorId), $f['id'], $f['proposalIds'],
+                                'Independent proof confirms both original cash refunds were disbursed', $this->nowAt());
+                        } else {
+                            $result = $service->postResolution(User::findOrFail($actorId), $f['uuid'],
                                 'Independent proof confirms the original cash refund was disbursed', $this->nowAt());
+                        }
                         $outcome = ['ok' => true, 'created' => $result['registry_created'], 'actor' => $actorId];
                     } catch (\Throwable $error) {
                         $outcome = ['ok' => false, 'error' => get_class($error), 'message' => $error->getMessage(), 'actor' => $actorId];
