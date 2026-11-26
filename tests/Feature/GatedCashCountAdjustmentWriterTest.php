@@ -1339,6 +1339,118 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         return compact('ids', 'keys', 'service');
     }
 
+    public function test_release_refund_signed_api_document_to_settlement_rejects_bypasses_and_replays(): void
+    {
+        $f = $this->resolutionControl('posting_required', -6);
+        $proposal = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_proposed')->sole();
+        $pid = (int) $proposal->id;
+        $root = $f['root'].$f['uuid'];
+        $group = '/api/completed-cash-refund-settlements/';
+        $bytes = "Synthetic independently sourced binary document\0\xff";
+        $record = ['proposal_id' => $pid, 'document_reference' => 'QA-API-DOCUMENT',
+            'document_base64' => base64_encode($bytes)];
+        $recorder = $this->actor();
+        $byteReviewer = $this->actor();
+        $attester = $this->actor();
+        $ordinary = User::factory()->create(['role' => 'admin']);
+        \Laravel\Sanctum\Sanctum::actingAs($ordinary);
+        $this->postJson($root.'/resolution-document', $record)->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($recorder);
+        $this->postJson($root.'/resolution-document', $record + ['actor_id' => $byteReviewer->id])->assertUnprocessable();
+        $this->postJson($root.'/resolution-document?reviewer_id=1', $record)->assertUnprocessable();
+        $this->postJson($root.'/resolution-document', array_replace($record, ['proposal_id' => (string) $pid]))->assertUnprocessable();
+        $this->postJson($root.'/resolution-document', array_replace($record, ['document_base64' => 'not base64!']))->assertUnprocessable();
+        $doc = $this->postJson($root.'/resolution-document', $record)->assertOk()
+            ->assertJsonPath('created', true)->assertJsonPath('original_bytes_stored', false)
+            ->assertJsonPath('document.sha256', hash('sha256', $bytes))->json();
+        $review = $record + ['document_id' => $doc['document_id'], 'confirmation' => self::EVIDENCE];
+        $this->postJson($root.'/resolution-document-review', $review)->assertConflict();
+        \Laravel\Sanctum\Sanctum::actingAs($byteReviewer);
+        $this->postJson($root.'/resolution-document-review', array_replace($review,
+            ['document_base64' => base64_encode($bytes.'changed')]))->assertConflict();
+        $this->postJson($root.'/resolution-document-review', $review)->assertOk()
+            ->assertJsonPath('independent_byte_review_recorded', true)
+            ->assertJsonPath('spending_authorized', false);
+        $keypair = sodium_crypto_sign_keypair();
+        $secret = sodium_crypto_sign_secretkey($keypair);
+        $keys = ['qa-api-source' => base64_encode(sodium_crypto_sign_publickey($keypair))];
+        config(['financial_candidate.refund_source_public_keys' => $keys]);
+        $signature = base64_encode(sodium_crypto_sign_detached(
+            \App\Services\CompletedCashRefundRequest::sourceStatement($doc['document'], 'qa-api-source', 'QA-API-SOURCE'), $secret));
+        sodium_memzero($secret);
+        $attestation = ['proposal_id' => $pid, 'document_id' => $doc['document_id'], 'issuer' => 'qa-api-source',
+            'source_reference' => 'QA-API-SOURCE', 'signature' => $signature, 'substantive_review' => self::EVIDENCE];
+        $this->postJson($root.'/resolution-source-attestation', $attestation)->assertConflict();
+        \Laravel\Sanctum\Sanctum::actingAs($attester);
+        $this->postJson($root.'/resolution-source-attestation', $attestation + ['public_key' => $keys['qa-api-source']])->assertUnprocessable();
+        $proof = $this->postJson($root.'/resolution-source-attestation', $attestation)->assertOk()
+            ->assertJsonPath('created', true)->assertJsonPath('spending_authorized', false)->json();
+        $member = ['operation_uuid' => $f['uuid'], 'proposal_id' => $pid, 'attestation_id' => $proof['attestation_id']];
+        $selection = ['account_id' => $f['id'], 'members' => [$member]];
+        $input = $selection + ['confirmation' => self::EVIDENCE];
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $this->postJson($group.'settle', $input + ['amount' => '0.01'])->assertUnprocessable();
+        $this->postJson($group.'settle', array_replace($input, ['members' => [$member + ['reviewer_id' => $f['approver']->id]]]))->assertUnprocessable();
+        $this->postJson($group.'settle', array_replace($input, ['members' => [$member, $member]]))->assertUnprocessable();
+        $this->postJson($group.'settle', array_replace($input, ['members' => [array_diff_key($member, ['attestation_id' => true])]]))->assertUnprocessable();
+        $this->postJson($group.'settle', array_replace($input, ['members' => [$f['uuid'] => $member]]))->assertUnprocessable();
+        $this->postJson($group.'readiness', $selection)->assertOk()
+            ->assertJsonPath('all_source_signatures_revalidated', true)
+            ->assertJsonPath('spending_authorized', false)->assertJsonPath('closure_authorized', false);
+        config(['financial_candidate.refund_source_public_keys' => []]);
+        $this->postJson($group.'settle', $input)->assertConflict();
+        $this->assertEquals($before, $snapshot());
+        config(['financial_candidate.refund_source_public_keys' => $keys]);
+        $this->postJson($group.'settle', $input)->assertOk()->assertJsonPath('registry_created', true)
+            ->assertJsonPath('batch.format', 'signed-v2')->assertJsonPath('batch.posting_required_minor', 6);
+        $this->assertSame(1, DB::table('payment_refunds')->count());
+        $after = $snapshot();
+        config(['financial_candidate.refund_source_public_keys' => []]);
+        $this->postJson($group.'settle', $input)->assertOk()->assertJsonPath('registry_created', false);
+        $this->assertEquals($after, $snapshot());
+        $this->getJson($root)->assertOk()->assertJsonPath('incident_unresolved', false);
+        $this->assertStringNotContainsString(base64_encode($bytes), json_encode(DB::table('audit_events')->get(), JSON_THROW_ON_ERROR));
+        app()->instance('env', 'production');
+        try {
+            $this->postJson($group.'settle', $input)->assertStatus(503);
+        } finally {
+            app()->instance('env', 'testing');
+        }
+    }
+
+    public function test_release_refund_signed_api_renewal_rejects_partial_selection_and_requires_fresh_evidence(): void
+    {
+        ['f' => $f, 'ids' => $attestations] = $this->mixedAtomicControl();
+        $counts = app(TreasuryCashCountService::class);
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'], 'QA-API-RENEWAL', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        $members = [];
+        foreach ($f['proposalIds'] as $uuid => $id) $members[] = ['operation_uuid' => $uuid, 'proposal_id' => $id];
+        $group = '/api/completed-cash-refund-settlements/';
+        $input = ['account_id' => $f['id'], 'members' => $members, 'count_id' => (int) $new['id'], 'evidence' => self::EVIDENCE];
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $this->postJson($group.'renew', array_replace($input, ['members' => [$members[0]]]))->assertUnprocessable();
+        $this->postJson($group.'renew', $input + ['classification' => 'no_disbursement'])->assertUnprocessable();
+        $this->assertSame(0, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_revised')->count());
+        $result = $this->postJson($group.'renew', $input)->assertOk()->assertJsonPath('created', true)
+            ->assertJsonPath('financial_posting_created', false)->assertJsonPath('posting_required_minor', 6)->json();
+        $this->postJson($group.'renew', $input)->assertOk()->assertJsonPath('created', false);
+        $this->assertSame(2, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_revised')->count());
+        $selected = [];
+        foreach ($result['proposal_ids'] as $uuid => $id) $selected[] = ['operation_uuid' => $uuid,
+            'proposal_id' => $id, 'attestation_id' => $attestations[$uuid]];
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->postJson($group.'settle', ['account_id' => $f['id'], 'members' => $selected, 'confirmation' => self::EVIDENCE])->assertConflict();
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () =>
+            app(\App\Services\CompletedCashRefundRequest::class)->unresolvedForAccount($f['id'])));
+    }
+
     public function test_release_refund_signed_single_posting_blocks_unsigned_and_replays_exactly(): void
     {
         $f = $this->resolutionControl('posting_required', -6);
