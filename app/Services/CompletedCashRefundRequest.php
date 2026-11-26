@@ -21,6 +21,8 @@ final class CompletedCashRefundRequest
     public const RESOLUTION_PROPOSED = 'financial.completed_cash_refund_resolution_proposed';
     public const RESOLUTION_REVISED = 'financial.completed_cash_refund_resolution_revised';
     public const BATCH_APPROVED = 'financial.completed_cash_refund_batch_approved';
+    public const DOCUMENT_RECORDED = 'financial.completed_cash_refund_document_recorded';
+    public const DOCUMENT_REVIEWED = 'financial.completed_cash_refund_document_reviewed';
     public const RESOLUTION_APPROVED = 'financial.completed_cash_refund_resolution_approved';
 
     public static function authenticated(User $actor): void
@@ -1000,6 +1002,182 @@ final class CompletedCashRefundRequest
         }
     }
 
+    /**
+     * Internal candidate, not a file upload or disbursement authorization.
+     * The caller must retain the original in controlled custody. Only its
+     * digest and metadata are persisted; review recomputes the digest from bytes.
+     */
+    public function recordResolutionDocument(User $actor, string $uuid, int $proposalId,
+        string $documentReference, string $bytes, DateTimeImmutable $now): array
+    {
+        $reference = mb_strtoupper(trim($documentReference));
+        $this->validateDocumentInput($reference, $bytes);
+        return $this->withDocumentContext($actor, $uuid, $proposalId, $now,
+            function (User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal, array $excluded, string $date)
+                use ($reference, $bytes): array {
+                if (in_array((int) $actor->id, $excluded, true)) {
+                    throw new DomainException('completed_refund_document_independence');
+                }
+                $digest = hash('sha256', $bytes);
+                $proof = $this->documentIdentity($request, $closed, $proposal) + [
+                    'document_reference' => $reference, 'sha256' => $digest, 'byte_count' => strlen($bytes),
+                    'recorded_on' => $date,
+                ];
+                // All writes are serialized by the issuance fence. Never
+                // reserve one document/reference for two claims or proposals.
+                foreach (AuditEvent::query()->where('event', self::DOCUMENT_RECORDED)->orderBy('id')->lockForUpdate()->get() as $row) {
+                    $p = $row->after;
+                    if (! is_array($p) || ! is_string($p['sha256'] ?? null)
+                        || $row->entity_id !== $p['sha256'] || ! is_string($p['document_reference'] ?? null)) {
+                        throw new DomainException('completed_refund_document_conflict');
+                    }
+                    if ($p['sha256'] !== $digest && $p['document_reference'] !== $reference
+                        && ($p['proposal_id'] ?? null) !== (int) $proposal->id) continue;
+                    if ((int) $row->actor_user_id !== (int) $actor->id || $row->source !== 'internal'
+                        || $row->entity_type !== 'completed_cash_refund_request'
+                        || $this->proposalHash($p) !== $this->proposalHash($proof)) {
+                        throw new DomainException('completed_refund_document_conflict');
+                    }
+                    return $this->documentResult($row, false, false);
+                }
+                $row = app(AuditLogger::class)->recordRequired(self::DOCUMENT_RECORDED, [
+                    'entity_type' => 'completed_cash_refund_request', 'entity_id' => $digest,
+                    'actor_user_id' => $actor->id, 'source' => 'internal', 'after' => $proof]);
+                return $this->documentResult($row, true, false);
+            });
+    }
+
+    public function reviewResolutionDocument(User $actor, string $uuid, int $proposalId, int $documentId,
+        string $reference, string $bytes, string $confirmation, DateTimeImmutable $now): array
+    {
+        $reference = mb_strtoupper(trim($reference));
+        $confirmation = trim($confirmation);
+        $this->validateDocumentInput($reference, $bytes);
+        if ($documentId <= 0 || mb_strlen($confirmation) < 20 || mb_strlen($confirmation) > 2000) {
+            throw new DomainException('completed_refund_document_input');
+        }
+        return $this->withDocumentContext($actor, $uuid, $proposalId, $now,
+            function (User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal, array $excluded, string $date)
+                use ($documentId, $reference, $bytes, $confirmation): array {
+                $document = AuditEvent::query()->where('event', self::DOCUMENT_RECORDED)->whereKey($documentId)->lockForUpdate()->first();
+                $p = $document?->after;
+                $digest = hash('sha256', $bytes);
+                if ($document === null || ! is_array($p) || $document->entity_type !== 'completed_cash_refund_request'
+                    || $document->source !== 'internal' || $document->entity_id !== $digest
+                    || ($p['sha256'] ?? null) !== $digest || ($p['byte_count'] ?? null) !== strlen($bytes)
+                    || ($p['document_reference'] ?? null) !== $reference || (int) $document->id <= (int) $proposal->id
+                    || ! is_string($p['recorded_on'] ?? null) || $p['recorded_on'] > $date
+                    || in_array((int) $document->actor_user_id, $excluded, true)) {
+                    throw new DomainException('completed_refund_document_conflict');
+                }
+                foreach ($this->documentIdentity($request, $closed, $proposal) as $key => $value) {
+                    if (($p[$key] ?? null) !== $value) throw new DomainException('completed_refund_document_conflict');
+                }
+                if (in_array((int) $actor->id, [...$excluded, (int) $document->actor_user_id], true)) {
+                    throw new DomainException('completed_refund_document_independence');
+                }
+                $proof = ['document_id' => (int) $document->id, 'document_hash' => $this->proposalHash($p),
+                    'sha256' => $digest, 'operation_uuid' => $request->entity_id, 'proposal_id' => (int) $proposal->id,
+                    'reviewed_on' => $date, 'confirmation' => $confirmation,
+                    'bytes_matched' => true, 'external_authenticity_verified' => false, 'closure_authorized' => false];
+                $rows = AuditEvent::query()->where('event', self::DOCUMENT_REVIEWED)
+                    ->where('entity_id', $digest)->lockForUpdate()->get();
+                if ($rows->count() > 1) throw new DomainException('completed_refund_document_conflict');
+                $old = $rows->first();
+                if ($old !== null) {
+                    if ((int) $old->actor_user_id !== (int) $actor->id || $old->source !== 'internal'
+                        || $old->entity_type !== 'completed_cash_refund_request' || (int) $old->id <= (int) $document->id
+                        || ! is_array($old->after) || $this->proposalHash($old->after) !== $this->proposalHash($proof)) {
+                        throw new DomainException('completed_refund_document_conflict');
+                    }
+                    return $this->documentResult($document, false, true);
+                }
+                app(AuditLogger::class)->recordRequired(self::DOCUMENT_REVIEWED, [
+                    'entity_type' => 'completed_cash_refund_request', 'entity_id' => $digest,
+                    'actor_user_id' => $actor->id, 'source' => 'internal', 'after' => $proof]);
+                return $this->documentResult($document, true, true);
+            });
+    }
+
+    private function validateDocumentInput(string $reference, string $bytes): void
+    {
+        if (! preg_match('/\A[A-Z0-9][A-Z0-9._\/-]{2,149}\z/', $reference)
+            || strlen($bytes) < 20 || strlen($bytes) > 5 * 1024 * 1024) {
+            throw new DomainException('completed_refund_document_input');
+        }
+    }
+
+    private function withDocumentContext(User $actor, string $uuid, int $proposalId, DateTimeImmutable $now, callable $action): array
+    {
+        self::authenticated($actor);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        if ($proposalId <= 0) throw new DomainException('completed_refund_document_input');
+        $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
+            function () use ($actor, $uuid, $proposalId, $date, $action): array {
+                DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
+                if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new DomainException('gated_refund_issuance_lock');
+                }
+                $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+                self::authenticated($actor);
+                app(TreasuryRegisterService::class)->authorize($actor);
+                $this->guard();
+                $request = $this->find($uuid, true);
+                abort_unless($request !== null, 404);
+                $p = $request->after;
+                $this->assertIntent($request, self::intent($p['payment_id'], $p['account_id'], $p['amount'],
+                    $p['reference'], $p['date'], $p['reason'], $p['evidence'], $uuid, (int) $request->actor_user_id));
+                $closed = $this->decision($request);
+                if ($closed === null || $this->verifiedResolution($request, $closed) !== null
+                    || DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()) {
+                    throw new DomainException('completed_refund_document_conflict');
+                }
+                $chain = $this->proposalChain($request, $closed);
+                if ($chain === []) throw new DomainException('completed_refund_resolution_evidence');
+                $proposal = end($chain);
+                $this->assertExpectedProposal($proposal, $proposalId);
+                $q = $proposal->after;
+                if (! in_array($q['classification'] ?? null, ['posting_required', 'cash_returned', 'no_disbursement'], true)
+                    || ($q['request_id'] ?? null) !== (int) $request->id || ($q['decision_id'] ?? null) !== (int) $closed->id
+                    || ($q['operation_uuid'] ?? null) !== $uuid || ($q['account_id'] ?? null) !== $p['account_id']
+                    || ($q['payment_id'] ?? null) !== $p['payment_id'] || ($q['claimed_amount'] ?? null) !== $p['amount']
+                    || ($q['reference'] ?? null) !== $p['reference']) throw new DomainException('completed_refund_document_conflict');
+                $payment = Payment::query()->lockForUpdate()->findOrFail($p['payment_id']);
+                $count = DB::table('treasury_cash_counts')->where('id', $q['count_id'])->lockForUpdate()->first();
+                $review = DB::table('treasury_cash_count_reviews')->where('id', $q['review_id'])->lockForUpdate()->first();
+                if (! $count || ! $review || (int) $count->treasury_account_id !== $p['account_id']
+                    || (int) $review->treasury_cash_count_id !== (int) $count->id || ! (bool) $review->accepted) {
+                    throw new DomainException('completed_refund_document_conflict');
+                }
+                $excluded = [(int) $request->actor_user_id, (int) $closed->actor_user_id, (int) $payment->user_id,
+                    (int) $count->counted_by, (int) $review->reviewed_by];
+                foreach ($chain as $item) $excluded[] = (int) $item->actor_user_id;
+                if ($payment->cash_session_id !== null) {
+                    $excluded[] = (int) \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id)->user_id;
+                }
+                return $action($actor, $request, $closed, $proposal, $excluded, $date);
+            });
+    }
+
+    private function documentIdentity(AuditEvent $request, AuditEvent $closed, AuditEvent $proposal): array
+    {
+        $p = $request->after;
+        return ['request_id' => (int) $request->id, 'decision_id' => (int) $closed->id,
+            'proposal_id' => (int) $proposal->id, 'proposal_hash' => $this->proposalHash($proposal->after),
+            'operation_uuid' => $request->entity_id, 'payment_id' => $p['payment_id'],
+            'account_id' => $p['account_id'], 'claimed_amount' => $p['amount'], 'refund_reference' => $p['reference'],
+            'classification' => $proposal->after['classification']];
+    }
+
+    private function documentResult(AuditEvent $document, bool $created, bool $reviewed): array
+    {
+        return ['created' => $created, 'document_id' => (int) $document->id, 'document' => $document->after,
+            'independent_byte_review_recorded' => $reviewed, 'external_authenticity_verified' => false,
+            'original_bytes_stored' => false, 'financial_posting_created' => false,
+            'spending_authorized' => false, 'closure_authorized' => false, 'incident_unresolved' => true];
+    }
+
     private function proposalHash(array $proof): string
     {
         ksort($proof);
@@ -1294,7 +1472,8 @@ final class CompletedCashRefundRequest
             || ! app(CompletedCashRefundResolutionProposalProtection::class)->active()
             || ! app(CompletedCashRefundResolutionApprovalProtection::class)->active()
             || ! app(CompletedCashRefundResolutionRevisionProtection::class)->active()
-            || ! app(CompletedCashRefundBatchApprovalProtection::class)->active()) {
+            || ! app(CompletedCashRefundBatchApprovalProtection::class)->active()
+            || ! app(CompletedCashRefundDocumentProtection::class)->active()) {
             throw new DomainException('completed_cash_refund_request_protection_missing');
         }
     }

@@ -1300,6 +1300,83 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'counter', 'countReviewer', 'amount', 'count', 'proposalIds', 'balance', 'counted');
     }
 
+    public function test_release_refund_document_independent_matching_bytes_preserve_cash_fence(): void
+    {
+        $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $actor = $this->actor();
+        $reviewer = $this->actor();
+        $uuid = $f['second'];
+        $proposal = $f['proposalIds'][$uuid];
+        $bytes = 'Synthetic QA document of returned cash, exact original reference QA-BATCH-SECOND.';
+        $reference = 'QA-DOC-RETURN-01';
+        \Laravel\Sanctum\Sanctum::actingAs($f['requester']);
+        $this->rejects('completed_refund_document_independence', fn () =>
+            $service->recordResolutionDocument($f['requester'], $uuid, $proposal, $reference, $bytes, $this->nowAt()));
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $record = fn () => $service->recordResolutionDocument($actor, $uuid, $proposal, $reference, $bytes, $this->nowAt());
+        $result = $record();
+        $this->assertTrue($result['created']);
+        $this->assertSame(hash('sha256', $bytes), $result['document']['sha256']);
+        $this->assertSame('0.04', $result['document']['claimed_amount']);
+        $this->assertSame('QA-BATCH-SECOND', $result['document']['refund_reference']);
+        $this->assertFalse($result['original_bytes_stored']);
+        $this->assertFalse($record()['created']);
+        $id = $result['document_id'];
+        $confirm = 'Independent reviewer compared the original document bytes';
+        $this->rejects('completed_refund_document_independence', fn () =>
+            $service->reviewResolutionDocument($actor, $uuid, $proposal, $id, $reference, $bytes, $confirm, $this->nowAt()));
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->rejects('completed_refund_document_conflict', fn () =>
+            $service->reviewResolutionDocument($reviewer, $uuid, $proposal, $id, $reference, $bytes.' changed', $confirm, $this->nowAt()));
+        $review = fn () => $service->reviewResolutionDocument($reviewer, $uuid, $proposal, $id, $reference, $bytes, $confirm, $this->nowAt());
+        $result = $review();
+        $this->assertTrue($result['created']);
+        $this->assertTrue($result['independent_byte_review_recorded']);
+        foreach (['external_authenticity_verified', 'financial_posting_created', 'closure_authorized', 'spending_authorized'] as $key) {
+            $this->assertFalse($result[$key]);
+        }
+        $this->assertFalse($review()['created']);
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () =>
+            $service->unresolvedForAccount($f['id'])));
+        $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+        foreach (['financial.completed_cash_refund_document_recorded', 'financial.completed_cash_refund_document_reviewed'] as $event) {
+            $row = AuditEvent::query()->where('event', $event)->sole();
+            $before = $row->getRawOriginal();
+            foreach ([fn () => DB::table('audit_events')->where('id', $row->id)->update(['after' => '{}']),
+                fn () => DB::table('audit_events')->where('id', $row->id)->delete()] as $attempt) {
+                try {
+                    $attempt();
+                    $this->fail('Document evidence was mutable.');
+                } catch (\Illuminate\Database\QueryException $error) {
+                    $this->assertStringContainsString('Financial approval audit is immutable or invalid', $error->getMessage());
+                }
+            }
+            $this->assertEquals($before, $row->fresh()->getRawOriginal());
+        }
+    }
+
+    public function test_release_refund_document_rejects_cross_claim_digest_and_reference_reuse(): void
+    {
+        $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'no_disbursement']);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $bytes = 'Synthetic QA document uniquely associated with the first incident.';
+        $reference = 'QA-UNIQUE-DOC-01';
+        $service->recordResolutionDocument($actor, $f['uuid'], $f['proposalIds'][$f['uuid']], $reference, $bytes, $this->nowAt());
+        $this->rejects('completed_refund_document_conflict', fn () =>
+            $service->recordResolutionDocument($actor, $f['second'], $f['proposalIds'][$f['second']], 'QA-OTHER-DOC', $bytes, $this->nowAt()));
+        $this->rejects('completed_refund_document_conflict', fn () =>
+            $service->recordResolutionDocument($actor, $f['second'], $f['proposalIds'][$f['second']], $reference, $bytes.' different', $this->nowAt()));
+        $this->rejects('completed_refund_resolution_proposal_changed', fn () =>
+            $service->recordResolutionDocument($actor, $f['second'], $f['proposalIds'][$f['uuid']], 'QA-WRONG-PROP', $bytes, $this->nowAt()));
+        $this->assertSame(1, AuditEvent::query()->where('event', 'financial.completed_cash_refund_document_recorded')->count());
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+    }
+
     public function test_release_refund_mixed_readiness_exact_partial_shortage_never_authorizes_posting(): void
     {
         $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);

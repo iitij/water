@@ -1,7 +1,7 @@
-name: Prospective refund incident mixed readiness
+name: Prospective refund incident document evidence
 on:
   push:
-    branches: ['release/prospective-refund-incident-mixed-readiness']
+    branches: ['release/prospective-refund-incident-document-evidence']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify mixed aggregate arithmetic without authorizing incident closure
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_mixed_readiness_|test_release_refund_batch_atomic_posts_all_claims_once' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify immutable claim document digest and independent byte review
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_document_|test_release_refund_mixed_readiness_exact_partial_shortage_never_authorizes_posting' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify mixed aggregate arithmetic without authorizing incident closure
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_mixed_readiness_|test_release_refund_batch_atomic_posts_all_claims_once' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify immutable claim document digest and independent byte review
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_document_|test_release_refund_mixed_readiness_exact_partial_shortage_never_authorizes_posting' tests/Feature/GatedCashCountAdjustmentWriterTest.php
