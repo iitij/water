@@ -1695,6 +1695,36 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($plan['spending_authorized']);
     }
 
+    public function test_release_refund_group_renewal_zero_posting_rejects_wrong_count_and_reviewer(): void
+    {
+        $f = $this->batchResolutionControl(0, '1.00', ['no_disbursement', 'cash_returned']);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $counts = app(TreasuryCashCountService::class);
+        $wrong = $f['counted'] - 1;
+        $wrongAmount = sprintf('%d.%02d', intdiv($wrong, 100), $wrong % 100);
+        $bad = $counts->record($f['counter'], $f['id'], $wrongAmount, 'QA-ZERO-RENEWAL-WRONG', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $bad['id'], true, self::EVIDENCE);
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $this->rejects('completed_refund_resolution_stale_count', fn () =>
+            $service->renewResolutionGroup($actor, $f['id'], $f['proposalIds'], (int) $bad['id'], self::EVIDENCE, $this->nowAt()));
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'], 'QA-ZERO-RENEWAL', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        \Laravel\Sanctum\Sanctum::actingAs($f['countReviewer']);
+        $this->rejects('completed_refund_resolution_independence', fn () =>
+            $service->renewResolutionGroup($f['countReviewer'], $f['id'], $f['proposalIds'], (int) $new['id'], self::EVIDENCE, $this->nowAt()));
+        $this->assertSame(0, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_revised')->count());
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $result = $service->renewResolutionGroup($actor, $f['id'], $f['proposalIds'], (int) $new['id'], self::EVIDENCE, $this->nowAt());
+        $this->assertSame(0, $result['posting_required_minor']);
+        $this->assertSame(10, $result['total_claimed_minor']);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $plan = $service->mixedResolutionReadiness($f['approver'], $f['id'], $result['proposal_ids'], $this->nowAt());
+        $this->assertSame(0, $plan['expected_treasury_delta_minor']);
+        $this->assertFalse($plan['closure_authorized']);
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+    }
+
     public function test_release_refund_mixed_source_plan_requires_complete_independent_current_sources(): void
     {
         $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);
