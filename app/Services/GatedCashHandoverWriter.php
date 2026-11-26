@@ -58,10 +58,11 @@ final class GatedCashHandoverWriter
             $expected = $read('expected_amount');
             $variance = $read('variance_amount', true);
             $openingMinor = $read('opening_amount');
+            $closedOn = $session->closed_at?->copy()->setTimezone('Asia/Aden')->toDateString();
             $this->need($session->isApproved() && $session->settlement_basis === 'physical_cash'
                 && $session->closed_at !== null && $session->approved_at !== null
                 && $session->closed_at <= $session->approved_at
-                && $date >= $session->closed_at->toDateString()
+                && $date >= $closedOn
                 && (int) $session->approved_by > 0 && (int) $session->approved_by !== (int) $session->user_id
                 && $openingMinor !== null && $openingMinor >= 0
                 && $counted !== null && $counted > 0 && $expected !== null && $variance !== null
@@ -102,21 +103,22 @@ final class GatedCashHandoverWriter
                 $this->need(! $payment->trashed() && ! $payment->hasPendingVoidRequest()
                     && $payment->payment_method === 'cash' && (int) $payment->user_id === (int) $session->user_id
                     && $payment->payment_date->toDateString() >= $session->session_date->toDateString()
-                    && $payment->payment_date->toDateString() <= $session->closed_at->toDateString(), 'gated_handover_session_scope');
+                    && $payment->payment_date->toDateString() <= $closedOn, 'gated_handover_session_scope');
                 $entry = Transaction::query()->where('reference_type', Payment::class)->where('reference_id', $payment->id)
                     ->where('type', 'payment')->lockForUpdate()->sole();
                 $leg = $this->ledger->leg((int) $entry->id);
                 $this->registered($leg, $payment->payment_date->toDateString());
                 $this->need($leg['amount_minor'] > 0, 'gated_handover_count_mismatch');
                 if ($payment->isVoided()) {
+                    $voidedOn = $payment->voided_at->copy()->setTimezone('Asia/Aden')->toDateString();
                     $this->need(in_array($payment->voided_via, ['gated', 'approval'], true)
-                        && $payment->voided_at >= $payment->payment_date->copy()->startOfDay()
+                        && $voidedOn >= $payment->payment_date->toDateString()
                         && $payment->voided_at <= $session->closed_at, 'gated_handover_void_unverified');
                     $reversal = Transaction::query()->where('reference_type', Payment::class)->where('reference_id', $payment->id)
                         ->where('type', 'payment_reversal')->lockForUpdate()->sole();
                     $reverseLeg = $this->ledger->leg((int) $reversal->id);
                     $this->need($reverseLeg['amount_minor'] === -$leg['amount_minor'], 'gated_handover_void_unverified');
-                    $this->registered($reverseLeg, $payment->voided_at->toDateString());
+                    $this->registered($reverseLeg, $voidedOn);
                     continue;
                 }
                 $total = SignedMinor::add($total, $leg['amount_minor']);

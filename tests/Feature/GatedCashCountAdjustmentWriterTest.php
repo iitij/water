@@ -9252,6 +9252,49 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($before, $snapshot());
     }
 
+    public function test_custody_period_funding_and_handover_use_aden_date_after_utc_cutoff(): void
+    {
+        $issuer = $this->actor();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $now = new DateTimeImmutable('2026-11-30T21:00:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($now));
+        $id = (int) DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $writer = app(GatedTreasuryOpeningFundingWriter::class);
+        $account = $writer->open($issuer, [
+            'code' => 'QA-CUSTODY-ADEN', 'name' => 'Synthetic custody account',
+            'channel' => 'cash', 'opening_on' => '2026-12-01', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-CUSTODY-ADEN-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], self::UUID, $now)['account'];
+        $accountId = (int) $account['id'];
+        $session = $writer->fund($collector, $issuer, $accountId, '10.25',
+            'QA-CUSTODY-ADEN-FUND', self::EVIDENCE, self::OTHER, $now)['session'];
+        $this->assertSame('2026-12-01', $session->session_date->toDateString());
+        $this->assertSame('2026-11-30 21:00:00', $session->getRawOriginal('opened_at'));
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->decide($sessions->close($session, '10.25'), true, $reviewer);
+        $this->assertSame('2026-11-30 21:00:00', $session->getRawOriginal('closed_at'));
+
+        $handover = app(\App\Services\GatedCashHandoverWriter::class);
+        $receive = fn () => $handover->receive($reviewer, (int) $session->id, $accountId, '10.25',
+            'QA-CUSTODY-ADEN-HANDOVER', '2026-12-01', self::EVIDENCE, self::ADJUST, $now);
+        $this->assertTrue($receive()['registry_created']);
+        $this->assertFalse($receive()['registry_created']);
+        $this->assertDatabaseCount('cash_handovers', 1);
+        $this->assertDatabaseHas('financial_posting_operations', [
+            'operation_uuid' => self::OTHER, 'effective_on' => '2026-12-01', 'period_id' => $id,
+        ]);
+        $this->assertDatabaseHas('financial_posting_operations', [
+            'operation_uuid' => self::ADJUST, 'effective_on' => '2026-12-01', 'period_id' => $id,
+        ]);
+        $report = DB::transaction(fn () => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($id));
+        $this->assertTrue($report['scanned_sources_match']);
+        $this->assertSame(3, $report['matched_legs']);
+    }
+
     public function test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure(): void
     {
         $actor = $this->actor();
