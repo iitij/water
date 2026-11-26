@@ -68,6 +68,20 @@ final class FinancialSourceInsertProtection
         }
         $sqlite = $driver === 'sqlite';
         $current = $sqlite ? '' : ' FOR UPDATE';
+        // Only relocate the existing meter identity, never change it.
+        // A scope freeze blocks even this representation-only change.
+        $same = static fn (string $field): string => $sqlite
+            ? "OLD.{$field} IS NEW.{$field}" : "BINARY OLD.{$field} <=> BINARY NEW.{$field}";
+        $provenance = implode(' AND ', array_map($same, ['meter_id', 'retired_meter_id', 'retired_meter_code']));
+        $meterCode = $sqlite ? 'm.unique_code IS NEW.retired_meter_code' : 'BINARY m.unique_code <=> BINARY NEW.retired_meter_code';
+        $retirement = "OLD.meter_id IS NOT NULL AND OLD.retired_meter_id IS NULL AND OLD.retired_meter_code IS NULL
+            AND NEW.meter_id IS NULL AND NEW.retired_meter_id = OLD.meter_id AND NEW.retired_meter_code IS NOT NULL
+            AND NOT EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water' AND s.active_freeze_uuid IS NOT NULL{$current})";
+        $documentRetirement = $retirement." AND EXISTS (SELECT 1 FROM meters m WHERE m.id = OLD.meter_id
+            AND m.subscriber_id = OLD.subscriber_id AND ({$meterCode}){$current})";
+        $readingRetirement = $retirement." AND OLD.invoice_id IS NOT NULL AND OLD.is_invoiced = 1
+            AND EXISTS (SELECT 1 FROM meters m JOIN invoices i ON i.id = OLD.invoice_id
+                WHERE m.id = OLD.meter_id AND m.subscriber_id = i.subscriber_id AND ({$meterCode}){$current})";
         $defs = [];
         foreach (self::DATES as $table => $column) {
             $date = "NEW.{$column}";
@@ -89,8 +103,11 @@ final class FinancialSourceInsertProtection
             $mutationMessage = 'Financial source mutation is fenced';
             $changes = [];
             foreach (array_merge(['id', $column], self::PROTECTED_FIELDS[$table] ?? []) as $field) {
-                $changes[] = $sqlite ? "OLD.{$field} IS NOT NEW.{$field}"
-                    : "NOT (OLD.{$field} <=> NEW.{$field})";
+                if ($field === 'meter_id') continue;
+                $changes[] = 'NOT ('.$same($field).')';
+            }
+            if (in_array($table, ['invoices', 'payments'], true)) {
+                $changes[] = "NOT COALESCE((({$provenance}) OR ({$documentRetirement})), 0)";
             }
             // Refunds and treasury posting documents are append-only in a
             // fenced period, including updates to non-date evidence.
@@ -343,11 +360,12 @@ final class FinancialSourceInsertProtection
         $equalReading = static fn (string $field): string => $sqlite
             ? "OLD.{$field} IS NEW.{$field}" : "BINARY OLD.{$field} <=> BINARY NEW.{$field}";
         $fixed = implode(' AND ', array_map($equalReading, [
-            'id', 'meter_id', 'retired_meter_id', 'retired_meter_code', 'reading_date',
+            'id', 'reading_date',
             'actual_reading_date', 'previous_reading', 'current_reading', 'consumption_units',
             'period_start', 'period_end', 'period_basis', 'submitted_period_start', 'submitted_period_end',
             'created_by', 'sync_uuid', 'image_path', 'created_at', 'deleted_at',
         ]));
+        $fixed .= " AND COALESCE((({$provenance}) OR ({$readingRetirement})), 0)";
         $linkChanged = 'NOT ('.implode(' AND ', array_map($equalReading, ['invoice_id', 'is_invoiced'])).')';
         $old = $readingFenced('OLD');
         $new = $readingFenced('NEW');
