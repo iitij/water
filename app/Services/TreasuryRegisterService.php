@@ -57,7 +57,7 @@ final class TreasuryRegisterService
     {
         if (! preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date)
             || ! checkdate((int) substr($date, 5, 2), (int) substr($date, 8, 2), (int) substr($date, 0, 4))
-            || $date > now()->toDateString()) {
+            || $date > now('Asia/Aden')->toDateString()) {
             $this->reject('date', 'تاريخ المستند غير صالح أو مستقبلي.');
         }
     }
@@ -147,7 +147,7 @@ final class TreasuryRegisterService
                 $summary = app(CashHandoverService::class)->summary($session);
                 if (! in_array($summary['status'], ['partial', 'complete'], true)
                     || (int) $session->user_id === (int) $source->received_by
-                    || $date < $session->closed_at->toDateString()) {
+                    || $date < $session->closed_at->copy()->setTimezone('Asia/Aden')->toDateString()) {
                     $this->reject('source', 'تسليم الصندوق غير متسق مع التسوية الأصلية.');
                 }
             } else {
