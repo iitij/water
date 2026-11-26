@@ -34,9 +34,14 @@ final class GatedInvoiceTransferWriter
     ) {}
 
     public function issue(User $actor, int $subscriberId, int $meterId, string $uuid,
-        DateTimeImmutable $now, ?string $notes = null): array
+        DateTimeImmutable $now, ?string $notes = null, ?array $selectedReadingIds = null): array
     {
-        return $this->within($actor, $uuid, $now, function (User $actor, array $context) use ($subscriberId, $meterId, $uuid, $now, $notes): array {
+        if ($selectedReadingIds !== null) {
+            $this->need($selectedReadingIds !== [] && count($selectedReadingIds) === count(array_unique($selectedReadingIds)), 'gated_invoice_reading_selection');
+            foreach ($selectedReadingIds as $id) $this->need(is_int($id) && $id > 0, 'gated_invoice_reading_selection');
+            sort($selectedReadingIds, SORT_NUMERIC);
+        }
+        return $this->within($actor, $uuid, $now, function (User $actor, array $context) use ($subscriberId, $meterId, $uuid, $now, $notes, $selectedReadingIds): array {
             abort_unless($actor->hasRole('super_admin') || $actor->can('Create:Invoice'), 403);
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($subscriberId);
             $meter = Meter::query()->where('subscriber_id', $subscriberId)->lockForUpdate()->findOrFail($meterId);
@@ -50,10 +55,16 @@ final class GatedInvoiceTransferWriter
                     && (int) $invoice->subscriber_id === $subscriberId && (int) $invoice->meter_id === $meterId
                     && $invoice->bill_date->toDateString() === $context['effective_on']
                     && $invoice->notes === $notes, 'gated_invoice_replay_conflict');
-                $this->checkIssueAudit($invoice, $actor, $uuid);
+                $this->checkIssueAudit($invoice, $actor, $uuid, $selectedReadingIds);
                 $created = $this->registry->record($context, $uuid, [$this->ledger->leg((int) $entry->id)], $now);
                 $this->need(! $created, 'gated_invoice_replay_conflict');
                 return ['invoice' => $invoice, 'registry_created' => false];
+            }
+            if ($selectedReadingIds !== null) {
+                $selected = \App\Models\Reading::query()->where('meter_id', $meterId)
+                    ->whereIn('id', $selectedReadingIds)->where('is_invoiced', false)
+                    ->orderBy('id')->lockForUpdate()->get();
+                $this->need($selected->count() === count($selectedReadingIds), 'gated_invoice_reading_selection');
             }
             $balance = app(TransactionService::class);
             $before = $balance->accountBalanceMinor($subscriber);
@@ -73,9 +84,10 @@ final class GatedInvoiceTransferWriter
                 'gated_invoice_effect_mismatch');
             app(AuditLogger::class)->recordRequired('financial.invoice_issued', [
                 'entity_type' => Invoice::class, 'entity_id' => $invoice->id, 'actor_user_id' => $actor->id,
-                'after' => ['operation_uuid' => $uuid, 'subscriber_id' => $subscriberId, 'meter_id' => $meterId, 'notes' => $notes],
+                'after' => ['operation_uuid' => $uuid, 'subscriber_id' => $subscriberId, 'meter_id' => $meterId, 'notes' => $notes,
+                    'selected_reading_ids' => $selectedReadingIds],
             ]);
-            $this->checkIssueAudit($invoice, $actor, $uuid);
+            $this->checkIssueAudit($invoice, $actor, $uuid, $selectedReadingIds);
             $this->need($this->registry->record($context, $uuid, [$leg], $now), 'gated_invoice_operation_conflict');
             return ['invoice' => $invoice, 'registry_created' => true];
         });
@@ -191,7 +203,7 @@ final class GatedInvoiceTransferWriter
         });
     }
 
-    private function checkIssueAudit(Invoice $invoice, User $actor, string $uuid): void
+    private function checkIssueAudit(Invoice $invoice, User $actor, string $uuid, ?array $selectedReadingIds): void
     {
         $audit = \App\Models\AuditEvent::query()->where('event', 'financial.invoice_issued')
             ->where('entity_type', Invoice::class)->where('entity_id', (string) $invoice->id)->lockForUpdate()->sole();
@@ -199,6 +211,7 @@ final class GatedInvoiceTransferWriter
             && ($audit->after['operation_uuid'] ?? null) === $uuid
             && (int) ($audit->after['subscriber_id'] ?? 0) === (int) $invoice->subscriber_id
             && (int) ($audit->after['meter_id'] ?? 0) === (int) $invoice->meter_id
+            && ($audit->after['selected_reading_ids'] ?? null) === $selectedReadingIds
             && array_key_exists('notes', $audit->after) && $audit->after['notes'] === $invoice->notes, 'gated_invoice_replay_conflict');
     }
 
