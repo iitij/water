@@ -1236,7 +1236,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_credits', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
-    private function batchResolutionControl(int $variance = -10, string $receiptAmount = '1.00'): array
+    private function batchResolutionControl(int $variance = -10, string $receiptAmount = '1.00', array $classifications = ['posting_required', 'posting_required']): array
     {
         [, , $account, , $lot, $subscriber] = $this->held();
         $issuer = $this->actor();
@@ -1289,15 +1289,75 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $counts->review($countReviewer, (int) $count['id'], true, self::EVIDENCE);
         \Laravel\Sanctum\Sanctum::actingAs($proposer);
         $proposalIds = [];
-        foreach ([$uuid, $second] as $claim) {
+        foreach ([$uuid, $second] as $index => $claim) {
             $response = $this->postJson($root.$claim.'/resolution-proposal', [
-                'count_id' => (int) $count['id'], 'classification' => 'posting_required', 'evidence' => self::EVIDENCE,
+                'count_id' => (int) $count['id'], 'classification' => $classifications[$index], 'evidence' => self::EVIDENCE,
             ])->assertOk()->assertJsonPath('created', true);
             $proposalIds[$claim] = $response->json('proposal_id');
         }
         $approver = $this->actor();
         return compact('id', 'uuid', 'second', 'root', 'submit', 'data', 'requester', 'approver',
             'counter', 'countReviewer', 'amount', 'count', 'proposalIds', 'balance', 'counted');
+    }
+
+    public function test_release_refund_mixed_readiness_exact_partial_shortage_never_authorizes_posting(): void
+    {
+        $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events', 'treasury_cash_counts', 'treasury_cash_count_reviews'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $plan = $service->mixedResolutionReadiness($f['approver'], $f['id'], $f['proposalIds'], $this->nowAt());
+        $this->assertSame(10, $plan['total_claimed_minor']);
+        $this->assertSame(6, $plan['posting_required_minor']);
+        $this->assertSame(4, $plan['nonposting_claimed_minor']);
+        $this->assertSame(-6, $plan['expected_treasury_delta_minor']);
+        $this->assertSame([-6, 0], array_column($plan['items'], 'expected_subscriber_delta_minor'));
+        $this->assertSame([-6, 0], array_column($plan['items'], 'expected_treasury_delta_minor'));
+        $this->assertTrue($plan['aggregate_arithmetic_verified']);
+        $this->assertFalse($plan['individual_nonposting_evidence_verified']);
+        $this->assertFalse($plan['evidence_ready_for_batch_review']);
+        $this->assertFalse($plan['financial_posting_created']);
+        $this->assertFalse($plan['closure_authorized']);
+        $this->assertFalse($plan['spending_authorized']);
+        $this->assertTrue($plan['incident_unresolved']);
+        $this->rejects('completed_refund_resolution_evidence', fn () => $service->postBatchResolution(
+            $f['approver'], $f['id'], $f['proposalIds'], 'Independent investigation of both cash claims', $this->nowAt()));
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () =>
+            $service->unresolvedForAccount($f['id'])));
+        $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+    }
+
+    public function test_release_refund_mixed_readiness_rejects_total_claim_shortage(): void
+    {
+        $f = $this->batchResolutionControl(-10, '1.00', ['posting_required', 'no_disbursement']);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->rejects('completed_refund_resolution_evidence', fn () =>
+            app(\App\Services\CompletedCashRefundRequest::class)->mixedResolutionReadiness(
+                $f['approver'], $f['id'], $f['proposalIds'], $this->nowAt()));
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+    }
+
+    public function test_release_refund_mixed_readiness_equal_count_does_not_prove_no_cash_disbursed(): void
+    {
+        $f = $this->batchResolutionControl(0, '1.00', ['no_disbursement', 'cash_returned']);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $plan = $service->mixedResolutionReadiness($f['approver'], $f['id'], $f['proposalIds'], $this->nowAt());
+        $this->assertSame(0, $plan['posting_required_minor']);
+        $this->assertSame(10, $plan['nonposting_claimed_minor']);
+        $this->assertSame([0, 0], array_column($plan['items'], 'expected_treasury_delta_minor'));
+        $this->assertTrue($plan['aggregate_arithmetic_verified']);
+        $this->assertFalse($plan['individual_nonposting_evidence_verified']);
+        $this->assertFalse($plan['closure_authorized']);
+        $this->assertTrue($plan['incident_unresolved']);
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () =>
+            $service->unresolvedForAccount($f['id'])));
     }
 
     public function test_release_refund_batch_controls_cumulative_receipt_limit_rolls_back_first_member(): void
