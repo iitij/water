@@ -33,6 +33,17 @@ final class FinancialSourceInsertProtection
         'treasury_accounts' => ['code', 'opening_reference'],
     ];
 
+    private const UNIQUE_KEYS = [
+        'invoices' => ['bill_number'],
+        'payments' => ['receipt_number', 'sync_uuid'],
+        'payment_refunds' => ['disbursement_reference'],
+        'treasury_accounts' => ['code', 'opening_reference'],
+        'treasury_postings' => ['cash_handover_id', 'payment_refund_id', 'evidence_reference',
+            'cash_session_funding_id', 'treasury_transfer_id', 'treasury_transfer_receipt_id',
+            'treasury_bank_fee_id', 'treasury_cash_adjustment_id', 'treasury_bank_collection_id',
+            'treasury_late_cash_receipt_id', 'held_cash_payout_uuid'],
+    ];
+
     private function definitions(): array
     {
         $driver = DB::getDriverName();
@@ -74,6 +85,34 @@ final class FinancialSourceInsertProtection
                     : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$mutationMessage}'; END IF; END";
                 $mutationName = 'fin_source_'.$table.'_'.strtolower($event);
                 $defs[$mutationName] = [$table, "BEFORE {$event} ON {$table} FOR EACH ROW {$mutationBody}", $mutationBody, $event];
+            }
+            if ($table === 'treasury_accounts') {
+                $fixed = [];
+                foreach (['opening_minor', 'opened_by', 'created_at'] as $field) {
+                    $fixed[] = $sqlite ? "OLD.{$field} IS NOT NEW.{$field}" : "NOT (OLD.{$field} <=> NEW.{$field})";
+                }
+                foreach (['code', 'channel', 'opening_reference', 'opening_evidence'] as $field) {
+                    $fixed[] = $sqlite ? "OLD.{$field} IS NOT NEW.{$field}" : "NOT (BINARY OLD.{$field} <=> BINARY NEW.{$field})";
+                }
+                $condition = '('.implode(' OR ', $fixed).") AND (({$oldInvalid}) OR ({$invalid}))";
+                $msg = 'Treasury opening evidence is fenced';
+                $extra = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                    : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+                $defs['fin_source_treasury_opening_update'] = [$table, "BEFORE UPDATE ON {$table} FOR EACH ROW {$extra}", $extra, 'UPDATE'];
+            }
+            if ($sqlite) {
+                // INSERT OR REPLACE and UPDATE OR REPLACE can delete a
+                // conflicting row without invoking its DELETE trigger.
+                $keys = array_merge(['id'], self::UNIQUE_KEYS[$table]);
+                $conflicts = implode(' OR ', array_map(fn ($key) => "d.{$key} = NEW.{$key}", $keys));
+                $prior = str_replace("NEW.{$column}", "d.{$column}", $invalid);
+                foreach (['INSERT', 'UPDATE'] as $event) {
+                    $exclude = $event === 'UPDATE' ? ' AND d.id <> OLD.id' : '';
+                    $condition = "EXISTS (SELECT 1 FROM {$table} d WHERE ({$conflicts}){$exclude} AND ({$prior}))";
+                    $extra = "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'Financial source replacement is fenced'); END";
+                    $defs['fin_source_'.$table.'_replace_'.strtolower($event)] = [$table,
+                        "BEFORE {$event} ON {$table} FOR EACH ROW {$extra}", $extra, $event];
+                }
             }
         }
         return $defs;
