@@ -12,8 +12,6 @@ use App\Models\User;
 use App\Services\FinancialCloseJournalProtection;
 use App\Services\FinancialPostingRegistryProtection;
 use App\Services\FinancialSourceInsertProtection;
-use App\Services\GatedCashReceiptWriter;
-use App\Services\GatedInvoiceTransferWriter;
 use DateTimeImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabaseState;
 use Illuminate\Support\Facades\DB;
@@ -81,10 +79,36 @@ final class FinancialCloseUpgradeTest extends TestCase
         $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-UPGRADE-METER']);
         $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
             'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
-        $invoice = app(GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id,
-            (int) $meter->id, '66666666-6666-4666-8666-666666666666', $now)['invoice'];
-        app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.04',
-            '77777777-7777-4777-8777-777777777777', $now);
+        // Populate the pre-upgrade schema before installing the new guards.
+        // The candidate registry writer intentionally requires the guards, so
+        // construct the exact previous-format registry rows from real effects.
+        $invoice = app(\App\Services\InvoiceService::class)->generateInvoice($subscriber, $meter);
+        $receipt = app(\App\Services\PaymentService::class)->collectPayment($subscriber, '0.04',
+            userId: (int) $actor->id, syncUuid: '77777777-7777-4777-8777-777777777777');
+        $periodId = (int) DB::table('financial_periods')->value('id');
+        DB::transaction(function () use ($invoice, $receipt, $periodId, $now): void {
+            foreach ([
+                [\App\Models\Invoice::class, $invoice->id, 'invoice', '66666666-6666-4666-8666-666666666666'],
+                [\App\Models\Payment::class, $receipt->id, 'payment', '77777777-7777-4777-8777-777777777777'],
+            ] as [$class, $id, $type, $uuid]) {
+                $transaction = DB::table('transactions')->where('reference_type', $class)
+                    ->where('reference_id', $id)->where('type', $type)->sole();
+                $leg = app(\App\Services\FinancialLedgerEvidence::class)->leg((int) $transaction->id);
+                $leg['amount_minor'] = (string) $leg['amount_minor'];
+                $payload = json_encode([
+                    'format' => 1, 'operation_uuid' => $uuid, 'scope' => 'water',
+                    'period_id' => $periodId, 'effective_on' => '2026-11-25',
+                    'epoch' => 5, 'version' => 0, 'legs' => [$leg],
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+                DB::table('financial_posting_operations')->insert([
+                    'operation_uuid' => $uuid, 'period_id' => $periodId, 'scope_key' => 'water',
+                    'effective_on' => '2026-11-25', 'fence_epoch' => 5, 'period_version' => 0,
+                    'recorded_at_utc' => $now->format('Y-m-d\TH:i:s.u\Z'),
+                    'canonical_payload' => $payload, 'payload_hash' => hash('sha256', $payload),
+                ]);
+                DB::table('financial_posting_events')->insert($leg + ['operation_uuid' => $uuid, 'scope_key' => 'water']);
+            }
+        });
         foreach ($this->guards() as $guard) $this->assertFalse($guard->active());
         $tables = ['financial_scopes', 'financial_periods', 'financial_close_commands',
             'financial_period_closures', 'subscribers', 'meters', 'readings', 'invoices',
@@ -106,6 +130,10 @@ final class FinancialCloseUpgradeTest extends TestCase
         $this->artisan('migrate', ['--force' => true])->assertExitCode(0);
         $this->assertEquals($after, $this->metadata());
         $this->assertEquals($before, $snapshot());
+        $verified = DB::transaction(fn () => app(\App\Services\FinancialPostingRegistry::class)->verifyPeriod('water', $periodId));
+        $this->assertSame(2, $verified['operations']);
+        $this->assertSame(2, $verified['events']);
+        $this->assertFalse($verified['source_coverage_verified']);
         foreach (self::NEW_MIGRATIONS as $migration) {
             $this->assertDatabaseHas('migrations', ['migration' => basename($migration, '.php')]);
         }
