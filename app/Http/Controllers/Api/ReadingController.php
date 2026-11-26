@@ -247,7 +247,13 @@ class ReadingController extends ApiController
             'ids' => ['required', 'array', 'min:1'],
             'ids.*' => ['integer', 'distinct', 'exists:readings,id'],
             'notes' => ['nullable', 'string'],
+            'operation_uuid' => ['nullable', 'uuid'],
         ]);
+        if (config('financial_candidate.invoices') === true || isset($data['operation_uuid'])) {
+            $result = app(\App\Services\ProspectiveReadingBatchInvoices::class)->issue(
+                $request->user(), $data['ids'], $data['notes'] ?? null, $data['operation_uuid'] ?? null);
+            return response()->json($result, $result['invoices_issued'] > 0 ? 201 : 422);
+        }
         $readings = Reading::with('meter.subscriber')->whereIn('id', $data['ids'])->where('is_invoiced', false)->get();
         if ($readings->isEmpty()) {
             return response()->json(['message' => 'لا توجد قراءات غير مفوترة ضمن الاختيار.'], 422);
