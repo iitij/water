@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify source attestation candidate df92063cc5f9cabe1b3433e38d888b1808560d1e exact CI; then read-side source proof and trust lifecycle, mixed settlement, all-writer protection, closure, Flutter and production.",
+  "next": "Verify source revalidation candidate 86c022e4bd9ffa3a0fa45f726a7fa1dfe1495688 exact CI; then claim-specific source proof integration and historical trust policy, mixed settlement, all-writer protection, closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2892,12 +2892,38 @@
     ]
   },
   "release_refund_incident_source_attestation": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "d6c6a00e1ec7942bcac985d4f6100889f4e199a1",
     "branch": "release/prospective-refund-incident-source-attestation",
     "source": "df92063cc5f9cabe1b3433e38d888b1808560d1e",
     "scope": "Internal Ed25519 detached signature validation over canonical domain-separated exact claim document metadata and source reference; public keys from deployment configuration, empty default, synthetic test keys only. Validate prior immutable byte review, independent substantive reviewer, source reference non-reuse and exact replay. New protected audit, migration and preflight. One new targeted test plus document regression per engine.",
-    "limits": "CI unverified. No live trusted issuer onboarded. Trusted signature authenticates signed statement, not physical fact. Does not authorize closure, posting or spending. Historical key version/revocation policy, verified read-side source proof, mixed writer integration, earlier operative paths authenticity review, aggregate revisions, entrypoints, closure, Flutter and production remain open.",
-    "next": "Verify exact CI; add trusted source proof revalidation and key lifecycle policy, then bind source attestations to mixed atomic settlement and reject stale/untrusted evidence."
+    "limits": "Exact targeted CI logs verified on both engines. No live trusted issuer onboarded. Trusted signature authenticates signed statement, not physical fact. Does not authorize closure, posting or spending. Historical key version/revocation policy, verified read-side source proof, mixed writer integration, earlier operative paths authenticity review, aggregate revisions, entrypoints, closure, Flutter and production remain open.",
+    "next": "Verify exact CI; add trusted source proof revalidation and key lifecycle policy, then bind source attestations to mixed atomic settlement and reject stale/untrusted evidence.",
+    "run": 45749777141,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139674491219,
+        "tests": 2,
+        "assertions": 62,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139674490951,
+        "tests": 2,
+        "assertions": 62,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_source_revalidation": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "df92063cc5f9cabe1b3433e38d888b1808560d1e",
+    "branch": "release/prospective-refund-incident-source-revalidation",
+    "source": "86c022e4bd9ffa3a0fa45f726a7fa1dfe1495688",
+    "scope": "Shared exact proof reconstruction for original source attestation and independent pending-use revalidation. Recheck current configured Ed25519 key, source signature, immutable document and byte review, current proposal identity, chronology and reviewer separation; reject reference/document reuse, removed or rotated key, wrong proposal and self-review. No financial mutation or closure permission. Extended affected test only per engine.",
+    "limits": "CI unverified. Current-key-only conservative trust policy for pending claims; no automatic reinterpretation of posted history. No trusted real issuer configured, no public endpoint or mixed writer integration. Historical key version and revocation evidence policy, safe renewed evidence after rotation, earlier operative paths authenticity review, aggregate revisions, all-writer protection, closure, Flutter and production remain open.",
+    "next": "Verify exact CI then bind independent revalidated source evidence for every claim to the mixed group plan under the financial gate; implement historical verification policy before operative settlement."
   }
 }
