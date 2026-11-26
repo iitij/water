@@ -127,7 +127,7 @@ class InvoiceService
 
             // 8. إنشاء الفاتورة
             $issuedAt = now();
-            $invoice = Invoice::create([
+            $invoice = new Invoice([
                 'subscriber_id' => $subscriber->id,
                 'meter_id' => $meter?->id,
                 'invoice_type' => $invoiceType,
@@ -143,6 +143,9 @@ class InvoiceService
                 'status' => 'issued',
                 'notes' => $notes,
             ]);
+            if (! $invoice->save(['financial_invoice_writer' => $gatedWriter])) {
+                throw new \RuntimeException('Invoice was not persisted.');
+            }
 
             // 8. إنشاء بنود الفاتورة
             $items = [];
@@ -190,7 +193,8 @@ class InvoiceService
                 amount: $subtotalMoney->negate()->decimal(), // الفاتورة تعتبر دين (Debit)
                 description: 'إصدار فاتورة رقم ' . $invoice->bill_number,
                 reference: $invoice,
-                meter: $meter
+                meter: $meter,
+                invoiceWriter: $gatedWriter
             );
 
             // تحديث رصيد المشترك بعد إنشاء الفاتورة والمعاملة المالية
