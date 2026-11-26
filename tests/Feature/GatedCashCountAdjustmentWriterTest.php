@@ -7863,6 +7863,88 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
     }
 
+    public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 20);
+        $authorizer = $this->actor();
+        $executor = $this->actor();
+        $service = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $this->authorizeHeld($authorizer, $executor, 15);
+        $firstId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $diagnostic = app(\App\Services\FinancialHeldLiabilityPeriodDiagnostic::class);
+        $inspect = fn (int $id) => DB::transaction(fn () => $diagnostic->inspect($id));
+        $first = $inspect($firstId);
+        $this->assertSame(15, $first['totals']['authorized_minor']);
+        $this->assertSame(15, $first['totals']['recorded_closing_pending_payout_minor']);
+        $this->assertSame(20, $first['totals']['recorded_closing_identified_minor']);
+        $this->assertSame(5, $first['totals']['recorded_closing_unidentified_minor']);
+        $this->assertSame(0, $first['totals']['paid_minor']);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $nextId = DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $this->assertTrue($service->cancelPayoutAuthorization($authorizer, self::OTHER, self::EVIDENCE,
+            '2026-12-02', $later)['created']);
+        $this->assertSame($first, $inspect($firstId));
+        $cancelled = $inspect((int) $nextId);
+        $this->assertSame(15, $cancelled['totals']['recorded_opening_pending_payout_minor']);
+        $this->assertSame(15, $cancelled['totals']['cancelled_authorization_minor']);
+        $this->assertSame(0, $cancelled['totals']['recorded_closing_pending_payout_minor']);
+        $this->assertSame(20, $cancelled['totals']['recorded_closing_identified_minor']);
+        $this->assertSame(0, $cancelled['totals']['paid_minor']);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $this->assertTrue($service->authorizePayout($authorizer, $executor, self::NEXT, 15,
+            'QA-DEC-AUTH', self::EVIDENCE, $uuid, '2026-12-02', $later)['created']);
+        $pay = fn () => $service->payout($executor, self::NEXT, 15, 'QA-DEC-PAYOUT', self::EVIDENCE,
+            $uuid, '2026-12-02', $later);
+        $this->assertTrue($pay()['created']);
+        $this->assertFalse($pay()['created']);
+        $this->assertSame($first, $inspect($firstId));
+        $second = $inspect((int) $nextId);
+        $this->assertSame(15, $second['totals']['recorded_opening_pending_payout_minor']);
+        $this->assertSame(15, $second['totals']['authorized_minor']);
+        $this->assertSame(15, $second['totals']['cancelled_authorization_minor']);
+        $this->assertSame(15, $second['totals']['paid_minor']);
+        $this->assertSame(0, $second['totals']['recorded_closing_pending_payout_minor']);
+        $this->assertSame(5, $second['totals']['recorded_closing_identified_minor']);
+        $this->assertSame(5, $second['totals']['recorded_closing_unidentified_minor']);
+        $this->assertSame(15, $second['rows'][0]['owners'][0]['recorded_opening_pending_payout_minor']);
+        $this->assertSame(0, $second['rows'][0]['owners'][0]['recorded_closing_pending_payout_minor']);
+        $this->assertDatabaseCount('treasury_held_cash_payouts', 1);
+        $this->assertDatabaseHas('treasury_postings', ['treasury_account_id' => $account['id'],
+            'held_cash_payout_uuid' => $uuid, 'amount_minor' => -15, 'effective_on' => '2026-12-02']);
+        $this->assertFalse($second['closure_authorized']);
+    }
+
+    public function test_close_evidence_rejects_orphan_batch_approval_even_without_any_request(): void
+    {
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $this->gate(function () use ($actor, $service): void {
+            $this->assertSame(0, $service->verifyBatchAuditCoverage()['groups']);
+            app(\App\Services\AuditLogger::class)->recordRequired($service::BATCH_APPROVED, [
+                'entity_type' => 'completed_cash_refund_request', 'entity_id' => '999999',
+                'actor_user_id' => $actor->id, 'source' => 'internal',
+                'after' => ['count_id' => 999999, 'incident_count' => 1,
+                    'proposal_ids_json' => json_encode(['88888888-8888-4888-8888-888888888888' => 999999], JSON_THROW_ON_ERROR)],
+            ]);
+        });
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $this->assertSame(0, AuditEvent::query()->where('event', $service::EVENT)->count());
+        $this->rejects('completed_refund_batch_conflict', fn () => $this->gate(fn () => $service->verifyBatchAuditCoverage()));
+        $this->rejects('completed_refund_batch_conflict', fn () =>
+            app(\App\Services\FinancialCloseEvidenceDiagnostic::class)->inspect($actor, $periodId, $this->nowAt()));
+        $this->assertSame(1, AuditEvent::query()->where('event', $service::BATCH_APPROVED)->count());
+        $this->assertDatabaseCount('payment_refunds', 0);
+        $this->assertDatabaseCount('financial_close_commands', 0);
+    }
+
     public function test_held_period_rollforward_preserves_prior_cutoff_and_owner_carry(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
@@ -7883,7 +7965,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, $row['recorded_closing_unidentified_minor']);
         $this->assertSame(5, $row['recorded_closing_identified_minor']);
         $this->assertSame([['assignment_uuid' => self::NEXT, 'subscriber_id' => (int) $subscriber->id,
-            'recorded_opening_minor' => 0, 'recorded_closing_minor' => 5]], $row['owners']);
+            'recorded_opening_minor' => 0, 'recorded_closing_minor' => 5,
+            'recorded_opening_pending_payout_minor' => 0, 'recorded_closing_pending_payout_minor' => 0]], $row['owners']);
         $nextId = DB::table('financial_periods')->insertGetId([
             'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
             'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
