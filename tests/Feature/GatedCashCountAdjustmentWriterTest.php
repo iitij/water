@@ -9112,6 +9112,74 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($evidence, $inspect()['bank_period_balances']);
     }
 
+    public function test_close_evidence_cash_count_uses_local_cutoff_and_matching_posting_snapshot(): void
+    {
+        $counter = $this->actor();
+        $reviewer = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $writer = app(GatedTreasuryOpeningFundingWriter::class);
+        $account = $writer->open($counter, [
+            'code' => 'QA-CASH-PERIOD', 'name' => 'Synthetic period cash',
+            'channel' => 'cash', 'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-CASH-PERIOD-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], self::UUID, $this->nowAt())['account'];
+        $accountId = (int) $account['id'];
+        $counts = app(TreasuryCashCountService::class);
+        $count = function (string $money, string $reference) use ($counts, $accountId, $counter, $reviewer): array {
+            $result = $counts->record($counter, $accountId, $money, $reference, self::EVIDENCE);
+
+            return $counts->review($reviewer, (int) $result['count']['id'], true, self::EVIDENCE);
+        };
+        $travel = fn (string $date) => $this->travelTo(\Carbon\Carbon::parse($date));
+        $travel('2026-11-30T19:30:00Z');
+        $count('100.00', 'QA-CUTOFF-FIRST');
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $inspect = fn () => $diagnostic->inspect($reviewer, $periodId, now()->toDateTimeImmutable());
+        $this->assertNull($inspect()['cash_period_observations']);
+
+        $travel('2026-11-30T20:00:00Z');
+        $writer->fund($this->actor(), $counter, $accountId, '5.25',
+            'QA-CUTOFF-FUND', self::EVIDENCE, self::OTHER, now()->toDateTimeImmutable());
+        // The local period ended, but the earlier count excluded a November posting.
+        $travel('2026-11-30T21:00:00Z');
+        $stale = $inspect();
+        $this->assertSame(['matched' => false, 'rows' => [], 'unverified_accounts' => [(string) $accountId]],
+            $stale['cash_period_observations']);
+        $this->assertContains('cash_period_observations_unmatched', $stale['blockers']);
+
+        $travel('2026-11-30T20:55:00Z');
+        $verified = $count('94.75', 'QA-CUTOFF-VERIFIED');
+        $travel('2026-11-30T21:00:00Z');
+        $count('94.75', 'QA-CUTOFF-NEXT-LOCAL-DAY');
+        $expected = ['matched' => true, 'rows' => [[
+            'account_id' => (string) $accountId,
+            'count_id' => (string) $verified['count']['id'],
+            'review_id' => (string) $verified['review']['id'],
+            'observed_at_utc' => '2026-11-30T20:55:00.000000Z',
+            'counted_minor' => 9475,
+            'ledger_hash' => $verified['count']['ledger_hash'],
+        ]], 'unverified_accounts' => []];
+        $result = $inspect();
+        $this->assertSame($expected, $result['cash_period_observations']);
+        $this->assertNotContains('cash_period_observations_unmatched', $result['blockers']);
+        $this->assertFalse($result['closure_authorized']);
+
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $travel('2026-12-01T08:30:00Z');
+        $writer->fund($this->actor(), $counter, $accountId, '2.60',
+            'QA-CUTOFF-LATER-FUND', self::EVIDENCE, self::ADJUST, now()->toDateTimeImmutable());
+        $tables = ['treasury_cash_counts', 'treasury_cash_count_reviews', 'treasury_postings',
+            'financial_posting_events', 'audit_events', 'financial_period_closures'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $this->assertSame($expected, $inspect()['cash_period_observations']);
+        $this->assertEquals($before, $snapshot());
+    }
+
     public function test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure(): void
     {
         $actor = $this->actor();

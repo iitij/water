@@ -28,6 +28,7 @@ final class FinancialCloseEvidenceDiagnostic
         private HeldCashReservation $reservation,
         private FinancialPeriodMovementDiagnostic $movements,
         private FinancialHeldLiabilityPeriodDiagnostic $heldPeriod,
+        private TreasuryCashCountService $cashCounts,
     ) {}
 
     public function inspect(User $actor, int $periodId, DateTimeImmutable $now): array
@@ -79,6 +80,7 @@ final class FinancialCloseEvidenceDiagnostic
         $heldPeriod = $this->heldPeriod->inspect($periodId);
         $settlement = $this->settlements->inspect($actor, $periodId, $through);
         $bankBalances = $ended ? $this->bankPeriodBalances($settlement, $movement) : null;
+        $cashObservations = $ended ? $this->cashPeriodObservations($period->next_on, $movement['recorded_movements_verified']) : null;
         $incident = $this->refundIncidents();
         $batchCoverage = $this->refunds->verifyBatchAuditCoverage();
         $subscriber = $ended ? null : $this->subscribers->inspect($periodId);
@@ -97,6 +99,7 @@ final class FinancialCloseEvidenceDiagnostic
         if (! $movement['recorded_movements_verified']) $blockers[] = 'period_movements_unmatched';
         if (! $settlement['scanned_settlements_match']) $blockers[] = 'settlement_sources_unmatched';
         if ($bankBalances !== null && ! $bankBalances['matched']) $blockers[] = 'bank_period_balances_unmatched';
+        if ($cashObservations !== null && ! $cashObservations['matched']) $blockers[] = 'cash_period_observations_unmatched';
         if ($incident['count'] !== 0 || $incident['orphan_accounts'] !== []) $blockers[] = 'unresolved_refund_incidents';
         if ($incident['unposted_cash_refund_minor'] !== 0) $blockers[] = 'unposted_cash_refunds';
         if ($subscriber !== null && ! $subscriber['scanned_accounts_match']) $blockers[] = 'subscriber_accounts_unmatched';
@@ -111,7 +114,7 @@ final class FinancialCloseEvidenceDiagnostic
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
-            'bank_period_balances' => $bankBalances,
+            'bank_period_balances' => $bankBalances, 'cash_period_observations' => $cashObservations,
             'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
             'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
@@ -150,6 +153,29 @@ final class FinancialCloseEvidenceDiagnostic
         $matched = $bankMovements->isEmpty();
 
         return ['matched' => $matched, 'rows' => $matched ? $rows : []];
+    }
+
+    private function cashPeriodObservations(string $nextOn, bool $movementsVerified): array
+    {
+        if (! $movementsVerified) {
+            return ['matched' => false, 'rows' => [], 'unverified_accounts' => []];
+        }
+
+        $accounts = DB::table('treasury_accounts')->where('channel', 'cash')->where('opening_on', '<', $nextOn)
+            ->orderBy('id')->lockForUpdate()->get();
+        $rows = [];
+        $unverified = [];
+        foreach ($accounts as $account) {
+            $observation = $this->cashCounts->periodEndObservation((int) $account->id, $nextOn);
+            if ($observation === null) {
+                $unverified[] = (string) $account->id;
+            } else {
+                $rows[] = $observation;
+            }
+        }
+
+        return ['matched' => $unverified === [], 'rows' => $unverified === [] ? $rows : [],
+            'unverified_accounts' => $unverified];
     }
 
     /** Scope-wide, deliberately not netted or restricted to the target month:
