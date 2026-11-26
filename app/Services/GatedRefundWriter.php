@@ -93,6 +93,7 @@ final class GatedRefundWriter
                     ? $service->batchPostingPlanLocked($reviewer, $accountId, $proposalIds, $date)
                     : $service->mixedSourcePlanLocked($reviewer, $accountId, $proposalIds, $attestationIds, $date);
                 $this->need(config('financial_candidate.completed_cash_refund') === true, 'completed_cash_refund_disabled');
+                if ($attestationIds === null) CompletedCashRefundRequest::requireSignedNewSettlement();
                 $this->need($this->batchCompletion === null, 'completed_refund_batch_conflict');
                 $this->batchCompletion = [$plan, (int) $reviewer->id, $confirmation];
                 try {
@@ -191,6 +192,7 @@ final class GatedRefundWriter
                             $intent, $reviewer, $confirmation, $replay, $expectedProposalId);
                     } else {
                         app(CompletedCashRefundRequest::class)->verifyLocked($intent);
+                        if (! $replay) CompletedCashRefundRequest::requireSignedNewSettlement();
                     }
                 } elseif (! $replay) {
                     app(CompletedCashRefundRequest::class)->assertUnreserved($uuid, $reference);
