@@ -115,7 +115,6 @@ final class HeldCashReleaseProposalService
     public function recordActiveRelease(User $actor, int $accountId, string $proposalUuid, string $uuid,
         string $evidence, DateTimeImmutable $now): array
     {
-        $this->need(config('financial_candidate.active_held_release') === true, 'active_held_release_disabled');
         return $this->release($actor, $accountId, $proposalUuid, $uuid, $evidence, $now, true);
     }
 
@@ -146,7 +145,7 @@ final class HeldCashReleaseProposalService
                     && $minor > 0 && SignedMinor::add($before, $minor) <= $credit['applied_minor']
                     && $minor <= $proof['candidate_additional_release_minor'], 'held_release_journal_capacity');
                 return $this->journalRow($proof, $credit, 'release', $before, SignedMinor::add($before, $minor), $proposalUuid);
-            }, $active);
+            }, $active, $proposalUuid);
     }
 
     /** Record the exact per-credit reduction required by the latest allocation. */
@@ -164,20 +163,35 @@ final class HeldCashReleaseProposalService
     }
 
     private function journalCommand(User $actor, int $accountId, string $uuid, string $evidence,
-        DateTimeImmutable $now, callable $plan, bool $active = false): array
+        DateTimeImmutable $now, callable $plan, bool $active = false, ?string $proposalUuid = null): array
     {
         $evidence = trim($evidence);
         $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1
             && mb_strlen($evidence) >= 20 && mb_strlen($evidence) <= 4000, 'held_release_proposal_input');
         return app(HeldCashReleaseReadiness::class)->withinPreview($accountId, $now,
-            function (array $proof) use ($actor, $uuid, $evidence, $plan, $active): array {
+            function (array $proof) use ($actor, $uuid, $evidence, $plan, $active, $proposalUuid): array {
                 $this->authorize($actor);
                 $this->verifyLocked($proof);
                 $state = $this->journalState($proof);
-                // Strict duplicate rejection until command-specific replay is
-                // bound to the original immutable request and response.
-                $this->need(! DB::table('held_cash_release_journal')->where('operation_uuid', $uuid)->exists(),
-                    'held_release_journal_duplicate');
+                $old = DB::table('held_cash_release_journal')->where('operation_uuid', $uuid)->lockForUpdate()->first();
+                if ($active && $old !== null) {
+                    $this->need($old->kind === 'release' && $old->proposal_uuid === $proposalUuid
+                        && (int) $old->treasury_account_id === $proof['account_id']
+                        && (int) $old->actor_id === (int) $actor->id && $old->evidence === $evidence,
+                        'active_held_release_replay_conflict');
+                    $marker = DB::table('held_cash_active_releases')->where('journal_id', $old->id)->lockForUpdate()->first();
+                    $this->need($marker !== null, 'active_held_release_no_shadow_adoption');
+                    $this->verifiedActiveState($proof);
+                    $row = (array) $old;
+                    unset($row['id']);
+                    foreach (['credit_id', 'treasury_account_id', 'revision_id', 'period_id', 'amount_minor',
+                        'applied_minor', 'before_minor', 'after_minor', 'actor_id'] as $key) {
+                        $row[$key] = SignedMinor::parse($row[$key]);
+                    }
+                    return $this->result($row, false) + ['active_release_recorded' => true];
+                }
+                $this->need($old === null, 'held_release_journal_duplicate');
+                if ($active) $this->need(config('financial_candidate.active_held_release') === true, 'active_held_release_disabled');
                 $row = $plan($proof, $state) + ['operation_uuid' => $uuid, 'actor_id' => (int) $actor->id, 'evidence' => $evidence];
                 $this->need(! DB::table('held_cash_active_releases')->where('credit_id', $row['credit_id'])->exists(),
                     'active_held_release_single_anchor');

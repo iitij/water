@@ -48,7 +48,10 @@ final class ActiveHeldCashRelease
 
     public function hasAccount(int $accountId): bool
     {
-        return DB::table('held_cash_active_releases')->where('treasury_account_id', $accountId)->exists();
+        if (DB::table('held_cash_active_releases')->where('treasury_account_id', $accountId)->exists()) return true;
+        return AuditEvent::query()->where('event', 'treasury.held_release_activated')
+            ->where('entity_type', 'held_cash_active_release')->lockForUpdate()->get()
+            ->contains(fn ($audit) => (int) ($audit->after['treasury_account_id'] ?? 0) === $accountId);
     }
 
     public function amount(int $accountId): int

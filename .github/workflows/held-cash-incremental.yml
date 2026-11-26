@@ -1,7 +1,7 @@
-name: Prospective active held release candidate
+name: Prospective active held reinstatement and replay
 on:
   push:
-    branches: ['release/prospective-active-held-release']
+    branches: ['release/prospective-active-release-reinstatement']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,8 +37,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify active release and optional reinstatement liquidity
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_active_reserve_|test_release_mixed_reserve_|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify active release reinstatement and exact replay
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_active_reserve_|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
@@ -97,5 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify active release and optional reinstatement liquidity
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_active_reserve_|test_release_mixed_reserve_|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify active release reinstatement and exact replay
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_active_reserve_|test_release_journal_records_exact_shadow_release_and_reinstatement_without_spending' tests/Feature/GatedCashCountAdjustmentWriterTest.php
