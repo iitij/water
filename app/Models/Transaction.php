@@ -62,12 +62,49 @@ class Transaction extends Model
         if (! $allowed) throw new \DomainException('gated_receipt_reversal_writer_required');
     }
 
+    public static function assertCorrectionPostingWriter(PaymentRefund|PaymentAccountTransfer $document, string $type, mixed $writer): void
+    {
+        if (($document instanceof PaymentRefund && $type !== 'payment_refund')
+            || ($document instanceof PaymentAccountTransfer && $type !== 'payment_transfer_in')) {
+            throw new \DomainException('gated_correction_ledger_writer_required');
+        }
+        try {
+            $document->assertGatedWriter($writer);
+        } catch (\DomainException $error) {
+            throw new \DomainException('gated_correction_ledger_writer_required', previous: $error);
+        }
+    }
+
     public function save(array $options = [])
     {
         $writer = $options['financial_invoice_writer'] ?? null;
         $receiptService = $options['financial_receipt_service'] ?? null;
         $reversalWriter = $options['financial_receipt_reversal_writer'] ?? null;
-        unset($options['financial_invoice_writer'], $options['financial_receipt_service'], $options['financial_receipt_reversal_writer']);
+        $correctionWriter = $options['financial_correction_writer'] ?? null;
+        unset($options['financial_invoice_writer'], $options['financial_receipt_service'], $options['financial_receipt_reversal_writer'], $options['financial_correction_writer']);
+        $correctionTypes = ['payment_refund', 'payment_transfer_in'];
+        $correctionClasses = [PaymentRefund::class, PaymentAccountTransfer::class];
+        $correctionRelated = in_array($this->type, $correctionTypes, true)
+            || in_array($this->reference_type, $correctionClasses, true)
+            || ($this->exists && (in_array($this->getOriginal('type'), $correctionTypes, true)
+                || in_array($this->getOriginal('reference_type'), $correctionClasses, true)));
+        if ($correctionRelated || $correctionWriter !== null) {
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $writer, $receiptService, $reversalWriter, $correctionWriter, $correctionClasses) {
+                if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new \LogicException('Financial issuance lock is missing.');
+                }
+                if ($writer !== null || $receiptService !== null || $reversalWriter !== null || $this->exists) {
+                    throw new \DomainException('gated_correction_ledger_writer_required');
+                }
+                $class = $this->reference_type;
+                $document = in_array($class, $correctionClasses, true) ? $class::query()->lockForUpdate()->find($this->reference_id) : null;
+                if ($document === null) {
+                    throw new \DomainException('gated_correction_ledger_writer_required');
+                }
+                self::assertCorrectionPostingWriter($document, $this->type, $correctionWriter);
+                return parent::save($options);
+            });
+        }
         $reversalRelated = $this->type === 'payment_reversal'
             || ($this->exists && $this->getOriginal('type') === 'payment_reversal');
         if ($reversalRelated || $reversalWriter !== null) {

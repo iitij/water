@@ -70,7 +70,7 @@ final class PaymentRefundService
             $existing = PaymentRefund::where('disbursement_reference', $reference)->lockForUpdate()->first();
             if (! ($gatedWriter !== null && $gatedWriter->allowsRecord((int) $payment->id, $reference, (int) $actor->id))
                 && ($gatedWriter !== null || config('financial_candidate.refunds') === true
-                    || ($existing !== null && GatedRefundWriter::hasRegisteredLeg($existing)))) {
+                    || $payment->hasRegisteredReceipt() || ($existing !== null && GatedRefundWriter::hasRegisteredLeg($existing)))) {
                 throw new \DomainException('gated_refund_writer_required');
             }
             if ($existing) {
@@ -128,13 +128,16 @@ final class PaymentRefundService
             if ($openInvoices()) {
                 throw ValidationException::withMessages(['amount' => 'لا يمكن استرداد الرصيد قبل تسوية جميع الفواتير المستحقة.']);
             }
-            $refund = PaymentRefund::create([
+            $refund = new PaymentRefund([
                 'payment_id' => $payment->id, 'subscriber_id' => $subscriber->id, 'recorded_by' => $actor->id,
                 'amount' => $amount, 'disbursement_reference' => $reference, 'method' => $method,
                 'disbursed_on' => $date, 'reason' => $reason, 'evidence' => $evidence,
             ]);
+            if (! $refund->save(['financial_correction_writer' => $gatedWriter])) {
+                throw new \RuntimeException('Refund document was not persisted.');
+            }
             $movement = $ledger->recordTransaction($subscriber, 'payment_refund',
-                $money->negate()->decimal(), 'استرداد رصيد دائن - '.$reference, $refund);
+                $money->negate()->decimal(), 'استرداد رصيد دائن - '.$reference, $refund, correctionWriter: $gatedWriter);
             $allocator->recalculateInvoices($subscriber);
             $after = $ledger->accountBalanceMinor($subscriber);
             if ($after !== FinancialAmount::add($before, -$requested) || $after < 0 || $openInvoices()) {

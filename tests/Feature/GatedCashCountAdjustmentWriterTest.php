@@ -3082,6 +3082,77 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_release_correction_model_fence_rejects_direct_refunds_transfers_and_ledger(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $other = Subscriber::create(['name' => 'Synthetic destination', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $collect = fn (string $uuid) => app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '10.00', $uuid, $this->nowAt())['payment'];
+        $receipt = $collect('66666666-6666-4666-8666-666666666666');
+        $second = $collect('77777777-7777-4777-8777-777777777777');
+        $refundWriter = app(\App\Services\GatedRefundWriter::class);
+        $transferWriter = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $ledger = app(\App\Services\TransactionService::class);
+        $reason = 'Independent documented correction';
+        $refund = ['payment_id' => $receipt->id, 'subscriber_id' => $subscriber->id, 'recorded_by' => $reviewer->id,
+            'amount' => '4.00', 'disbursement_reference' => 'QA-CORRECTION-FENCE', 'method' => 'treasury_cash',
+            'disbursed_on' => '2026-11-25', 'reason' => $reason, 'evidence' => self::EVIDENCE];
+        $transfer = ['payment_id' => $second->id, 'from_subscriber_id' => $subscriber->id,
+            'to_subscriber_id' => $other->id, 'approved_by' => $reviewer->id, 'amount' => '10.00',
+            'reason' => $reason, 'evidence' => self::EVIDENCE];
+        $tables = ['payments', 'payment_refunds', 'payment_account_transfers', 'transactions', 'treasury_postings',
+            'payment_allocations', 'payment_allocation_revisions', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $unchanged = function (string $error, callable $action) use ($tables, $snapshot): void {
+            $before = [];
+            foreach ($tables as $table) $before[$table] = $snapshot($table);
+            $this->rejects($error, $action);
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        };
+        foreach ([true, false] as $enabled) {
+            config(['financial_candidate.refunds' => $enabled, 'financial_candidate.subscriber_transfers' => $enabled]);
+            $unchanged('gated_refund_document_writer_required', fn () => \App\Models\PaymentRefund::create($refund));
+            $unchanged('gated_refund_document_writer_required', fn () => DB::transaction(fn () =>
+                (new \App\Models\PaymentRefund($refund))->saveQuietly(['financial_correction_writer' => $refundWriter])));
+            $unchanged('gated_transfer_document_writer_required', fn () => \App\Models\PaymentAccountTransfer::create($transfer));
+            $unchanged('gated_transfer_document_writer_required', fn () => DB::transaction(fn () =>
+                (new \App\Models\PaymentAccountTransfer($transfer))->saveQuietly(['financial_correction_writer' => $transferWriter])));
+        }
+        $refundUuid = '88888888-8888-4888-8888-888888888888';
+        $transferUuid = '99999999-9999-4999-8999-999999999999';
+        $record = fn () => $refundWriter->record($reviewer, (int) $receipt->id, (int) $account['id'], '4.00',
+            'QA-CORRECTION-FENCE', 'treasury_cash', '2026-11-25', $reason, self::EVIDENCE, $refundUuid, $this->nowAt());
+        $move = fn () => $transferWriter->transfer($reviewer, (int) $second->id, (int) $other->id,
+            $reason, self::EVIDENCE, $transferUuid, $this->nowAt());
+        $r = $record();
+        $t = $move();
+        $this->assertTrue($r['registry_created']);
+        $this->assertTrue($t['registry_created']);
+        foreach ([true, false] as $enabled) {
+            config(['financial_candidate.refunds' => $enabled, 'financial_candidate.subscriber_transfers' => $enabled]);
+            foreach ([[$r['refund'], 'payment_refund', '-4.00', $subscriber, $refundWriter, 'refund'],
+                [$t['transfer'], 'payment_transfer_in', '10.00', $other, $transferWriter, 'transfer']] as [$doc, $type, $amount, $owner, $writer, $kind]) {
+                $data = ['subscriber_id' => $owner->id, 'type' => $type, 'amount' => $amount,
+                    'reference_type' => get_class($doc), 'reference_id' => $doc->id];
+                $entry = \App\Models\Transaction::where('reference_type', get_class($doc))->where('reference_id', $doc->id)->where('type', $type)->sole();
+                $unchanged('gated_correction_ledger_writer_required', fn () => \App\Models\Transaction::create($data));
+                $unchanged('gated_correction_ledger_writer_required', fn () => $ledger->recordTransaction($owner, $type, $amount, reference: $doc));
+                $unchanged('gated_correction_ledger_writer_required', fn () => DB::transaction(fn () =>
+                    $ledger->recordTransaction($owner, $type, $amount, reference: $doc, correctionWriter: $writer)));
+                $unchanged('gated_correction_ledger_writer_required', fn () => $entry->fresh()->forceFill(['amount' => '1.00'])->saveQuietly());
+                $unchanged('gated_'.$kind.'_document_writer_required', fn () => $doc->fresh()->forceFill(['amount' => '1.00'])->saveQuietly());
+            }
+        }
+        $this->assertFalse($record()['registry_created']);
+        $this->assertFalse($move()['registry_created']);
+        $this->assertSame(600, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(1000, $ledger->accountBalanceMinor($other));
+        $this->assertSame(2, DB::table('financial_posting_events')->where('operation_uuid', $refundUuid)->count());
+        $this->assertSame(2, DB::table('financial_posting_events')->where('operation_uuid', $transferUuid)->count());
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_receipt_mutation_fence_blocks_quiet_financial_and_void_field_changes(): void
     {
         [, , $account, , , $subscriber] = $this->held();

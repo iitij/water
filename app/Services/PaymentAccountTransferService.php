@@ -70,7 +70,7 @@ final class PaymentAccountTransferService
                 }
             }
             if (! ($gatedWriter !== null && $gatedWriter->allowsTransfer((int) $receipt->id, $destinationId, (int) $actor->id))
-                && ($gatedWriter !== null || $registered || config('financial_candidate.subscriber_transfers') === true)) {
+                && ($gatedWriter !== null || $registered || $receipt->hasRegisteredReceipt() || config('financial_candidate.subscriber_transfers') === true)) {
                 throw new \DomainException('gated_subscriber_transfer_writer_required');
             }
             if ($existing) {
@@ -90,7 +90,7 @@ final class PaymentAccountTransferService
             }
             $ledger = app(TransactionService::class);
             $before = ['from' => $ledger->accountBalanceMinor($from), 'to' => $ledger->accountBalanceMinor($to)];
-            $transfer = PaymentAccountTransfer::create([
+            $transfer = new PaymentAccountTransfer([
                 'payment_id' => $receipt->id,
                 'from_subscriber_id' => $from->id,
                 'to_subscriber_id' => $to->id,
@@ -99,9 +99,12 @@ final class PaymentAccountTransferService
                 'reason' => $reason,
                 'evidence' => $evidence,
             ]);
+            if (! $transfer->save(['financial_correction_writer' => $gatedWriter])) {
+                throw new \RuntimeException('Transfer document was not persisted.');
+            }
             $out = $ledger->reverseDocument($from, $receipt, 'payment', reversalWriter: $gatedWriter);
             $in = $ledger->recordTransaction($to, 'payment_transfer_in', $money->decimal(),
-                'تصحيح تخصيص سند '.$receipt->receipt_number, $transfer);
+                'تصحيح تخصيص سند '.$receipt->receipt_number, $transfer, correctionWriter: $gatedWriter);
             $allocator = app(PaymentService::class);
             $allocator->recalculateInvoices($from);
             $allocator->recalculateInvoices($to);
