@@ -79,7 +79,11 @@ final class ActiveHeldCashRelease
             'protected_minor' => $protected,
             'margin_minor' => $margin,
             'shortfall_minor' => max(0, SignedMinor::negate($margin)),
-            'additional_outflow_blocked' => $margin <= 0,
+            'unresolved_refund_incident_count' => $proof['unresolved_refund_incident_count'],
+            'unresolved_refund_claimed_minor' => $proof['unresolved_refund_claimed_minor'],
+            'incident_outflow_blocked' => $proof['incident_outflow_blocked'],
+            'additional_outflow_blocked' => $margin <= 0 || $proof['incident_outflow_blocked'],
+            'available_for_ordinary_outflow_minor' => $proof['incident_outflow_blocked'] ? 0 : max(0, $margin),
             'closure_authorized' => false,
         ];
     }

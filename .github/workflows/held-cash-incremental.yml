@@ -1,7 +1,7 @@
-name: Prospective unresolved refund incident outflow fence
+name: Prospective refund incident liquidity disclosure
 on:
   push:
-    branches: ['release/prospective-refund-incident-outflow-fence']
+    branches: ['release/prospective-refund-incident-liquidity']
   workflow_dispatch:
 permissions:
   contents: read

@@ -1267,6 +1267,17 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'operation_uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'disbursement_confirmed' => true];
         $assertBlocked = fn () => $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
             app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($id, 1, '2026-11-25')));
+        $assertIncidentLiquidity = function (int $count, int $claimed) use ($id): void {
+            $proof = app(\App\Services\HeldCashReleaseReadiness::class)->preview($id, $this->nowAt());
+            $this->assertSame($count, $proof['unresolved_refund_incident_count']);
+            $this->assertSame($claimed, $proof['unresolved_refund_claimed_minor']);
+            $this->assertTrue($proof['incident_outflow_blocked']);
+            $this->assertSame(0, $proof['candidate_additional_release_minor']);
+            $actual = $this->gate(fn () => app(\App\Services\ActiveHeldCashRelease::class)->currentLiquidity($id));
+            $this->assertTrue($actual['additional_outflow_blocked']);
+            $this->assertSame(0, $actual['available_for_ordinary_outflow_minor']);
+            $this->assertSame($count, $actual['unresolved_refund_incident_count']);
+        };
         $first = $data['operation_uuid'];
         $second = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
         $third = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -1279,6 +1290,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         \Laravel\Sanctum\Sanctum::actingAs($requester);
         $this->postJson($submit, $data)->assertOk()->assertJsonPath('status', 'pending');
         $assertBlocked();
+        $assertIncidentLiquidity(1, 6);
         $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])->assertConflict();
         \Laravel\Sanctum\Sanctum::actingAs($issuer);
         $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])->assertConflict();
@@ -1287,6 +1299,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])
             ->assertOk()->assertJsonPath('created', true)->assertJsonPath('status', 'rejected')->assertJsonPath('incident_unresolved', true);
         $assertBlocked();
+        $assertIncidentLiquidity(1, 6);
         $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])->assertOk()->assertJsonPath('created', false);
         $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason.' changed'])->assertConflict();
         $this->postJson($root.$first.'/approve', ['confirmation' => $confirm])->assertConflict();
@@ -1299,6 +1312,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->postJson($root.$second.'/close', ['decision' => 'withdrawn', 'reason' => $reason])
             ->assertOk()->assertJsonPath('status', 'withdrawn')->assertJsonPath('incident_unresolved', true);
         $assertBlocked();
+        $assertIncidentLiquidity(2, 12);
         \Laravel\Sanctum\Sanctum::actingAs($reviewer);
         $this->postJson($root.$second.'/approve', ['confirmation' => $confirm])->assertConflict();
         foreach ($before as $table => $rows) $this->assertEquals($rows, $snapshot($table), $table);
@@ -1321,6 +1335,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->getJson($root.$third)->assertOk()->assertJsonPath('status', 'posting_recorded_unverified')
             ->assertJsonPath('operation_exists', true)->assertJsonPath('completion_verified', false);
         $this->assertDatabaseCount('payment_refunds', 1);
+        $assertIncidentLiquidity(2, 12); // posted third request must not be counted twice
     }
 
     public function test_release_completed_cash_refund_preserves_factual_deficit_and_exact_identity(): void
@@ -1418,6 +1433,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->assertSame($value, $liquidity[$key], $key);
         }
         $this->assertTrue($liquidity['additional_outflow_blocked']);
+        $this->assertFalse($liquidity['incident_outflow_blocked']);
+        $this->assertSame(0, $liquidity['unresolved_refund_incident_count']);
+        $this->assertSame(0, $liquidity['unresolved_refund_claimed_minor']);
         $ledger = app(\App\Services\TransactionService::class);
         $this->assertSame(94, $ledger->accountBalanceMinor($other));
         $this->assertSame(10, $ledger->accountBalanceMinor($subscriber));

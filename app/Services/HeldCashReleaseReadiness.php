@@ -61,7 +61,17 @@ final class HeldCashReleaseReadiness
             || $result['credited_minor'] !== $proof['credited_minor']) {
             throw new DomainException('held_release_protection_mismatch');
         }
+        $incidents = app(CompletedCashRefundRequest::class)->unresolvedForAccount($accountId);
+        $blocked = $incidents['count'] !== 0;
+        if ($blocked) {
+            $result['candidate_additional_release_minor'] = 0;
+            $result['candidate_protected_minor'] = $result['protected_minor'];
+            $result['candidate_margin_minor'] = $result['margin_minor'];
+        }
         return $result + [
+            'unresolved_refund_incident_count' => $incidents['count'],
+            'unresolved_refund_claimed_minor' => $incidents['claimed_minor'],
+            'incident_outflow_blocked' => $blocked,
             'account_id' => $accountId, 'effective_on' => $date,
             'period_id' => $context['period_id'], 'credits' => $credits,
             'source_coverage_verified' => false, 'closure_authorized' => false,

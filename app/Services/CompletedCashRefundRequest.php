@@ -172,11 +172,20 @@ final class CompletedCashRefundRequest
     /** A closed review is not a cash recovery. Caller owns the issuance fence. */
     public function assertNoUnresolvedForAccount(int $accountId): void
     {
+        if ($this->unresolvedForAccount($accountId)['count'] !== 0) {
+            throw new DomainException('completed_cash_refund_incident_unresolved');
+        }
+    }
+
+    /** Unverified cash assertions are a separate disclosure, not a booked balance. */
+    public function unresolvedForAccount(int $accountId): array
+    {
         if (DB::transactionLevel() <= 0
             || ! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
             throw new DomainException('held_cash_reservation_context');
         }
         $this->guard();
+        $count = $claimed = 0;
         foreach (AuditEvent::query()->where('event', self::EVENT)->orderBy('id')->lockForUpdate()->get() as $row) {
             $p = $row->after;
             if (! is_array($p) || ! is_int($p['account_id'] ?? null) || $p['account_id'] <= 0
@@ -189,10 +198,13 @@ final class CompletedCashRefundRequest
             $this->assertIntent($row, $intent);
             if ($this->decision($row) !== null
                 || ! DB::table('financial_posting_operations')->where('operation_uuid', $row->entity_id)->lockForUpdate()->first()) {
-                throw new DomainException('completed_cash_refund_incident_unresolved');
+                $count++;
+                $claimed = \App\Support\SignedMinor::add($claimed, FinancialAmount::parse($intent['amount'])->minor);
+                continue;
             }
             app(GatedRefundWriter::class)->verifyIncidentPosting($intent);
         }
+        return ['count' => $count, 'claimed_minor' => $claimed];
     }
 
     private function decision(AuditEvent $request): ?AuditEvent
