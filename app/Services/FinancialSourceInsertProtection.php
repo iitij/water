@@ -333,6 +333,50 @@ final class FinancialSourceInsertProtection
                 $defs['fin_detail_'.$table.'_'.strtolower($event)] = [$table, "BEFORE {$event} ON {$table} FOR EACH ROW {$body}", $body, $event];
             }
         }
+        // A cancelled invoice may release the current reading link for
+        // re-billing. Its tariff lines remain permanent evidence of the
+        // observation, so protect the reading even after that link is cleared.
+        $readingFenced = static function (string $row) use ($invoiceFenced, $current): string {
+            return "(".$invoiceFenced($row)." OR EXISTS (SELECT 1 FROM invoice_tariff_lines l
+                WHERE l.reading_id = {$row}.id AND ".$invoiceFenced('l')."{$current}))";
+        };
+        $equalReading = static fn (string $field): string => $sqlite
+            ? "OLD.{$field} IS NEW.{$field}" : "BINARY OLD.{$field} <=> BINARY NEW.{$field}";
+        $fixed = implode(' AND ', array_map($equalReading, [
+            'id', 'meter_id', 'retired_meter_id', 'retired_meter_code', 'reading_date',
+            'actual_reading_date', 'previous_reading', 'current_reading', 'consumption_units',
+            'period_start', 'period_end', 'period_basis', 'submitted_period_start', 'submitted_period_end',
+            'created_by', 'sync_uuid', 'image_path', 'created_at', 'deleted_at',
+        ]));
+        $linkChanged = 'NOT ('.implode(' AND ', array_map($equalReading, ['invoice_id', 'is_invoiced'])).')';
+        $old = $readingFenced('OLD');
+        $new = $readingFenced('NEW');
+        $oldLink = $invoiceFenced('OLD');
+        $newLink = $invoiceFenced('NEW');
+        $released = "NEW.invoice_id IS NULL AND NEW.is_invoiced = 0
+            AND EXISTS (SELECT 1 FROM invoices i WHERE i.id = OLD.invoice_id
+                AND i.status = 'cancelled' AND i.voided_at IS NOT NULL{$current})";
+        $conditions = [
+            'INSERT' => $newLink,
+            'UPDATE' => "(({$old} OR {$new}) AND NOT ({$fixed}))
+                OR (({$linkChanged}) AND (({$newLink}) OR (({$oldLink}) AND NOT ({$released}))))",
+            'DELETE' => $old,
+        ];
+        if ($sqlite) {
+            $victim = $readingFenced('d');
+            foreach (['INSERT', 'UPDATE'] as $event) {
+                $exclude = $event === 'UPDATE' ? ' AND d.id <> OLD.id' : '';
+                $conditions[$event] .= " OR EXISTS (SELECT 1 FROM readings d WHERE
+                    (d.id = NEW.id OR d.sync_uuid = NEW.sync_uuid){$exclude} AND {$victim})";
+            }
+        }
+        foreach ($conditions as $event => $condition) {
+            $condition = preg_replace('/\s+/', ' ', trim($condition));
+            $msg = 'Financial reading evidence is fenced';
+            $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+            $defs['fin_reading_evidence_'.strtolower($event)] = ['readings', "BEFORE {$event} ON readings FOR EACH ROW {$body}", $body, $event];
+        }
         return $defs;
     }
 
