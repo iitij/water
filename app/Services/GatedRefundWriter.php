@@ -222,6 +222,50 @@ final class GatedRefundWriter
         }
     }
 
+    /** Exact source and approval identity; never acquire a scope lock from a business-lock path. */
+    public function verifyIncidentPosting(array $intent): void
+    {
+        $this->need(DB::transactionLevel() > 0
+            && app(FinancialApprovalAuditProtection::class)->active(), 'completed_cash_refund_incident_unresolved');
+        $refund = PaymentRefund::query()->where('disbursement_reference', $intent['reference'])->lockForUpdate()->sole();
+        $minor = \App\Support\FinancialAmount::parse($intent['amount'])->minor;
+        $this->need((int) $refund->payment_id === $intent['payment_id']
+            && (int) $refund->recorded_by === $intent['requested_by']
+            && $refund->method === 'treasury_cash' && AccountMoney::stored($refund) === $minor
+            && $refund->disbursed_on->toDateString() === $intent['date']
+            && $refund->reason === $intent['reason'] && $refund->evidence === $intent['evidence'],
+            'completed_cash_refund_incident_unresolved');
+        $posting = $this->posting((int) $refund->id);
+        $entry = $this->entry(PaymentRefund::class, (int) $refund->id, 'payment_refund');
+        $this->need((int) $posting->treasury_account_id === $intent['account_id']
+            && (int) $posting->posted_by === $intent['requested_by'], 'completed_cash_refund_incident_unresolved');
+        foreach ([$this->ledger->leg((int) $entry->id), $this->custody->leg((int) $posting->id)] as $leg) {
+            $this->need($leg['amount_minor'] === -$minor
+                && $this->registered($leg, $intent['date'], false)->operation_uuid === $intent['operation_uuid'],
+                'completed_cash_refund_incident_unresolved');
+        }
+        $this->need(DB::table('financial_posting_events')->where('operation_uuid', $intent['operation_uuid'])
+            ->lockForUpdate()->get()->count() === 2, 'completed_cash_refund_incident_unresolved');
+        $audit = \App\Models\AuditEvent::query()->where('event', 'financial.completed_cash_refund')
+            ->where('entity_type', PaymentRefund::class)->where('entity_id', (string) $refund->id)->lockForUpdate()->sole();
+        $confirmation = $audit->after['confirmation'] ?? null;
+        $this->need(is_string($confirmation) && mb_strlen(trim($confirmation)) >= 20
+            && $audit->source === 'internal' && (int) $audit->actor_user_id > 0
+            && (int) $audit->actor_user_id !== $intent['requested_by'], 'completed_cash_refund_incident_unresolved');
+        $payment = Payment::query()->lockForUpdate()->findOrFail($intent['payment_id']);
+        $this->need((int) $audit->actor_user_id !== (int) $payment->user_id, 'completed_cash_refund_incident_unresolved');
+        if ($payment->cash_session_id !== null) {
+            $session = \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id);
+            $this->need((int) $audit->actor_user_id !== (int) $session->user_id, 'completed_cash_refund_incident_unresolved');
+        }
+        $expected = $this->completedProof($refund, (int) $posting->id, $intent['account_id'], $intent['operation_uuid'], $confirmation);
+        $actual = $audit->after;
+        $this->need(is_array($actual) && count($actual) === count($expected), 'completed_cash_refund_incident_unresolved');
+        foreach ($expected as $key => $value) {
+            $this->need(($actual[$key] ?? null) === $value, 'completed_cash_refund_incident_unresolved');
+        }
+    }
+
     /** Both legs must remain protected even when the candidate switch is off. */
     public static function hasRegisteredLeg(PaymentRefund $refund): bool
     {
@@ -266,7 +310,7 @@ final class GatedRefundWriter
             ->where('type', $type)->lockForUpdate()->sole();
     }
 
-    private function registered(array $leg, string $date): object
+    private function registered(array $leg, string $date, bool $verifyPeriod = true): object
     {
         $event = DB::table('financial_posting_events')->where('scope_key', 'water')
             ->where('source_type', $leg['source_type'])->where('source_id', $leg['source_id'])
@@ -276,7 +320,7 @@ final class GatedRefundWriter
             'gated_refund_prerequisite_unregistered');
         $op = DB::table('financial_posting_operations')->where('operation_uuid', $event->operation_uuid)->lockForUpdate()->first();
         $this->need($op !== null && $op->scope_key === 'water' && $op->effective_on === $date, 'gated_refund_prerequisite_unregistered');
-        $this->registry->verifyPeriod('water', (int) $op->period_id);
+        if ($verifyPeriod) $this->registry->verifyPeriod('water', (int) $op->period_id);
         return $op;
     }
 

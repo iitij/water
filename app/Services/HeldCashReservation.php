@@ -26,6 +26,7 @@ final class HeldCashReservation
         $account = DB::table('treasury_accounts')->where('id', $accountId)->lockForUpdate()->first();
         if ($account === null) throw new DomainException('held_cash_reservation_account');
         if ($account->channel !== 'cash') return;
+        app(CompletedCashRefundRequest::class)->assertNoUnresolvedForAccount($accountId);
 
         $held = $this->protectedForAccount($accountId);
         if ($held === 0 && ! app(ActiveHeldCashRelease::class)->hasAccount($accountId)) return;

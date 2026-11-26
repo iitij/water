@@ -169,10 +169,36 @@ final class CompletedCashRefundRequest
             });
     }
 
+    /** A closed review is not a cash recovery. Caller owns the issuance fence. */
+    public function assertNoUnresolvedForAccount(int $accountId): void
+    {
+        if (DB::transactionLevel() <= 0
+            || ! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+            throw new DomainException('held_cash_reservation_context');
+        }
+        $this->guard();
+        foreach (AuditEvent::query()->where('event', self::EVENT)->orderBy('id')->lockForUpdate()->get() as $row) {
+            $p = $row->after;
+            if (! is_array($p) || ! is_int($p['account_id'] ?? null) || $p['account_id'] <= 0
+                || $row->entity_type !== 'completed_cash_refund_request') {
+                throw new DomainException('completed_cash_refund_request_conflict');
+            }
+            if ($p['account_id'] !== $accountId) continue;
+            $intent = self::intent($p['payment_id'], $p['account_id'], $p['amount'], $p['reference'],
+                $p['date'], $p['reason'], $p['evidence'], $row->entity_id, (int) $row->actor_user_id);
+            $this->assertIntent($row, $intent);
+            if ($this->decision($row) !== null
+                || ! DB::table('financial_posting_operations')->where('operation_uuid', $row->entity_id)->lockForUpdate()->first()) {
+                throw new DomainException('completed_cash_refund_incident_unresolved');
+            }
+            app(GatedRefundWriter::class)->verifyIncidentPosting($intent);
+        }
+    }
+
     private function decision(AuditEvent $request): ?AuditEvent
     {
         $rows = AuditEvent::query()->where('event', self::CLOSED)
-            ->where('entity_id', $request->entity_id)->get();
+            ->where('entity_id', $request->entity_id)->lockForUpdate()->get();
         if ($rows->count() > 1) throw new DomainException('completed_cash_refund_decision_conflict');
         $row = $rows->first();
         if ($row === null) return null;

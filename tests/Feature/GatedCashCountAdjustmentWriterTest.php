@@ -1265,6 +1265,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $data = ['account_id' => $id, 'amount' => '0.06', 'reference' => 'QA-LIFECYCLE-1', 'date' => '2026-11-25',
             'reason' => 'Independent evidence of completed cash disbursement', 'evidence' => self::EVIDENCE,
             'operation_uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'disbursement_confirmed' => true];
+        $assertBlocked = fn () => $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($id, 1, '2026-11-25')));
         $first = $data['operation_uuid'];
         $second = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
         $third = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
@@ -1276,6 +1278,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($tables as $table) $before[$table] = $snapshot($table);
         \Laravel\Sanctum\Sanctum::actingAs($requester);
         $this->postJson($submit, $data)->assertOk()->assertJsonPath('status', 'pending');
+        $assertBlocked();
         $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])->assertConflict();
         \Laravel\Sanctum\Sanctum::actingAs($issuer);
         $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])->assertConflict();
@@ -1283,6 +1286,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->postJson($root.$first.'/close', ['decision' => 'withdrawn', 'reason' => $reason])->assertConflict();
         $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])
             ->assertOk()->assertJsonPath('created', true)->assertJsonPath('status', 'rejected')->assertJsonPath('incident_unresolved', true);
+        $assertBlocked();
         $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason])->assertOk()->assertJsonPath('created', false);
         $this->postJson($root.$first.'/close', ['decision' => 'rejected', 'reason' => $reason.' changed'])->assertConflict();
         $this->postJson($root.$first.'/approve', ['confirmation' => $confirm])->assertConflict();
@@ -1294,6 +1298,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->postJson($submit, array_replace($data, ['operation_uuid' => $second, 'reference' => 'QA-LIFECYCLE-2']))->assertOk();
         $this->postJson($root.$second.'/close', ['decision' => 'withdrawn', 'reason' => $reason])
             ->assertOk()->assertJsonPath('status', 'withdrawn')->assertJsonPath('incident_unresolved', true);
+        $assertBlocked();
         \Laravel\Sanctum\Sanctum::actingAs($reviewer);
         $this->postJson($root.$second.'/approve', ['confirmation' => $confirm])->assertConflict();
         foreach ($before as $table => $rows) $this->assertEquals($rows, $snapshot($table), $table);
@@ -1402,6 +1407,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $reason, self::EVIDENCE, $confirmation, $uuid, $this->nowAt()));
         $result = $this->postJson($approveUrl, ['confirmation' => $confirmation])->assertOk()->json();
         $this->assertTrue($result['registry_created']);
+        $this->gate(fn () => app(\App\Services\CompletedCashRefundRequest::class)->assertNoUnresolvedForAccount($id));
         $this->assertSame(-6, (int) $result['posting']['amount_minor']);
         $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
         $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());

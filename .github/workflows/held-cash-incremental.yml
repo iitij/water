@@ -1,7 +1,7 @@
-name: Prospective completed refund request lifecycle
+name: Prospective unresolved refund incident outflow fence
 on:
   push:
-    branches: ['release/prospective-completed-refund-lifecycle']
+    branches: ['release/prospective-refund-incident-outflow-fence']
   workflow_dispatch:
 permissions:
   contents: read
