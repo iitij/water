@@ -300,6 +300,31 @@ final class FinancialCloseCoordinatorTest extends TestCase
         $this->assertTrue($protection->active());
     }
 
+    public function test_close_refuses_commands_and_replays_without_ledger_protection(): void
+    {
+        $protection = app(\App\Services\LedgerProtection::class);
+        $this->assertTrue($protection->active());
+        $this->freeze();
+        $scope = DB::table('financial_scopes')->where('scope_key', 'water')->first();
+        $period = DB::table('financial_periods')->where('month', '2026-11')->first();
+        DB::unprepared('DROP TRIGGER ledger_reject_delete');
+        try {
+            $this->assertFalse($protection->active());
+            $this->rejects('close_ledger_protection_missing', fn () => $this->freeze());
+            $this->rejects('close_ledger_protection_missing', fn () => $this->prepare());
+            $this->assertEquals($scope, DB::table('financial_scopes')->where('scope_key', 'water')->first());
+            $this->assertEquals($period, DB::table('financial_periods')->where('month', '2026-11')->first());
+            $this->assertSame(1, DB::table('financial_close_commands')->count());
+            $this->assertSame(0, DB::table('financial_period_closures')->count());
+        } finally {
+            $protection->install();
+        }
+        $this->assertTrue($protection->active());
+        $this->assertTrue($this->freeze()['replayed']);
+        $prepared = $this->prepare();
+        $this->assertSame('CLOSED', $this->command('approve', 3, $this->approval($prepared['result']['attempt']['prepared']['hash']))['current_state']);
+    }
+
     public function test_corrupt_journal_blocks_further_commands_and_no_production_proof_is_bound(): void
     {
         $this->assertFalse(app()->bound(FinancialCloseProofSource::class));
