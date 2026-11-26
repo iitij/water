@@ -34,18 +34,22 @@ final class GatedInvoiceTransferWriter
     ) {}
 
     public function issue(User $actor, int $subscriberId, int $meterId, string $uuid,
-        DateTimeImmutable $now, ?string $notes = null, ?array $selectedReadingIds = null): array
+        DateTimeImmutable $now, ?string $notes = null, ?array $selectedReadingIds = null, ?int $autoReadingId = null): array
     {
         if ($selectedReadingIds !== null) {
             $this->need($selectedReadingIds !== [] && count($selectedReadingIds) === count(array_unique($selectedReadingIds)), 'gated_invoice_reading_selection');
             foreach ($selectedReadingIds as $id) $this->need(is_int($id) && $id > 0, 'gated_invoice_reading_selection');
             sort($selectedReadingIds, SORT_NUMERIC);
         }
-        return $this->within($actor, $uuid, $now, function (User $actor, array $context) use ($subscriberId, $meterId, $uuid, $now, $notes, $selectedReadingIds): array {
+        return $this->within($actor, $uuid, $now, function (User $actor, array $context) use ($subscriberId, $meterId, $uuid, $now, $notes, $selectedReadingIds, $autoReadingId): array {
             abort_unless($actor->hasRole('super_admin') || $actor->can('Create:Invoice'), 403);
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($subscriberId);
             $meter = Meter::query()->where('subscriber_id', $subscriberId)->lockForUpdate()->findOrFail($meterId);
             $op = $this->operation($uuid);
+            if ($autoReadingId !== null) {
+                app(ProspectiveReadingAutoInvoice::class)->assertIntent($actor, $autoReadingId, $meterId,
+                    $uuid, $notes, $selectedReadingIds, $op !== null);
+            }
             if ($op !== null) {
                 // The immutable request proof binds caller, meter, subscriber and notes.
                 $event = $this->eventFor($uuid, 'invoice');
