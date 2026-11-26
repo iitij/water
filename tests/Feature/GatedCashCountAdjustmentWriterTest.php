@@ -8135,6 +8135,78 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
     }
 
+    public function test_source_void_fence_rejects_closed_reversal_dates_and_preserves_later_void(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl();
+        $actor = $f['approver'];
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $service->postMixedResolution($actor, $f['id'], $f['proposalIds'], $ids, self::EVIDENCE, $this->nowAt());
+        $original = DB::table('payments')->orderBy('id')->first();
+        $subscriber = Subscriber::create(['name' => 'Synthetic later void subscriber',
+            'square_id' => Square::create(['name' => 'Synthetic later void square'])->id, 'status' => 'active']);
+        \App\Models\Setting::set('void_approval_threshold', '1.00');
+        $receipt = app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.30',
+            'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', $this->nowAt())['payment'];
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $copies = [];
+        foreach (['invoices' => 'bill_date', 'payments' => 'payment_date'] as $table => $date) {
+            // Unregistered synthetic rows isolate the date fence from registered
+            // document guards. They are not examples of authorized posting.
+            $row = array_diff_key((array) DB::table($table)->orderBy('id')->first(), ['id' => true]);
+            $row[$date] = '2026-12-02';
+            $row['voided_at'] = '2026-11-25 08:30:00';
+            $row['voided_by'] = $actor->id;
+            $row['void_reason'] = 'Synthetic prior reversal evidence';
+            if ($table === 'invoices') {
+                $row['bill_number'] = 'QA-VOID-DATE-INVOICE';
+                $row['status'] = 'cancelled';
+            } else {
+                $row['receipt_number'] = 'QA-VOID-DATE-RECEIPT';
+                $row['sync_uuid'] = 'abababab-abab-4bab-8bab-abababababab';
+                $row['voided_via'] = 'gated';
+            }
+            $copies[$table] = [$row, DB::table($table)->insertGetId($row)];
+        }
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
+        $reject = function (callable $write): void {
+            try {
+                $write();
+                $this->fail('Fenced reversal date mutation unexpectedly accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial source reversal date is fenced', $error->getMessage());
+            }
+        };
+        foreach ($copies as $table => [$row, $id]) {
+            $before = (array) DB::table($table)->where('id', $id)->sole();
+            $reject(fn () => DB::table($table)->where('id', $id)->update(['voided_at' => '2026-12-02 08:30:00']));
+            $reject(fn () => DB::table($table)->where('id', $id)->update(['voided_at' => null]));
+            $reject(fn () => DB::table($table)->where('id', $id)->update(['void_reason' => 'Changed prior reversal evidence']));
+            $reject(fn () => DB::table($table)->where('id', $id)->delete());
+            if ($table === 'invoices') $row['bill_number'] = 'QA-VOID-DATE-INVOICE-NEW';
+            else {
+                $row['receipt_number'] = 'QA-VOID-DATE-RECEIPT-NEW';
+                $row['sync_uuid'] = 'acacacac-acac-4cac-8cac-acacacacacac';
+            }
+            $reject(fn () => DB::table($table)->insert($row));
+            $this->assertEquals($before, (array) DB::table($table)->where('id', $id)->sole());
+        }
+        // The deliberately inconsistent synthetic rows must not influence the
+        // real writer control. Use a distinct clean subscriber for the control.
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $uuid = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+        $writer = app(\App\Services\GatedReceiptVoidWriter::class);
+        $reason = 'Independent documented later receipt cancellation';
+        $this->assertTrue($writer->request($actor, (int) $receipt->id, $reason, $later, $uuid)['registry_created']);
+        $this->assertFalse($writer->request($actor, (int) $receipt->id, $reason, $later, $uuid)['registry_created']);
+        $this->assertSame('2026-12-02', $receipt->fresh()->voided_at->toDateString());
+        $this->assertDatabaseHas('financial_posting_operations', ['operation_uuid' => $uuid, 'effective_on' => '2026-12-02']);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'amount_minor' => -30]);
+    }
+
     public function test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
