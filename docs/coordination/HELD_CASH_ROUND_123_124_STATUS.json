@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify batch control candidate 6c10d1f265cdaca2f27e9d70a99b9bf31ffdbb4c exact CI; then batch races, mixed and refreshed evidence, all-writer protection, closure, Flutter and production.",
+  "next": "Verify concurrency and focused actor-deletion test retry at 366ac1bab049bb891b8472888a6026748668ffca exact CI; then mixed classifications and refreshed evidence, all-writer protection, closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2789,12 +2789,42 @@
     ]
   },
   "release_refund_incident_batch_controls": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_SQLITE_PASS_MYSQL_ASSERTION_FAILURE",
     "base": "71e484f8feaf2d573bc65217d49efb9899fd0889",
     "branch": "release/prospective-refund-incident-batch-controls",
     "source": "6c10d1f265cdaca2f27e9d70a99b9bf31ffdbb4c",
     "scope": "Test-only: two claims of 6 and 4 minor units against 9 minor receipt/credit, exact matching aggregate cash shortage. Observe first registered operation before second member exceeds cumulative eligibility, assert exact validation failure and complete rollback across 14 tables, unchanged balances, remaining incident fence. Verify immutable group audit against direct update/delete/duplicate/actor deletion, conflict on different reviewer replay, exact canonical replay.",
     "limits": "CI unverified. No product code changes. Batch races, distinct-receipt eligibility, mixed classifications and refreshed aggregate evidence, broader direct writes and entrypoint protection, closure, Flutter and production remain open.",
-    "next": "Verify exact control CI; then real independent MySQL group races and remaining batch lifecycle."
+    "next": "Verify exact control CI; then real independent MySQL group races and remaining batch lifecycle.",
+    "run": 45748189129,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139669265371,
+        "tests": 2,
+        "assertions": 39,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139669265026,
+        "tests": 2,
+        "assertions": 34,
+        "failures": 1,
+        "exit": 1
+      }
+    ],
+    "finding": "MySQL cumulative receipt rollback passed. Actor deletion was correctly rejected by preexisting identity guard (User identity cannot be deleted), but the test incorrectly required the batch-specific audit guard message. Remaining replay assertions not reached. No product failure established."
+  },
+  "release_refund_incident_batch_concurrency": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "6c10d1f265cdaca2f27e9d70a99b9bf31ffdbb4c",
+    "branch": "release/prospective-refund-incident-batch-concurrency",
+    "initial_source": "a5e2eb6ca521032572f3600a09dab20da0678d0e",
+    "initial_run": 45748363652,
+    "source": "366ac1bab049bb891b8472888a6026748668ffca",
+    "scope": "Test-only: two genuine concurrent MySQL batch settlements, same reviewer retry and competing reviewers. Three distinct connections; verify actual lock contention before releasing coordinator; exact four legs, one group approval, correct balances and zero unresolved claims. Correct affected immutable audit test: only actor deletion accepts existing exact identity guard diagnostic, assert batch protection active and actor remains; all audit mutations still require original guard message. Focused MySQL retry plus two races.",
+    "limits": "CI not yet verified; no product changes. SQLite prior tests passed; mixed classifications, refreshed aggregate evidence, broader entrypoint and closure, Flutter and deployment remain open.",
+    "next": "Verify final exact SHA CI, preserve accepted cumulative limit rollback; then mixed classification settlement and remaining entrypoint protection."
   }
 }
