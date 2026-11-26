@@ -60,6 +60,157 @@ final class FinancialPostingRegistryTest extends TestCase
         return app(FinancialPostingRegistry::class)->record($context, $uuid, $legs, $this->nowAt());
     }
 
+    private function corruptEffectForDiagnostic(): void
+    {
+        DB::unprepared('DROP TRIGGER fin_registry_leg_reject_update');
+        try {
+            DB::table('financial_posting_events')->update(['amount_minor' => 11]);
+        } finally {
+            app(\App\Services\FinancialPostingRegistryProtection::class)->install();
+        }
+    }
+
+    private function rejectsRegistryMutation(callable $attempt): void
+    {
+        try {
+            $attempt();
+            $this->fail('Registry mutation accepted.');
+        } catch (QueryException $error) {
+            $this->assertStringContainsString('Financial registry evidence is immutable or fenced', $error->getMessage());
+        }
+    }
+
+    public function test_registry_protection_rejects_direct_mutation_and_fenced_inserts(): void
+    {
+        $this->assertTrue(app(\App\Services\FinancialPostingRegistryProtection::class)->active());
+        $leg = $this->leg('10', 'bank', 10);
+        $this->gate(fn (array $context) => $this->record($context, self::UUID, [$leg]));
+        $operation = (array) DB::table('financial_posting_operations')->sole();
+        $event = (array) DB::table('financial_posting_events')->sole();
+        $snapshot = fn () => [DB::table('financial_posting_operations')->get()->toArray(),
+            DB::table('financial_posting_events')->get()->toArray()];
+        $before = $snapshot();
+        foreach ([
+            fn () => DB::table('financial_posting_operations')->update(['payload_hash' => str_repeat('0', 64)]),
+            fn () => DB::table('financial_posting_events')->update(['amount_minor' => 11]),
+            fn () => DB::table('financial_posting_events')->delete(),
+            fn () => DB::table('financial_posting_operations')->delete(),
+        ] as $attempt) {
+            $this->rejectsRegistryMutation($attempt);
+            $this->assertEquals($before, $snapshot());
+        }
+        if (DB::getDriverName() === 'sqlite') {
+            foreach ([
+                ['financial_posting_operations', $operation],
+                ['financial_posting_events', $event],
+                ['financial_posting_events', array_replace($event, ['id' => 999999])],
+            ] as [$table, $row]) {
+                $sql = 'INSERT OR REPLACE INTO '.$table.' ('.implode(', ', array_keys($row)).') VALUES ('
+                    .implode(', ', array_fill(0, count($row), '?')).')';
+                $this->rejectsRegistryMutation(fn () => DB::statement($sql, array_values($row)));
+                $this->assertEquals($before, $snapshot());
+            }
+        }
+        $this->assertFalse($this->gate(fn (array $context) => $this->record($context, self::UUID, [$leg])));
+        $newOperation = array_replace($operation, ['operation_uuid' => self::OTHER]);
+        $newEvent = array_diff_key(array_replace($event, ['source_id' => '20']), ['id' => true]);
+        foreach (['FROZEN', 'CLOSED'] as $state) {
+            DB::table('financial_periods')->where('id', $operation['period_id'])->update(['state' => $state]);
+            $this->rejectsRegistryMutation(fn () => DB::table('financial_posting_operations')->insert($newOperation));
+            $this->rejectsRegistryMutation(fn () => DB::table('financial_posting_events')->insert($newEvent));
+            $this->assertEquals($before, $snapshot());
+        }
+        $this->assertSame(1, DB::transaction(fn () => app(FinancialPostingRegistry::class)
+            ->verifyPeriod('water', (int) $operation['period_id']))['events']);
+    }
+
+    public function test_mysql_registry_fence_uses_current_reads_and_scope_lock(): void
+    {
+        if (DB::getDriverName() !== 'mysql') $this->markTestSkipped('Requires two independent MySQL connections.');
+        $leg = $this->leg('10', 'bank', 10);
+        $this->gate(fn (array $context) => $this->record($context, self::UUID, [$leg]));
+        $op = (array) DB::table('financial_posting_operations')->sole();
+        $event = (array) DB::table('financial_posting_events')->sole();
+        $newOp = array_replace($op, ['operation_uuid' => self::OTHER]);
+        $newEvent = array_diff_key(array_replace($event, ['source_id' => '20']), ['id' => true]);
+        $name = 'qa_registry_second';
+        config(["database.connections.{$name}" => config('database.connections.mysql')]);
+        $other = DB::connection($name);
+        $primary = DB::connection();
+        try {
+            $other->statement('SET SESSION innodb_lock_wait_timeout = 1');
+            $other->statement('SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+            $this->assertNotSame((string) $primary->selectOne('SELECT CONNECTION_ID() AS id')->id,
+                (string) $other->selectOne('SELECT CONNECTION_ID() AS id')->id);
+            $primary->beginTransaction();
+            try {
+                $primary->table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->sole();
+                foreach ([
+                    fn () => $other->table('financial_posting_operations')->insert($newOp),
+                    fn () => $other->table('financial_posting_events')->insert($newEvent),
+                ] as $attempt) {
+                    try {
+                        $attempt();
+                        $this->fail('Direct insert did not wait for the scope lock.');
+                    } catch (QueryException $error) {
+                        $this->assertSame(1205, (int) $error->errorInfo[1]);
+                    }
+                }
+            } finally {
+                $primary->rollBack();
+            }
+
+            $other->beginTransaction();
+            try {
+                $this->assertSame('OPEN', $other->table('financial_periods')->where('id', $op['period_id'])->value('state'));
+                // Freeze commits on another connection while this transaction
+                // retains its old consistent read snapshot.
+                $primary->transaction(function () use ($primary, $op): void {
+                    $primary->table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->sole();
+                    $primary->table('financial_periods')->where('id', $op['period_id'])->lockForUpdate()->sole();
+                    $primary->table('financial_periods')->where('id', $op['period_id'])->update(['state' => 'FROZEN', 'version' => 3]);
+                    $primary->table('financial_scopes')->where('scope_key', 'water')
+                        ->update(['fence_epoch' => 6, 'active_freeze_uuid' => self::OTHER]);
+                });
+                $this->assertSame('OPEN', $other->table('financial_periods')->where('id', $op['period_id'])->value('state'));
+                $this->assertSame('FROZEN', $primary->table('financial_periods')->where('id', $op['period_id'])->value('state'));
+                $this->rejectsRegistryMutation(fn () => $other->table('financial_posting_operations')->insert($newOp));
+                $this->rejectsRegistryMutation(fn () => $other->table('financial_posting_events')->insert($newEvent));
+            } finally {
+                $other->rollBack();
+            }
+            $this->assertEquals([$op], $primary->table('financial_posting_operations')->get()->map(fn ($row) => (array) $row)->all());
+            $this->assertEquals([$event], $primary->table('financial_posting_events')->get()->map(fn ($row) => (array) $row)->all());
+        } finally {
+            DB::purge($name);
+        }
+    }
+
+    public function test_missing_registry_protection_blocks_record_and_verification(): void
+    {
+        $registry = app(FinancialPostingRegistry::class);
+        $periodId = (int) DB::table('financial_periods')->value('id');
+        DB::unprepared('DROP TRIGGER fin_registry_op_reject_delete');
+        try {
+            $this->assertFalse(app(\App\Services\FinancialPostingRegistryProtection::class)->active());
+            foreach ([
+                fn () => $this->gate(fn (array $context) => $this->record($context, self::UUID, [$this->leg('10', 'bank', 10)])),
+                fn () => $this->gate(fn () => $registry->verifyPeriod('water', $periodId)),
+            ] as $attempt) {
+                try {
+                    $attempt();
+                    $this->fail('Missing registry protection accepted.');
+                } catch (DomainException $error) {
+                    $this->assertSame('posting_registry_protection_missing', $error->getMessage());
+                }
+            }
+        } finally {
+            app(\App\Services\FinancialPostingRegistryProtection::class)->install();
+        }
+        $this->assertDatabaseCount('financial_posting_operations', 0);
+        $this->assertDatabaseCount('financial_posting_events', 0);
+    }
+
     public function test_exact_signed_legs_and_byte_identical_replay_are_persisted(): void
     {
         $legs = [$this->leg('10', 'subscriber', 1025), $this->leg('10', 'bank', -PHP_INT_MAX)];
@@ -141,7 +292,7 @@ final class FinancialPostingRegistryTest extends TestCase
         });
         $this->gate(fn (array $context) => $this->record($context, self::UUID, [$leg]));
         // Synthetic tampering probes detection, NOT a claim of DB immutability.
-        DB::table('financial_posting_events')->update(['amount_minor' => 11]);
+        $this->corruptEffectForDiagnostic();
         try {
             $this->gate(fn (array $context) => $this->record($context, self::UUID, [$leg]));
             $this->fail('Corrupt persisted effect treated as identical replay.');
@@ -187,7 +338,7 @@ final class FinancialPostingRegistryTest extends TestCase
         $registry = app(FinancialPostingRegistry::class);
         $this->gate(fn (array $context) => $this->record($context, self::UUID, [$this->leg('10', 'bank', 10)]));
         $period = (int) DB::table('financial_periods')->value('id');
-        DB::table('financial_posting_events')->update(['amount_minor' => 11]);
+        $this->corruptEffectForDiagnostic();
         try {
             $this->gate(fn (array $context) => $registry->verifyPeriod('water', $period));
             $this->fail('Corrupt evidence accepted.');

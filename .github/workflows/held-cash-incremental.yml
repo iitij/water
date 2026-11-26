@@ -1,13 +1,13 @@
-name: Prospective refund signed API transport
+name: Registry fence current-read serialization
 on:
   pull_request:
-    branches: ['release/prospective-refund-signed-settlement']
+    branches: ['main']
     types: [opened, synchronize, reopened]
 permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/prospective-refund-signed-api'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-registry-locks'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -39,10 +39,10 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify signed API transport and renewal
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_signed_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify registry fence and current-read behavior
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_registry_protection_|test_missing_registry_protection_' tests/Feature/FinancialPostingRegistryTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/prospective-refund-signed-api'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-registry-locks'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -101,5 +101,7 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify signed API transport and renewal
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_signed_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify registry fence and current-read behavior
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialPostingRegistryTest.php
+      - name: Verify two independent MySQL connections and stale snapshot rejection
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_mysql_registry_fence_' tests/Feature/FinancialPostingRegistryTest.php
