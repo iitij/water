@@ -37,6 +37,15 @@ final class CompletedCashRefundController extends ApiController
         }
     }
 
+    public function show(Request $request, string $uuid, CompletedCashRefundRequest $service)
+    {
+        try {
+            return response()->json($service->inspect($request->user(), strtolower($uuid)));
+        } catch (DomainException $error) {
+            throw new ConflictHttpException($error->getMessage(), $error);
+        }
+    }
+
     public function approve(Request $request, string $uuid, CompletedCashRefundRequest $service)
     {
         abort_unless(app()->environment(['testing', 'staging']), 503);

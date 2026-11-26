@@ -138,6 +138,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/payments/{id}/whatsapp-result', [PaymentController::class, 'recordWhatsAppResult'])->whereNumber('id');
     Route::post('/payments/{id}/refund', [PaymentController::class, 'recordRefund'])->whereNumber('id');
     Route::post('/payments/{id}/completed-cash-refund-requests', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'submit'])->whereNumber('id');
+    Route::get('/completed-cash-refund-requests/{uuid}', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'show'])->whereUuid('uuid');
     Route::post('/completed-cash-refund-requests/{uuid}/approve', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'approve'])->whereUuid('uuid');
     Route::post('/payments/{id}/transfer-account', [PaymentController::class, 'transferAccount'])->whereNumber('id');
     Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);

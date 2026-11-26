@@ -1310,6 +1310,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->rejects('completed_cash_refund_independence', fn () => $complete($actor));
         $this->assertDatabaseCount('payment_refunds', 0);
         \Laravel\Sanctum\Sanctum::actingAs($witness);
+        $this->getJson('/api/completed-cash-refund-requests/'.$uuid)->assertOk()
+            ->assertJsonPath('request.amount', '0.06')->assertJsonPath('request.requested_by', $reviewer->id)
+            ->assertJsonPath('request.evidence', self::EVIDENCE)->assertJsonPath('operation_exists', false);
         $this->postJson($approveUrl, ['confirmation' => $confirmation, 'amount' => '0.07'])->assertUnprocessable();
         $this->postJson($approveUrl, ['confirmation' => $confirmation, 'reviewer_id' => $actor->id])->assertUnprocessable();
         $this->rejects('completed_cash_refund_request_conflict', fn () => $writer->recordCompletedCashRefund(

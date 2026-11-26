@@ -85,6 +85,25 @@ final class CompletedCashRefundRequest
         });
     }
 
+    public function inspect(User $actor, string $uuid): array
+    {
+        self::authenticated($actor);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        app(TreasuryRegisterService::class)->authorize($actor);
+        return DB::transaction(function () use ($uuid): array {
+            $this->guard();
+            $row = $this->find($uuid, false);
+            abort_unless($row !== null, 404);
+            $p = $row->after;
+            if (! is_array($p)) throw new DomainException('completed_cash_refund_request_conflict');
+            $this->assertIntent($row, self::intent($p['payment_id'], $p['account_id'], $p['amount'], $p['reference'],
+                $p['date'], $p['reason'], $p['evidence'], $uuid, (int) $row->actor_user_id));
+            $recorded = DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->exists();
+            // A recorded operation is not itself verified completion.
+            return ['request' => $p, 'operation_exists' => $recorded, 'completion_verified' => false];
+        });
+    }
+
     public function approve(User $reviewer, string $uuid, string $confirmation, DateTimeImmutable $now): array
     {
         self::authenticated($reviewer);
