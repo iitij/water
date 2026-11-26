@@ -9276,7 +9276,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame('2026-11-25', $funding['issued_on']);
         $expected = [['session_id' => (string) $closed->id, 'collector_id' => (string) $closed->user_id,
             'funding' => $funding, 'funding_issue' => null,
-            'closed_at_cutoff' => true]];
+            'cash_receipts' => ['gross_minor' => 0, 'reversed_minor' => 0, 'net_minor' => 0, 'rows' => []],
+            'cash_receipts_issue' => null, 'closed_at_cutoff' => true]];
         $this->assertSame($expected, $nov['approved_counted_custody_period']['unapproved_at_closing']);
         $this->assertContains('collector_custody_outside_approved_counts', $nov['blockers']);
         $this->assertSame(0, $nov['approved_counted_custody_period']['totals']['closing_minor']);
@@ -9306,6 +9307,52 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertNull($item['funding']);
         $this->assertSame('gated_handover_prerequisite_unregistered', $item['funding_issue']);
         $this->assertContains('collector_custody_outside_approved_counts', $result['blockers']);
+    }
+
+    public function test_pending_till_receipts_ignore_next_month_void_and_refuse_unregistered_receipt(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $session = app(CashSessionService::class)->open($collector);
+        $receipts = app(GatedCashReceiptWriter::class);
+        $voids = app(\App\Services\GatedReceiptVoidWriter::class);
+        \App\Models\Setting::set('void_approval_threshold', '0.00');
+        $first = $receipts->collect($collector, (int) $subscriber->id, '1.25',
+            '88888888-8888-4888-8888-888888888888', $this->nowAt(), $session->id)['payment'];
+        $second = $receipts->collect($collector, (int) $subscriber->id, '0.30',
+            '99999999-9999-4999-8999-999999999999', $this->nowAt(), $session->id)['payment'];
+        $voids->request($collector, $second->id, self::REASON, $this->nowAt(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+        $december = (int) DB::table('financial_periods')->insertGetId(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $november = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $midnight = new DateTimeImmutable('2026-11-30T21:00:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($midnight));
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $inspect = fn (int $period) => collect(app(\App\Services\FinancialCloseEvidenceDiagnostic::class)
+            ->inspect($reviewer, $period, now()->toDateTimeImmutable())['approved_counted_custody_period']['unapproved_at_closing'])
+            ->firstWhere('session_id', (string) $session->id);
+        $nov = $inspect($november);
+        $this->assertNull($nov['cash_receipts_issue']);
+        $this->assertSame(155, $nov['cash_receipts']['gross_minor']);
+        $this->assertSame(30, $nov['cash_receipts']['reversed_minor']);
+        $this->assertSame(125, $nov['cash_receipts']['net_minor']);
+        $this->assertSame('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $nov['cash_receipts']['rows'][1]['reversal']['operation_uuid']);
+        $voids->request($collector, $first->id, self::REASON, $midnight, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+        $this->assertSame($nov, $inspect($november));
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-31T21:00:00Z'));
+        $dec = $inspect($december);
+        $this->assertNull($dec['cash_receipts_issue']);
+        $this->assertSame(0, $dec['cash_receipts']['net_minor']);
+        $this->assertSame(155, $dec['cash_receipts']['reversed_minor']);
+
+        $this->travelTo(\Carbon\Carbon::instance($this->nowAt()));
+        app(PaymentService::class)->collectPayment($subscriber, '0.40', userId: $collector->id,
+            requestedCashSessionId: $session->id);
+        $this->travelTo(\Carbon\Carbon::instance($midnight));
+        $unverified = $inspect($november);
+        $this->assertNotNull($unverified['cash_receipts_issue']);
+        $this->assertNull($unverified['cash_receipts']);
     }
 
     public function test_approved_custody_period_detects_an_orphan_physical_approval(): void

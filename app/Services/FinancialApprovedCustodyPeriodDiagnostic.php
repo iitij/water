@@ -82,7 +82,7 @@ final class FinancialApprovedCustodyPeriodDiagnostic
             ->where(fn ($q) => $q->whereNull('approved_at')->orWhere('approved_at', '>=', $cutoffUtc)
                 ->orWhere('state', '!=', CashSession::STATE_APPROVED)
                 ->orWhereNull('settlement_basis')->orWhere('settlement_basis', '!=', 'physical_cash'))
-            ->orderBy('id')->lockForUpdate()->get(['id', 'user_id', 'opened_at', 'closed_at', 'opening_amount']);
+            ->orderBy('id')->lockForUpdate()->get(['id', 'user_id', 'opened_at', 'closed_at', 'session_date', 'opening_amount']);
         $items = [];
         foreach ($sessions as $session) {
             $funding = null;
@@ -98,8 +98,18 @@ final class FinancialApprovedCustodyPeriodDiagnostic
             } catch (InvalidArgumentException|OverflowException) {
                 $issue = 'custody_funding_amount_invalid';
             }
+            $receipts = null;
+            $receiptIssue = null;
+            try {
+                $receipts = $this->handovers->pendingReceiptEvidence($session, $cutoffUtc, $localDate);
+            } catch (DomainException $error) {
+                $receiptIssue = $error->getMessage();
+            } catch (InvalidArgumentException|OverflowException) {
+                $receiptIssue = 'custody_receipt_amount_invalid';
+            }
             $items[] = ['session_id' => (string) $session->id, 'collector_id' => (string) $session->user_id,
                 'funding' => $funding, 'funding_issue' => $issue,
+                'cash_receipts' => $receipts, 'cash_receipts_issue' => $receiptIssue,
                 'closed_at_cutoff' => $session->getRawOriginal('closed_at') !== null && $session->getRawOriginal('closed_at') < $cutoffUtc];
         }
 

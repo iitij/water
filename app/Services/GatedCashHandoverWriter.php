@@ -212,6 +212,64 @@ final class GatedCashHandoverWriter
             'issued_on' => $funding->issued_on, 'funded_minor' => $openingMinor];
     }
 
+    /** Rebuild ordinary cash receipt legs effective before a local cutoff, under the close gate. */
+    public function pendingReceiptEvidence(CashSession $session, string $cutoffUtc, string $localDate): array
+    {
+        $this->need(DB::transactionLevel() > 0, 'gated_handover_requires_transaction');
+        $payments = Payment::withTrashed()->where('cash_session_id', $session->id)->where('payment_method', 'cash')
+            ->where('payment_date', '<', $localDate)->orderBy('id')->lockForUpdate()->get();
+        $gross = 0;
+        $reversed = 0;
+        $rows = [];
+        foreach ($payments as $payment) {
+            $date = $payment->payment_date->toDateString();
+            $this->need(! $payment->trashed() && (int) $payment->user_id === (int) $session->user_id
+                && $session->session_date !== null && $date >= $session->session_date->toDateString()
+                && $payment->sync_uuid !== null, 'custody_receipt_identity_unverified');
+            $posted = $this->ordinaryReceiptLeg($payment, 'payment', $date);
+            $this->need($posted['operation_uuid'] === $payment->sync_uuid && $posted['minor'] > 0,
+                'custody_receipt_identity_unverified');
+            $gross = SignedMinor::add($gross, $posted['minor']);
+            $voidAt = $payment->getRawOriginal('voided_at');
+            $reverse = null;
+            if ($voidAt !== null && $voidAt < $cutoffUtc) {
+                $voidOn = (new DateTimeImmutable($voidAt, new \DateTimeZone('UTC')))
+                    ->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
+                $this->need(in_array($payment->voided_via, ['gated', 'approval'], true) && $voidOn >= $date
+                    && ($session->getRawOriginal('closed_at') === null || $voidAt <= $session->getRawOriginal('closed_at')),
+                    'custody_void_source_unverified');
+                $reverse = $this->ordinaryReceiptLeg($payment, 'payment_reversal', $voidOn);
+                $this->need($reverse['minor'] === -$posted['minor'], 'custody_void_amount_unverified');
+                $reversed = SignedMinor::add($reversed, $posted['minor']);
+            }
+            $registeredReversals = DB::table('transactions as t')
+                ->join('financial_posting_events as e', 'e.source_id', '=', 't.id')
+                ->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
+                ->where('t.reference_type', Payment::class)->where('t.reference_id', $payment->id)
+                ->where('t.type', 'payment_reversal')->where('e.scope_key', 'water')->where('o.scope_key', 'water')
+                ->where('e.source_type', 'ledger_transaction')->where('e.leg', 'subscriber')->where('o.effective_on', '<', $localDate)
+                ->orderBy('t.id')->lockForUpdate()->pluck('o.operation_uuid')->all();
+            $this->need($registeredReversals === ($reverse === null ? [] : [$reverse['operation_uuid']]),
+                'custody_void_membership_unverified');
+            $rows[] = ['payment_id' => (string) $payment->id, 'receipt' => $posted, 'reversal' => $reverse];
+        }
+        return ['gross_minor' => $gross, 'reversed_minor' => $reversed,
+            'net_minor' => SignedMinor::subtract($gross, $reversed), 'rows' => $rows];
+    }
+
+    private function ordinaryReceiptLeg(Payment $payment, string $type, string $date): array
+    {
+        $entries = Transaction::withTrashed()->where('reference_type', Payment::class)->where('reference_id', $payment->id)
+            ->where('type', $type)->orderBy('id')->lockForUpdate()->get();
+        $this->need($entries->count() === 1, 'custody_receipt_leg_unverified');
+        $leg = $this->ledger->leg((int) $entries->first()->id);
+        $op = $this->registered($leg, $date);
+        $this->need(DB::table('financial_posting_events')->where('operation_uuid', $op->operation_uuid)->count() === 1,
+            'custody_receipt_operation_unverified');
+        return ['transaction_id' => $leg['source_id'], 'operation_uuid' => $op->operation_uuid,
+            'effective_on' => $date, 'minor' => $leg['amount_minor']];
+    }
+
     private function registered(array $leg, string $date): object
     {
         $event = DB::table('financial_posting_events')->where('scope_key', 'water')->where('source_type', $leg['source_type'])
