@@ -1,0 +1,17 @@
+# Water — الإغلاق المالي الدائم، تحقّق كشوف البنك وجرد النقد
+
+تاريخ التحقق 26 نوفمبر 2026. المرحلة G1B ضمن [#54](https://github.com/iitij/water/issues/54) و[#57](https://github.com/iitij/water/issues/57). فرع main عند `0681c12f47d6b542c35d6d487a2bb810762bfb16`.
+
+| العمل | SHA | SQLite | MySQL 8 | الحالة |
+| --- | --- | --- | --- | --- |
+| [#176](https://github.com/iitij/water/pull/176) ربط التشخيص الفعلي مع منسق الإغلاق | `ba4b5ef28e735f439016dafc0eeaf94445d63f36` | 11 اختبارًا و163 تحققًا | 11 اختبارًا و163 تحققًا | [نجح الفحص الموجّه](https://github.com/iitij/water/actions/runs/45891378120) |
+| [#177](https://github.com/iitij/water/pull/177) كشوف البنك وأرصدة الفترة | `625949b7561beedff0ae34a962db30516599546c` | 9 اختبارات و123 تحققًا | 9 اختبارات و123 تحققًا | [نجح الفحص الموجّه](https://github.com/iitij/water/actions/runs/45893034844) |
+| [#178](https://github.com/iitij/water/pull/178) جرد النقد عند نهاية الفترة | `a095a9efdd7235bb57b2433142ecfbe5429dbeab` | 6 اختبارات و82 تحققًا | 6 اختبارات و82 تحققًا | [نجح الفحص الموجّه](https://github.com/iitij/water/actions/runs/45893587859) |
+
+الطلبات مسودات متتابعة. كل تشغيل يثبت نسخة رأس الفرع ويستخدم PHP 8.4.28 وSQLite داخل الذاكرة أو MySQL 8 بقاعدة اختبار منفصلة. أوامر `vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter … tests/Feature/GatedCashCountAdjustmentWriterTest.php` موجودة في سجلات التنفيذ وملف `.github/workflows/held-cash-incremental.yml` على كل SHA. رمز الخروج 0 لكل وظيفة واردة في الجدول. أدلة الاختبار خاصة بنطاق كل طلب.
+
+- #177 يعدل `FinancialSettlementCoverageDiagnostic` و`FinancialCloseEvidenceDiagnostic`. يطابق طرفي سلسلة كشوف مصرفية متصلة مع حركة البنك المسجلة ويطلب سند الافتتاح المسجل للحساب الذي بدأ داخل الفترة. يرفض نقص الكشوف ويختبر فصل الحركة التالية.
+- #178 يعدل `TreasuryCashCountService` و`FinancialCloseEvidenceDiagnostic`. يطابق جردًا ذا فرق صفري، راجعه مستخدم مستقل، مع بصمة دفتر الخزينة قبل بداية الفترة التالية بتوقيت عدن. يختبر رفض الجرد القديم وفصل الحركة التالية وأثر إعادة الفحص على الصفوف.
+- يشمل الطلبان تحديث سجل `docs/v2/agents/backlog.json` والاختبارات الموجّهة. يبقى الإغلاق الإنتاجي محجوبًا. المطلوب إثبات الأرصدة الافتتاحية المستقلة والذمم وحركات العهد والأموال في الطريق والتغطية الفعلية للكتّاب وتسلسل الاعتماد إلى الإغلاق النهائي. لا يلزم تعديل الأرصدة التاريخية.
+
+نقطة الاستئناف على فرع `release/permanent-close-cash-period-observation` عند `a095a9efdd7235bb57b2433142ecfbe5429dbeab`. تحقق من رأس الفرع والطلبات الأحدث قبل أي تعديل. أكمل أدلة التحويلات والعهد عبر حدود الفترات، واربطها بتغطية المصدر، ثم اختبر الاعتماد اللاحق مع إعادة التحقق من الأدلة تحت القفل. يبقى القبول التشغيلي والنشر ضمن بوابة [#61](https://github.com/iitij/water/issues/61).
