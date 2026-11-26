@@ -19,33 +19,41 @@ final class FinancialPostingRegistryProtection
         }
         $sqlite = $driver === 'sqlite';
         $definitions = [];
-        $add = static function (string $name, string $table, string $event, string $condition) use (&$definitions, $sqlite): void {
+        $add = static function (string $name, string $table, string $event, string $condition, bool $scopeLock = false) use (&$definitions, $sqlite): void {
             $condition = preg_replace('/\s+/', ' ', trim($condition));
             $message = 'Financial registry evidence is immutable or fenced';
+            // InnoDB repeatable-read snapshots must not authorize an INSERT
+            // after the scope fence has advanced. Acquire the same scope row
+            // as the coordinator and use current reads for the destination.
+            $lock = $scopeLock
+                ? 'DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = NEW.scope_key FOR UPDATE; '
+                : '';
+            $invalid = $scopeLock ? "locked_scope IS NULL OR ({$condition})" : $condition;
             $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$message}'); END"
-                : "BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END";
+                : "BEGIN {$lock}IF {$invalid} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END";
             $definitions[$name] = [$table, $event, "BEFORE {$event} ON {$table} FOR EACH ROW {$body}", $body];
         };
         foreach (['financial_posting_operations' => 'fin_registry_op', 'financial_posting_events' => 'fin_registry_leg'] as $table => $prefix) {
             $add($prefix.'_reject_update', $table, 'UPDATE', '1 = 1');
             $add($prefix.'_reject_delete', $table, 'DELETE', '1 = 1');
         }
+        $current = $sqlite ? '' : ' FOR UPDATE';
         $open = "s.mode = 'ACTIVE' AND s.active_freeze_uuid IS NULL AND s.currency = 'YER'
             AND s.timezone = 'Asia/Aden' AND s.calendar_version = 1
             AND p.state = 'OPEN' AND p.scope_key = s.scope_key
-            AND NOT EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id)
-            AND NOT EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve')";
+            AND NOT EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id{$current})
+            AND NOT EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve'{$current})";
         $operation = "NOT EXISTS (SELECT 1 FROM financial_periods p JOIN financial_scopes s ON s.scope_key = p.scope_key
             WHERE p.id = NEW.period_id AND s.scope_key = NEW.scope_key AND {$open}
             AND s.fence_epoch = NEW.fence_epoch AND p.version = NEW.period_version
-            AND NEW.effective_on >= p.start_on AND NEW.effective_on < p.next_on)";
+            AND NEW.effective_on >= p.start_on AND NEW.effective_on < p.next_on{$current})";
         $event = "NOT EXISTS (SELECT 1 FROM financial_posting_operations o
             JOIN financial_periods p ON p.id = o.period_id JOIN financial_scopes s ON s.scope_key = p.scope_key
             WHERE o.operation_uuid = NEW.operation_uuid AND o.scope_key = NEW.scope_key
             AND s.scope_key = NEW.scope_key AND {$open}
             AND s.fence_epoch = o.fence_epoch AND p.version = o.period_version
             AND o.effective_on >= p.start_on AND o.effective_on < p.next_on
-            AND NEW.currency = s.currency)";
+            AND NEW.currency = s.currency{$current})";
         if ($sqlite) {
             // REPLACE can suppress DELETE triggers, including when an alternative
             // unique source identity is used.
@@ -53,8 +61,8 @@ final class FinancialPostingRegistryProtection
             $event .= ' OR EXISTS (SELECT 1 FROM financial_posting_events e WHERE e.id = NEW.id
                 OR (e.scope_key = NEW.scope_key AND e.source_type = NEW.source_type AND e.source_id = NEW.source_id AND e.leg = NEW.leg))';
         }
-        $add('fin_registry_op_reject_insert', 'financial_posting_operations', 'INSERT', $operation);
-        $add('fin_registry_leg_reject_insert', 'financial_posting_events', 'INSERT', $event);
+        $add('fin_registry_op_reject_insert', 'financial_posting_operations', 'INSERT', $operation, ! $sqlite);
+        $add('fin_registry_leg_reject_insert', 'financial_posting_events', 'INSERT', $event, ! $sqlite);
         return $definitions;
     }
 
