@@ -52,8 +52,8 @@ final class HeldCashReleaseReadiness
         $handoverReserve = app(HandoverSurplusReservation::class)->forAccount($accountId);
         $pending = $reserve->unpostedCashRefundMinor();
         $balance = app(HeldCashRecordedLiquidityEvidence::class)->balance($accountId, $date);
-        // Active production policy remains R=0. Do not accept a release
-        // amount from a caller or infer that an allocation grants one.
+        // Compute the conservative baseline independently of active release.
+        // Never infer spending authority from a credit allocation alone.
         $credits = array_map(static fn (array $credit): array =>
             $credit + ['released_minor' => 0], $proof['credits']);
         $result = app(HeldCashReleasePolicy::class)->evaluate($balance, $pending, $outstanding, $credits, $handoverReserve);

@@ -268,6 +268,7 @@ final class HeldCashReleaseProposalService
     public function verifiedActiveState(array $proof): array
     {
         FinancialWriteGate::currentContext();
+        $this->need(app(ActiveHeldCashRelease::class)->protectionActive(), 'active_held_release_protection_missing');
         $this->verifyLocked($proof);
         $state = $this->journalState($proof);
         $markers = DB::table('held_cash_active_releases')->orderBy('journal_id')->lockForUpdate()->get();
@@ -309,9 +310,12 @@ final class HeldCashReleaseProposalService
             $this->need($projected['released_minor'] === $released
                 && SignedMinor::add($projected['protected_minor'], $released) === $proof['protected_minor'],
                 'held_release_protection_mismatch');
+            $active = SignedMinor::sum($this->verifiedActiveState($proof));
+            $actualMargin = SignedMinor::add($proof['margin_minor'], $active);
             return ['shadow_released_minor' => $released, 'reinstatement_due_minor' => $due,
-                'actual_protected_minor' => $proof['protected_minor'], 'actual_margin_minor' => $proof['margin_minor'],
-                'actual_shortfall_minor' => $proof['shortfall_minor'],
+                'active_released_minor' => $active,
+                'actual_protected_minor' => SignedMinor::subtract($proof['protected_minor'], $active), 'actual_margin_minor' => $actualMargin,
+                'actual_shortfall_minor' => max(0, SignedMinor::negate($actualMargin)),
                 'handover_reserved_minor' => $proof['handover_reserved_minor'],
                 'shadow_protected_minor' => $projected['protected_minor'], 'shadow_margin_minor' => $projected['margin_minor'],
                 'shadow_shortfall_minor' => $projected['shortfall_minor'],

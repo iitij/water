@@ -49,6 +49,7 @@ final class FinancialDatabasePreflight extends Command
                 'held_release' => fn () => app(HeldCashReleaseDocumentProtection::class)->active(),
                 'held_release_journal' => fn () => app(HeldCashReleaseDocumentProtection::class)->journalActive(),
                 'held_reinstatement' => fn () => app(HeldCashReleaseDocumentProtection::class)->reinstatementActive(),
+                'held_active_release' => fn () => app(\App\Services\ActiveHeldCashRelease::class)->protectionActive(),
                 'correction_documents' => fn () => app(FinancialCorrectionDocumentProtection::class)->active(),
                 'registered_documents' => fn () => app(RegisteredDocumentProtection::class)->active(),
                 'invoice_projection' => fn () => app(InvoiceProjectionProtection::class)->active(),

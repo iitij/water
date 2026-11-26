@@ -15,6 +15,37 @@ use Illuminate\Support\Facades\DB;
  */
 final class ActiveHeldCashRelease
 {
+    public function protectionActive(): bool
+    {
+        $driver = DB::getDriverName();
+        if (! in_array($driver, ['sqlite', 'mysql', 'mariadb'], true)) return false;
+        $sqlite = $driver === 'sqlite';
+        $body = $sqlite ? "BEGIN SELECT RAISE(ABORT, 'Active held release is immutable'); END"
+            : "SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Active held release is immutable'";
+        $normalize = static fn (string $sql): string => preg_replace('/\s+/', ' ', rtrim(trim($sql), ';'));
+        $table = 'held_cash_active_releases';
+        foreach (['UPDATE', 'DELETE'] as $event) {
+            $name = 'active_held_release_reject_'.strtolower($event);
+            if ($sqlite) {
+                $row = DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)->where('tbl_name', $table)->first();
+                if ($row === null || $normalize($row->sql) !== $normalize("CREATE TRIGGER {$name} BEFORE {$event} ON {$table} {$body}")) return false;
+            } else {
+                $row = FinancialTriggerMetadata::query()->where('TRIGGER_NAME', $name)->where('EVENT_OBJECT_TABLE', $table)
+                    ->where('EVENT_MANIPULATION', $event)->where('ACTION_TIMING', 'BEFORE')->first();
+                if ($row === null || $normalize($row->ACTION_STATEMENT) !== $normalize($body)) return false;
+            }
+        }
+        if ($sqlite) {
+            $row = DB::table('sqlite_master')->where('type', 'trigger')->where('name', 'active_held_release_reject_replace')
+                ->where('tbl_name', $table)->first();
+            $expected = "CREATE TRIGGER active_held_release_reject_replace BEFORE INSERT ON held_cash_active_releases
+                FOR EACH ROW WHEN EXISTS (SELECT 1 FROM held_cash_active_releases a
+                WHERE a.journal_id = NEW.journal_id OR a.credit_id = NEW.credit_id) {$body}";
+            if ($row === null || $normalize($row->sql) !== $normalize($expected)) return false;
+        }
+        return true;
+    }
+
     public function hasAccount(int $accountId): bool
     {
         return DB::table('held_cash_active_releases')->where('treasury_account_id', $accountId)->exists();
@@ -64,6 +95,10 @@ final class ActiveHeldCashRelease
             || $journal->kind !== 'release') throw new DomainException('active_held_release_evidence');
         $expected = ['journal_id' => (int) $journal->id, 'credit_id' => (int) $journal->credit_id,
             'treasury_account_id' => (int) $journal->treasury_account_id];
-        if ($audits->first()->after !== $expected) throw new DomainException('active_held_release_evidence');
+        $actual = $audits->first()->after;
+        if (! is_array($actual) || count($actual) !== count($expected)) throw new DomainException('active_held_release_evidence');
+        foreach ($expected as $key => $value) {
+            if (($actual[$key] ?? null) !== $value) throw new DomainException('active_held_release_evidence');
+        }
     }
 }
