@@ -251,6 +251,56 @@ final class FinancialSourceInsertProtection
                 : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
             $defs['fin_source_parent_'.$parent.'_delete'] = [$parent, "BEFORE DELETE ON {$parent} FOR EACH ROW {$body}", $body, 'DELETE'];
         }
+        // A square deletion cascades through subscribers and meters on
+        // InnoDB without invoking the intermediate parent triggers.
+        // SQLite replacement can also delete a parent without its DELETE guard.
+        $parentKeys = [
+            'squares' => ['id', 'code'],
+            'subscribers' => ['id'],
+            'meters' => ['id', 'unique_code', 'subscriber_id'],
+            'cash_sessions' => ['id'],
+            'invoices' => ['id', 'bill_number'],
+        ];
+        foreach ($parentKeys as $parent => $keys) {
+            $children = $parent === 'squares'
+                ? ['invoices' => ['subscriber_id'], 'payments' => ['subscriber_id']]
+                : $parents[$parent];
+            $checks = [];
+            foreach ($children as $child => $columns) {
+                $link = $parent === 'squares'
+                    ? "EXISTS (SELECT 1 FROM subscribers s WHERE s.id = d.subscriber_id AND s.square_id = OLD.id{$current})"
+                    : '('.implode(' OR ', array_map(fn ($key) => "d.{$key} = OLD.id", $columns)).')';
+                $dates = ['d.'.self::DATES[$child], 'd.voided_at'];
+                $dateChecks = [];
+                foreach ($dates as $date) {
+                    $dateChecks[] = "EXISTS (SELECT 1 FROM financial_periods p WHERE p.scope_key = 'water'
+                        AND {$date} >= p.start_on AND {$date} < p.next_on
+                        AND (p.state <> 'OPEN'
+                            OR EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id{$current})
+                            OR EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve'{$current})){$current})";
+                }
+                $fenced = "EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water'
+                    AND s.active_freeze_uuid IS NOT NULL{$current}) OR ".implode(' OR ', $dateChecks);
+                $checks[] = "EXISTS (SELECT 1 FROM {$child} d WHERE ({$link}) AND ({$fenced}){$current})";
+            }
+            $condition = preg_replace('/\s+/', ' ', trim(implode(' OR ', $checks)));
+            // Also protect a parent when only its child's reversal is closed.
+            $msg = 'Financial source parent graph is fenced';
+            $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+            $defs['fin_graph_'.$parent.'_delete'] = [$parent, "BEFORE DELETE ON {$parent} FOR EACH ROW {$body}", $body, 'DELETE'];
+            if ($sqlite) {
+                $conflicts = implode(' OR ', array_map(fn ($key) => "victim.{$key} = NEW.{$key}", $keys));
+                $prior = str_replace('OLD.id', 'victim.id', $condition);
+                foreach (['INSERT', 'UPDATE'] as $event) {
+                    $exclude = $event === 'UPDATE' ? ' AND victim.id <> OLD.id' : '';
+                    $collision = "EXISTS (SELECT 1 FROM {$parent} victim WHERE ({$conflicts}){$exclude} AND ({$prior}))";
+                    $extra = "WHEN {$collision} BEGIN SELECT RAISE(ABORT, 'Financial source parent replacement is fenced'); END";
+                    $defs['fin_graph_'.$parent.'_replace_'.strtolower($event)] = [$parent,
+                        "BEFORE {$event} ON {$parent} FOR EACH ROW {$extra}", $extra, $event];
+                }
+            }
+        }
         return $defs;
     }
 
