@@ -258,6 +258,26 @@ class ReadingResource extends Resource
                     ->falseLabel('غير مفوترة'),
             ])
             ->actions([
+                \Filament\Actions\Action::make('resume_auto_invoice')
+                    ->label('إعادة محاولة إصدار الفاتورة')
+                    ->visible(fn (Reading $record): bool => auth()->user()?->can('create', \App\Models\Invoice::class)
+                        && app(\App\Services\ProspectiveReadingAutoInvoice::class)->canResume($record, auth()->user()))
+                    ->requiresConfirmation()
+                    ->action(function (Reading $record): void {
+                        \Illuminate\Support\Facades\Gate::authorize('create', \App\Models\Invoice::class);
+                        $auto = app(\App\Services\ProspectiveReadingAutoInvoice::class);
+                        abort_unless($auto->canResume($record, auth()->user()), 409);
+                        try {
+                            $invoice = $auto->attempt($record, auth()->user(), null);
+                            if ($invoice === null || $invoice->status === 'cancelled') {
+                                throw new \DomainException('gated_auto_invoice_intent_conflict');
+                            }
+                            \Filament\Notifications\Notification::make()
+                                ->title('تم إصدار الفاتورة من الطلب الأصلي')->success()->send();
+                        } catch (\DomainException|\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                            throw \Illuminate\Validation\ValidationException::withMessages(['data' => $error->getMessage()]);
+                        }
+                    }),
                 \Filament\Actions\EditAction::make()
                     ->hidden(fn (Reading $record): bool => $record->is_invoiced || $record->period_basis !== 'observation'),
                 \Filament\Actions\DeleteAction::make()
