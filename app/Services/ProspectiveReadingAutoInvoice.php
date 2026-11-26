@@ -71,6 +71,20 @@ final class ProspectiveReadingAutoInvoice
         return $this->intent((int) $reading->id) !== null;
     }
 
+    /** Only the original authorized actor can resume an unposted null-notes intent from the web. */
+    public function canResume(Reading $reading, User $actor): bool
+    {
+        if (config('financial_candidate.invoices') !== true || $reading->is_invoiced
+            || (int) $reading->created_by !== (int) $actor->id || ! $this->allowed($actor)) return false;
+        $audit = $this->intent((int) $reading->id);
+        $data = $audit?->after;
+        return $audit !== null && (int) $audit->actor_user_id === (int) $actor->id
+            && ($data['eligible'] ?? null) === true && ($data['configured'] ?? null) === true
+            && array_key_exists('notes', $data) && $data['notes'] === null
+            && is_string($data['operation_uuid'] ?? null)
+            && ! DB::table('financial_posting_operations')->where('operation_uuid', $data['operation_uuid'])->exists();
+    }
+
     /** Never infer a new intent for a previously saved reading. */
     public function attempt(Reading $reading, User $actor, ?string $notes): ?Invoice
     {
