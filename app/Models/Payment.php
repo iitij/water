@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Services\PaymentService;
+use App\Services\GatedReceiptVoidWriter;
+use Illuminate\Support\Facades\DB;
 use App\Services\TransactionService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
@@ -183,8 +185,38 @@ class Payment extends Model
     public function save(array $options = [])
     {
         $service = $options['financial_receipt_service'] ?? null;
-        unset($options['financial_receipt_service']);
-        if ($this->exists && $service === null) return parent::save($options);
+        $voidWriter = $options['financial_receipt_void_writer'] ?? null;
+        unset($options['financial_receipt_service'], $options['financial_receipt_void_writer']);
+        if ($this->exists && $service === null) {
+            $immutable = ['id', 'subscriber_id', 'meter_id', 'invoice_id', 'user_id', 'receipt_number',
+                'amount', 'payment_date', 'payment_method', 'reference_number', 'reason', 'sync_uuid',
+                'cash_session_id', 'retired_meter_id', 'retired_meter_code', 'deleted_at', 'created_at'];
+            $voidFields = ['voided_at', 'void_reason', 'voided_by', 'voided_via',
+                'void_requested_at', 'void_requested_by', 'void_request_reason',
+                'void_decision_notes', 'void_decided_by', 'void_decided_at'];
+            if (! $this->isDirty(array_merge($immutable, $voidFields)) && $voidWriter === null) {
+                return parent::save($options);
+            }
+            return DB::transaction(function () use ($options, $voidWriter, $immutable, $voidFields) {
+                if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new \LogicException('Payment issuance lock is missing.');
+                }
+                $persisted = self::withTrashed()->lockForUpdate()->findOrFail($this->getRawOriginal($this->getKeyName()));
+                $gatedRequest = DB::table('audit_events')->where('entity_type', self::class)
+                    ->where('entity_id', (string) $persisted->id)->where('event', 'financial.void_request_gated')->exists();
+                $protected = Transaction::receiptReversalFenceEnabled() || $persisted->hasRegisteredReceipt()
+                    || $gatedRequest || $voidWriter !== null;
+                if ($protected && ($this->isDirty($immutable)
+                    || ! ($voidWriter instanceof GatedReceiptVoidWriter
+                        && $this->isDirty($voidFields) && $voidWriter->allowsMutation($persisted)))) {
+                    throw new \DomainException('gated_receipt_document_mutation_required');
+                }
+                return parent::save($options);
+            });
+        }
+        if ($voidWriter !== null) {
+            throw new \DomainException('gated_receipt_document_mutation_required');
+        }
         return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $service) {
             if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Payment issuance lock is missing.');

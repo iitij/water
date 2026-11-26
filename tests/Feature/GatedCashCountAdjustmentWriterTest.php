@@ -3082,6 +3082,67 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_release_receipt_mutation_fence_blocks_quiet_financial_and_void_field_changes(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $session = app(CashSessionService::class)->open($issuer);
+        $other = Subscriber::create(['name' => 'Synthetic other account', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        config(['financial_candidate.cash_receipts' => true, 'financial_candidate.void_api' => true]);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id)['payment'];
+        $writer = app(\App\Services\GatedReceiptVoidWriter::class);
+        $ledger = app(\App\Services\TransactionService::class);
+        \App\Models\Setting::set('void_approval_threshold', '1.00');
+        $reason = 'Independent documented receipt cancellation';
+        $tables = ['payments', 'transactions', 'payment_allocations', 'payment_allocation_revisions',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $unchanged = function (callable $action) use ($tables, $snapshot): void {
+            $before = [];
+            foreach ($tables as $table) $before[$table] = $snapshot($table);
+            $this->rejects('gated_receipt_document_mutation_required', $action);
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        };
+        foreach ([true, false] as $enabled) {
+            config(['financial_candidate.cash_receipts' => $enabled, 'financial_candidate.void_api' => $enabled]);
+            foreach ([
+                ['amount' => '20.00'], ['subscriber_id' => $other->id], ['cash_session_id' => null],
+                ['sync_uuid' => '77777777-7777-4777-8777-777777777777'],
+                ['voided_at' => now(), 'voided_via' => 'gated'],
+                ['void_requested_at' => now(), 'void_requested_by' => $issuer->id, 'void_request_reason' => $reason],
+                ['deleted_at' => now()],
+            ] as $changes) {
+                $unchanged(fn () => $receipt->fresh()->forceFill($changes)->saveQuietly());
+            }
+            $unchanged(fn () => $receipt->fresh()->forceFill(['amount' => '20.00'])->save());
+            $unchanged(fn () => DB::transaction(fn () => $receipt->fresh()->forceFill(['voided_at' => now()])
+                ->saveQuietly(['financial_receipt_void_writer' => $writer])));
+        }
+        $receipt->fresh()->forceFill(['notes' => 'Nonfinancial note'])->saveQuietly();
+        $this->assertSame('Nonfinancial note', $receipt->fresh()->notes);
+        $request = fn () => $writer->request($issuer, (int) $receipt->id, $reason, $this->nowAt());
+        $first = $request()['request_id'];
+        $this->assertTrue($receipt->fresh()->hasPendingVoidRequest());
+        $unchanged(fn () => $receipt->fresh()->forceFill(['void_requested_at' => null])->saveQuietly());
+        $unchanged(fn () => $receipt->fresh()->forceFill(['void_decided_by' => $reviewer->id])->saveQuietly());
+        $writer->decide($reviewer, (int) $receipt->id, false, 'Independent rejection', $this->nowAt(), requestId: $first);
+        $this->assertFalse($receipt->fresh()->hasPendingVoidRequest());
+        $this->assertSame(1000, $ledger->accountBalanceMinor($subscriber));
+        $second = $request()['request_id'];
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $approve = fn () => $writer->decide($reviewer, (int) $receipt->id, true, null, $this->nowAt(), $uuid, $second);
+        $this->assertTrue($approve()['registry_created']);
+        $this->assertFalse($approve()['registry_created']);
+        $unchanged(fn () => $receipt->fresh()->forceFill(['voided_at' => null])->saveQuietly());
+        $this->assertTrue($receipt->fresh()->isVoided());
+        $this->assertSame(0, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(0, app(CashSessionService::class)->expectedAmountMinor($session->fresh()));
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_receipt_reversal_fence_blocks_direct_and_idle_writers(): void
     {
         [, , $account, , , $subscriber] = $this->held();

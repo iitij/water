@@ -279,7 +279,7 @@ class PaymentService
                 'void_reason' => $reason,
                 'voided_by' => $userId,
                 'voided_via' => $source,
-            ])->saveQuietly();
+            ])->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
 
             // Keep the original posting and append its opposite.
             $transactionService = new TransactionService();
@@ -403,7 +403,7 @@ class PaymentService
                 'void_decision_notes' => null,
                 'void_decided_by' => null,
                 'void_decided_at' => null,
-            ])->saveQuietly();
+            ])->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
 
             app(AuditLogger::class)->recordRequired('payment.void_requested', [
                 'entity_type' => Payment::class,
@@ -473,7 +473,7 @@ class PaymentService
                     'void_decision_notes' => $notes,
                     'void_decided_by' => $actor->id,
                     'void_decided_at' => now(),
-                ])->saveQuietly();
+                ])->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
 
                 app(AuditLogger::class)->recordRequired('payment.void_approved', [
                     'entity_type' => Payment::class,
@@ -497,7 +497,7 @@ class PaymentService
                 'void_decision_notes' => $notes,
                 'void_decided_by' => $actor->id,
                 'void_decided_at' => now(),
-            ])->saveQuietly();
+            ])->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
 
             app(AuditLogger::class)->recordRequired('payment.void_rejected', [
                 'entity_type' => Payment::class,
