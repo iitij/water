@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact targeted CI and fix confirmed failures. Inventory remaining legitimate model and raw query writes before protecting all financial mutation paths; continue reserve discharge, liquidity, Flutter compatibility and integrated release checks.",
+  "next": "Verify exact SQLite/MySQL CI and correct confirmed failures only. Protect direct receipt reversal and quiet document financial mutations without breaking void/transfer and legitimate meter replacement; inventory other ledger and raw query paths. Continue prospective reserve discharge, general liquidity, Flutter compatibility and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-reading-auto-invoice-filament",
-      "commit": "7cf8c90c4a587abf694695cb5acb1a0c22638ca2",
-      "run": 45729615917,
-      "sqlite": "2 tests, 62 assertions",
-      "mysql": "2 tests, 62 assertions",
-      "scope": "ListReadings header create action now records reading and durable automatic invoice intent in same subscriber/meter-locked transaction, issues after commit with refreshed original actor. New explicit row recovery action only original authorized actor with unposted null-notes intent, reuses protected frozen reading proof and UUID, hides completed or cancelled operation. Two targeted tests exercise actual modal creation, closed-period preservation, disabled setting, other actor denial, original retry, invalid reading, automatic issue after success and unchanged cash."
+      "branch": "release/prospective-invoice-model-fence",
+      "commit": "c50e29aba0627388a8a38562f5bf81e7d12bf25d",
+      "run": 45729849894,
+      "sqlite": "1 test, 65 assertions",
+      "mysql": "1 test, 65 assertions",
+      "scope": "Invoice save override fences direct new document creation and cancellation/void fields (including quiet saves); TransactionService and Transaction model protect invoice postings and reversals and quiet changes of registered invoice ledger rows. Active invoice writer scope explicitly carried into creation and reversal under issuance lock. New targeted test checks direct and idle-scope creation, direct reversal service/model, quiet mutation and cancellation with switch on/off, exact genuine issue/reversal and unchanged cash."
     }
   },
   "round146": {
@@ -1808,12 +1808,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_invoice_model_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "7cf8c90c4a587abf694695cb5acb1a0c22638ca2",
     "branch": "release/prospective-invoice-model-fence",
     "source": "c50e29aba0627388a8a38562f5bf81e7d12bf25d",
     "scope": "Invoice save override fences direct new document creation and cancellation/void fields (including quiet saves); TransactionService and Transaction model protect invoice postings and reversals and quiet changes of registered invoice ledger rows. Active invoice writer scope explicitly carried into creation and reversal under issuance lock. New targeted test checks direct and idle-scope creation, direct reversal service/model, quiet mutation and cancellation with switch on/off, exact genuine issue/reversal and unchanged cash.",
-    "limits": "CI pending. Scope only invoice-related Eloquent creation/cancellation/ledger writes; raw DB/query-builder updates, other quiet invoice field changes, allocation caches, direct payment/other ledger creation and database-level enforcement not yet comprehensively fenced. Do not claim complete write coverage. No historical repair, main merge or production activation.",
-    "next": "Verify exact targeted CI and fix confirmed failures. Inventory remaining legitimate model and raw query writes before protecting all financial mutation paths; continue reserve discharge, liquidity, Flutter compatibility and integrated release checks."
+    "limits": "Exact checkout, raw logs and lockfile verified for invoice Eloquent document and invoice ledger posting/reversal scope. Raw query writes and other paths remain open. No production activation.",
+    "next": "Protect original receipt creation and original ledger posting through PaymentService private scope.",
+    "run": 45729849894,
+    "jobs": [
+      {
+        "id": 139608846804,
+        "engine": "sqlite",
+        "tests": 1,
+        "assertions": 65,
+        "exit": 0
+      },
+      {
+        "id": 139608847127,
+        "engine": "mysql",
+        "tests": 1,
+        "assertions": 65,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_receipt_model_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "c50e29aba0627388a8a38562f5bf81e7d12bf25d",
+    "branch": "release/prospective-receipt-model-fence",
+    "source": "587622fcb2057e6dc4759b95543a10dc4bc48321",
+    "scope": "PaymentService private receipt identity passed through Payment model and TransactionService/Transaction original receipt posting under issuance lock. New direct receipt or original payment ledger creation rejected when any receipt candidate flag enabled; registered receipt UUID/original ledger remains protected even with flags disabled. Explicit inactive service rejected. Original receipt posting quiet updates fenced. New targeted bypass test and changed noncash claim and late cash issuance regressions.",
+    "limits": "CI pending. This slice does not fence quiet Payment field mutations, payment reversal/transfer/refund/held credit ledger creation, raw query-builder or database-level writes. Existing void and other service guards unchanged. No historical repair, main merge or production activation.",
+    "next": "Verify exact SQLite/MySQL CI and correct confirmed failures only. Protect direct receipt reversal and quiet document financial mutations without breaking void/transfer and legitimate meter replacement; inventory other ledger and raw query paths. Continue prospective reserve discharge, general liquidity, Flutter compatibility and integrated release checks."
   }
 }
