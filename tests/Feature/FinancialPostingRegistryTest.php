@@ -124,6 +124,68 @@ final class FinancialPostingRegistryTest extends TestCase
             ->verifyPeriod('water', (int) $operation['period_id']))['events']);
     }
 
+    public function test_mysql_registry_fence_uses_current_reads_and_scope_lock(): void
+    {
+        if (DB::getDriverName() !== 'mysql') $this->markTestSkipped('Requires two independent MySQL connections.');
+        $leg = $this->leg('10', 'bank', 10);
+        $this->gate(fn (array $context) => $this->record($context, self::UUID, [$leg]));
+        $op = (array) DB::table('financial_posting_operations')->sole();
+        $event = (array) DB::table('financial_posting_events')->sole();
+        $newOp = array_replace($op, ['operation_uuid' => self::OTHER]);
+        $newEvent = array_diff_key(array_replace($event, ['source_id' => '20']), ['id' => true]);
+        $name = 'qa_registry_second';
+        config(["database.connections.{$name}" => config('database.connections.mysql')]);
+        $other = DB::connection($name);
+        $primary = DB::connection();
+        try {
+            $other->statement('SET SESSION innodb_lock_wait_timeout = 1');
+            $other->statement('SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+            $this->assertNotSame((string) $primary->selectOne('SELECT CONNECTION_ID() AS id')->id,
+                (string) $other->selectOne('SELECT CONNECTION_ID() AS id')->id);
+            $primary->beginTransaction();
+            try {
+                $primary->table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->sole();
+                foreach ([
+                    fn () => $other->table('financial_posting_operations')->insert($newOp),
+                    fn () => $other->table('financial_posting_events')->insert($newEvent),
+                ] as $attempt) {
+                    try {
+                        $attempt();
+                        $this->fail('Direct insert did not wait for the scope lock.');
+                    } catch (QueryException $error) {
+                        $this->assertSame(1205, (int) $error->errorInfo[1]);
+                    }
+                }
+            } finally {
+                $primary->rollBack();
+            }
+
+            $other->beginTransaction();
+            try {
+                $this->assertSame('OPEN', $other->table('financial_periods')->where('id', $op['period_id'])->value('state'));
+                // Freeze commits on another connection while this transaction
+                // retains its old consistent read snapshot.
+                $primary->transaction(function () use ($primary, $op): void {
+                    $primary->table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->sole();
+                    $primary->table('financial_periods')->where('id', $op['period_id'])->lockForUpdate()->sole();
+                    $primary->table('financial_periods')->where('id', $op['period_id'])->update(['state' => 'FROZEN', 'version' => 3]);
+                    $primary->table('financial_scopes')->where('scope_key', 'water')
+                        ->update(['fence_epoch' => 6, 'active_freeze_uuid' => self::OTHER]);
+                });
+                $this->assertSame('OPEN', $other->table('financial_periods')->where('id', $op['period_id'])->value('state'));
+                $this->assertSame('FROZEN', $primary->table('financial_periods')->where('id', $op['period_id'])->value('state'));
+                $this->rejectsRegistryMutation(fn () => $other->table('financial_posting_operations')->insert($newOp));
+                $this->rejectsRegistryMutation(fn () => $other->table('financial_posting_events')->insert($newEvent));
+            } finally {
+                $other->rollBack();
+            }
+            $this->assertEquals([$op], $primary->table('financial_posting_operations')->get()->map(fn ($row) => (array) $row)->all());
+            $this->assertEquals([$event], $primary->table('financial_posting_events')->get()->map(fn ($row) => (array) $row)->all());
+        } finally {
+            DB::purge($name);
+        }
+    }
+
     public function test_missing_registry_protection_blocks_record_and_verification(): void
     {
         $registry = app(FinancialPostingRegistry::class);
