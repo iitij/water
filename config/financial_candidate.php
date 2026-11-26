@@ -4,6 +4,8 @@
 // financial entry points share the same gate and client contract.
 return [
     'completed_cash_refund' => env('WATER_CANDIDATE_COMPLETED_CASH_REFUND', false),
+    // Empty by default. Reviewed deployment must provision external Ed25519 public keys only.
+    'refund_source_public_keys' => [],
     'active_held_release' => env('WATER_CANDIDATE_ACTIVE_HELD_RELEASE', false),
     'invoices' => env('WATER_CANDIDATE_INVOICES', false),
     'subscriber_transfers' => env('WATER_CANDIDATE_SUBSCRIBER_TRANSFERS', false),

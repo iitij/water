@@ -58,6 +58,7 @@ final class FinancialDatabasePreflight extends Command
                 'completed_refund_resolution_revision' => fn () => app(\App\Services\CompletedCashRefundResolutionRevisionProtection::class)->active(),
                 'completed_refund_batch_approval' => fn () => app(\App\Services\CompletedCashRefundBatchApprovalProtection::class)->active(),
                 'completed_refund_document' => fn () => app(\App\Services\CompletedCashRefundDocumentProtection::class)->active(),
+                'completed_refund_source' => fn () => app(\App\Services\CompletedCashRefundSourceProtection::class)->active(),
                 'correction_documents' => fn () => app(FinancialCorrectionDocumentProtection::class)->active(),
                 'registered_documents' => fn () => app(RegisteredDocumentProtection::class)->active(),
                 'invoice_projection' => fn () => app(InvoiceProjectionProtection::class)->active(),

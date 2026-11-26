@@ -1300,6 +1300,75 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'counter', 'countReviewer', 'amount', 'count', 'proposalIds', 'balance', 'counted');
     }
 
+    public function test_release_refund_source_attestation_checks_trust_signature_and_independence(): void
+    {
+        $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $recorder = $this->actor();
+        $byteReviewer = $this->actor();
+        $sourceReviewer = $this->actor();
+        $uuid = $f['second'];
+        $proposal = $f['proposalIds'][$uuid];
+        $bytes = 'Synthetic returned cash source evidence; no real external document.';
+        $reference = 'QA-ATTEST-DOC';
+        \Laravel\Sanctum\Sanctum::actingAs($recorder);
+        $doc = $service->recordResolutionDocument($recorder, $uuid, $proposal, $reference, $bytes, $this->nowAt());
+        $id = $doc['document_id'];
+        $issuer = 'qa-source';
+        $sourceRef = 'QA-EXTERNAL-001';
+        $keypair = sodium_crypto_sign_keypair();
+        $key = sodium_crypto_sign_publickey($keypair);
+        $secret = sodium_crypto_sign_secretkey($keypair);
+        $statement = \App\Services\CompletedCashRefundRequest::sourceStatement($doc['document'], $issuer, $sourceRef);
+        $signature = base64_encode(sodium_crypto_sign_detached($statement, $secret));
+        $confirmation = 'Independent source reviewer inspected the claimed cash return evidence';
+        $attest = fn (User $actor, string $sig, string $ref = 'QA-EXTERNAL-001') =>
+            $service->attestResolutionSource($actor, $uuid, $proposal, $id, $issuer, $ref, $sig, $confirmation, $this->nowAt());
+        \Laravel\Sanctum\Sanctum::actingAs($sourceReviewer);
+        $this->rejects('completed_refund_source_evidence', fn () => $attest($sourceReviewer, $signature));
+        \Laravel\Sanctum\Sanctum::actingAs($byteReviewer);
+        $service->reviewResolutionDocument($byteReviewer, $uuid, $proposal, $id, $reference, $bytes,
+            'Independent reviewer compared the original document bytes', $this->nowAt());
+        \Laravel\Sanctum\Sanctum::actingAs($sourceReviewer);
+        $this->rejects('completed_refund_source_untrusted', fn () => $attest($sourceReviewer, $signature));
+        config(['financial_candidate.refund_source_public_keys' => [$issuer => base64_encode($key)]]);
+        $this->rejects('completed_refund_source_signature', fn () => $attest($sourceReviewer, $signature, 'QA-EXTERNAL-002'));
+        $wrong = $doc['document'];
+        $wrong['claimed_amount'] = '0.05';
+        $wrongSignature = base64_encode(sodium_crypto_sign_detached(
+            \App\Services\CompletedCashRefundRequest::sourceStatement($wrong, $issuer, $sourceRef), $secret));
+        $this->rejects('completed_refund_source_signature', fn () => $attest($sourceReviewer, $wrongSignature));
+        \Laravel\Sanctum\Sanctum::actingAs($byteReviewer);
+        $this->rejects('completed_refund_document_independence', fn () => $attest($byteReviewer, $signature));
+        \Laravel\Sanctum\Sanctum::actingAs($sourceReviewer);
+        $result = $attest($sourceReviewer, $signature);
+        $this->assertTrue($result['created']);
+        $this->assertTrue($result['attestation']['trusted_signature_verified']);
+        $this->assertFalse($result['attestation']['physical_fact_automatically_verified']);
+        $this->assertFalse($result['attestation']['closure_authorized']);
+        $this->assertFalse($result['financial_posting_created']);
+        $this->assertFalse($result['spending_authorized']);
+        $this->assertTrue($result['incident_unresolved']);
+        $this->assertFalse($attest($sourceReviewer, $signature)['created']);
+        $audit = AuditEvent::query()->where('event', 'financial.completed_cash_refund_source_attested')->sole();
+        $before = $audit->getRawOriginal();
+        foreach ([fn () => DB::table('audit_events')->where('id', $audit->id)->update(['after' => '{}']),
+            fn () => DB::table('audit_events')->where('id', $audit->id)->delete()] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Source evidence was mutable.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial approval audit is immutable or invalid', $error->getMessage());
+            }
+        }
+        $this->assertEquals($before, $audit->fresh()->getRawOriginal());
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+        sodium_memzero($secret);
+    }
+
     public function test_release_refund_document_independent_matching_bytes_preserve_cash_fence(): void
     {
         $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);
