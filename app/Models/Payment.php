@@ -174,7 +174,7 @@ class Payment extends Model
             ->where('scope_key', 'water')->where('operation_uuid', $this->sync_uuid)->exists()) return true;
         if (! $this->exists) return false;
         $ids = Transaction::withTrashed()->where('reference_type', self::class)
-            ->where('reference_id', $this->id)->where('type', 'payment')->pluck('id');
+            ->where('reference_id', $this->id)->whereIn('type', ['payment', 'payment_reversal'])->pluck('id');
         return $db::table('financial_posting_events')->where('scope_key', 'water')
             ->where('source_type', 'ledger_transaction')->where('leg', 'subscriber')
             ->whereIn('source_id', $ids->map(fn ($id) => (string) $id)->all())->exists();

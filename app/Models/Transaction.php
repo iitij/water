@@ -46,11 +46,48 @@ class Transaction extends Model
         }
     }
 
+    public static function receiptReversalFenceEnabled(): bool
+    {
+        return Payment::receiptFenceEnabled() || config('financial_candidate.void_api') === true
+            || config('financial_candidate.subscriber_transfers') === true;
+    }
+
+    public static function assertReceiptReversalWriter(Payment $payment, mixed $writer): void
+    {
+        if ($writer === null && ! self::receiptReversalFenceEnabled() && ! $payment->hasRegisteredReceipt()) return;
+        $allowed = ($writer instanceof \App\Services\GatedReceiptVoidWriter
+                && $payment->isVoided() && $writer->allowsMutation($payment))
+            || ($writer instanceof \App\Services\GatedInvoiceTransferWriter
+                && ! $payment->isVoided() && $writer->allowsReceiptReversal((int) $payment->id));
+        if (! $allowed) throw new \DomainException('gated_receipt_reversal_writer_required');
+    }
+
     public function save(array $options = [])
     {
         $writer = $options['financial_invoice_writer'] ?? null;
         $receiptService = $options['financial_receipt_service'] ?? null;
-        unset($options['financial_invoice_writer'], $options['financial_receipt_service']);
+        $reversalWriter = $options['financial_receipt_reversal_writer'] ?? null;
+        unset($options['financial_invoice_writer'], $options['financial_receipt_service'], $options['financial_receipt_reversal_writer']);
+        $reversalRelated = $this->type === 'payment_reversal'
+            || ($this->exists && $this->getOriginal('type') === 'payment_reversal');
+        if ($reversalRelated || $reversalWriter !== null) {
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $writer, $receiptService, $reversalWriter) {
+                if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new \LogicException('Financial issuance lock is missing.');
+                }
+                $payment = Payment::withTrashed()->find($this->exists ? $this->getOriginal('reference_id') : $this->reference_id);
+                $protected = self::receiptReversalFenceEnabled() || $payment?->hasRegisteredReceipt() || $reversalWriter !== null;
+                if ($writer !== null || $receiptService !== null || ($this->exists && $protected)) {
+                    throw new \DomainException('gated_receipt_reversal_writer_required');
+                }
+                if (! $this->exists && $payment && $this->reference_type === Payment::class && $this->type === 'payment_reversal') {
+                    self::assertReceiptReversalWriter($payment, $reversalWriter);
+                } elseif ($protected) {
+                    throw new \DomainException('gated_receipt_reversal_writer_required');
+                }
+                return parent::save($options);
+            });
+        }
         $receiptRelated = $this->type === 'payment' || ($this->exists && $this->getOriginal('type') === 'payment');
         if ($receiptRelated || $receiptService !== null) {
             return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $writer, $receiptService) {

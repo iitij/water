@@ -283,7 +283,7 @@ class PaymentService
 
             // Keep the original posting and append its opposite.
             $transactionService = new TransactionService();
-            $transactionService->reverseDocument($payment->subscriber, $payment, 'payment');
+            $transactionService->reverseDocument($payment->subscriber, $payment, 'payment', reversalWriter: $gatedWriter);
             if ($payment->meter_id) {
                 if ($meter = \App\Models\Meter::find($payment->meter_id)) {
                     $transactionService->updateMeterBalance($meter);

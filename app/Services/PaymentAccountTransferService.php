@@ -99,7 +99,7 @@ final class PaymentAccountTransferService
                 'reason' => $reason,
                 'evidence' => $evidence,
             ]);
-            $out = $ledger->reverseDocument($from, $receipt, 'payment');
+            $out = $ledger->reverseDocument($from, $receipt, 'payment', reversalWriter: $gatedWriter);
             $in = $ledger->recordTransaction($to, 'payment_transfer_in', $money->decimal(),
                 'تصحيح تخصيص سند '.$receipt->receipt_number, $transfer);
             $allocator = app(PaymentService::class);

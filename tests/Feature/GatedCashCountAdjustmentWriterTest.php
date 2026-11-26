@@ -3082,6 +3082,59 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_release_receipt_reversal_fence_blocks_direct_and_idle_writers(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        $session = app(CashSessionService::class)->open($actor);
+        $uuid = '66666666-6666-4666-8666-666666666666';
+        $voidUuid = '88888888-8888-4888-8888-888888888888';
+        config(['financial_candidate.cash_receipts' => true, 'financial_candidate.void_api' => true]);
+        \App\Models\Setting::set('void_approval_threshold', '0.00');
+        $payment = app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '10.00',
+            $uuid, $this->nowAt(), (int) $session->id)['payment'];
+        $ledger = app(\App\Services\TransactionService::class);
+        $void = app(\App\Services\GatedReceiptVoidWriter::class);
+        $transfer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $data = ['subscriber_id' => $subscriber->id, 'type' => 'payment_reversal', 'amount' => '-10.00',
+            'reference_type' => Payment::class, 'reference_id' => $payment->id];
+        $tables = ['payments', 'transactions', 'payment_allocations', 'payment_allocation_revisions',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        foreach ([true, false] as $enabled) {
+            config(['financial_candidate.cash_receipts' => $enabled, 'financial_candidate.void_api' => $enabled]);
+            $this->rejects('gated_receipt_reversal_writer_required', fn () => \App\Models\Transaction::create($data));
+            $this->rejects('gated_receipt_reversal_writer_required', fn () =>
+                (new \App\Models\Transaction($data))->saveQuietly(['financial_receipt_reversal_writer' => $void]));
+            $this->rejects('gated_receipt_reversal_writer_required', fn () =>
+                $ledger->recordTransaction($subscriber, 'payment_reversal', '-10.00', reference: $payment));
+            $this->rejects('gated_receipt_reversal_writer_required', fn () =>
+                $ledger->reverseDocument($subscriber, $payment, 'payment'));
+            $this->rejects('gated_receipt_reversal_writer_required', fn () =>
+                DB::transaction(fn () => $ledger->reverseDocument($subscriber, $payment, 'payment', reversalWriter: $void)));
+            $this->rejects('gated_receipt_reversal_writer_required', fn () =>
+                DB::transaction(fn () => $ledger->reverseDocument($subscriber, $payment, 'payment', reversalWriter: $transfer)));
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        }
+        $cancel = fn () => $void->request($actor, (int) $payment->id, 'Independent documented cancellation',
+            $this->nowAt(), $voidUuid);
+        $this->assertTrue($cancel()['registry_created']);
+        $this->assertFalse($cancel()['registry_created']);
+        $entry = \App\Models\Transaction::where('reference_type', Payment::class)->where('reference_id', $payment->id)
+            ->where('type', 'payment_reversal')->sole();
+        $this->rejects('gated_receipt_reversal_writer_required', fn () => $entry->forceFill(['amount' => '-20.00'])->saveQuietly());
+        $this->assertSame('-10.00', $entry->fresh()->amount);
+        $this->assertTrue($payment->fresh()->isVoided());
+        $this->assertSame(0, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(0, app(CashSessionService::class)->expectedAmountMinor($session->fresh()));
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $voidUuid, 'amount_minor' => -1000]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $voidUuid)->count());
+        $this->assertSame($before['treasury_postings'], $snapshot('treasury_postings'));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_receipt_model_fence_blocks_direct_receipt_and_original_ledger(): void
     {
         [, , $account, , , $subscriber] = $this->held();

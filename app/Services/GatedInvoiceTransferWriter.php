@@ -197,6 +197,12 @@ final class GatedInvoiceTransferWriter
         return DB::transactionLevel() > 0 && $this->invoiceIdentity === ['cancel', $invoiceId, $actorId];
     }
 
+    public function allowsReceiptReversal(int $paymentId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->transferIdentity !== null
+            && $this->transferIdentity[0] === $paymentId;
+    }
+
     public function allowsTransfer(int $paymentId, int $destinationId, int $actorId): bool
     {
         return DB::transactionLevel() > 0 && $this->transferIdentity === [$paymentId, $destinationId, $actorId];

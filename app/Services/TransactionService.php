@@ -113,11 +113,12 @@ class TransactionService
         ?Model $reference = null,
         ?\App\Models\Meter $meter = null,
         ?GatedInvoiceTransferWriter $invoiceWriter = null,
-        ?PaymentService $receiptService = null
+        ?PaymentService $receiptService = null,
+        GatedReceiptVoidWriter|GatedInvoiceTransferWriter|null $reversalWriter = null
     ): Transaction {
         $amount = FinancialAmount::validated($amount, 'transaction')->decimal();
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter, $invoiceWriter, $receiptService) {
-            if ($reference instanceof Invoice || in_array($type, ['invoice', 'invoice_reversal', 'payment'], true)) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter, $invoiceWriter, $receiptService, $reversalWriter) {
+            if ($reference instanceof Invoice || in_array($type, ['invoice', 'invoice_reversal', 'payment', 'payment_reversal'], true)) {
                 if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Financial issuance lock is missing.');
                 }
@@ -128,6 +129,11 @@ class TransactionService
                 Transaction::assertReceiptPostingService($reference, $receiptService);
             } elseif ($receiptService !== null) {
                 throw new \DomainException('gated_receipt_ledger_writer_required');
+            }
+            if ($reference instanceof Payment && $type === 'payment_reversal') {
+                Transaction::assertReceiptReversalWriter($reference, $reversalWriter);
+            } elseif ($reversalWriter !== null) {
+                throw new \DomainException('gated_receipt_reversal_writer_required');
             }
             if ($reference instanceof Invoice) {
                 Transaction::assertInvoicePostingWriter($reference, $type, $invoiceWriter);
@@ -170,7 +176,7 @@ class TransactionService
             if ($reference instanceof Invoice || $reference instanceof Payment) {
                 $transaction->forceFill(['retired_meter_id' => $reference->retired_meter_id, 'retired_meter_code' => $reference->retired_meter_code]);
             }
-            if (! $transaction->save(['financial_invoice_writer' => $invoiceWriter, 'financial_receipt_service' => $receiptService]) || ! $transaction->exists || $transaction->getKey() === null) {
+            if (! $transaction->save(['financial_invoice_writer' => $invoiceWriter, 'financial_receipt_service' => $receiptService, 'financial_receipt_reversal_writer' => $reversalWriter]) || ! $transaction->exists || $transaction->getKey() === null) {
                 throw new \RuntimeException('Ledger posting was not persisted.');
             }
 
@@ -189,13 +195,13 @@ class TransactionService
      * The caller holds the subscriber lock and changes document state in the
      * same transaction. Historical missing/deleted originals are not guessed.
      */
-    public function reverseDocument(Subscriber $subscriber, Model $reference, string $originalType, ?GatedInvoiceTransferWriter $invoiceWriter = null): Transaction
+    public function reverseDocument(Subscriber $subscriber, Model $reference, string $originalType, ?GatedInvoiceTransferWriter $invoiceWriter = null, GatedReceiptVoidWriter|GatedInvoiceTransferWriter|null $reversalWriter = null): Transaction
     {
         if (! (($originalType === 'invoice' && $reference instanceof Invoice) || ($originalType === 'payment' && $reference instanceof Payment))) {
             throw new \InvalidArgumentException('Unsupported reversal type.');
         }
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $reference, $originalType, $invoiceWriter) {
-            if ($reference instanceof Invoice) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $reference, $originalType, $invoiceWriter, $reversalWriter) {
+            if ($reference instanceof Invoice || $reference instanceof Payment) {
                 if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Financial issuance lock is missing.');
                 }
@@ -225,6 +231,7 @@ class TransactionService
                 reference: $reference,
                 meter: $original->meter,
                 invoiceWriter: $invoiceWriter,
+                reversalWriter: $reversalWriter,
             );
             return $reversal;
         }, 3);
