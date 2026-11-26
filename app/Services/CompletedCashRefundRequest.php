@@ -19,6 +19,7 @@ final class CompletedCashRefundRequest
     public const EVENT = 'financial.completed_cash_refund_requested';
     public const CLOSED = 'financial.completed_cash_refund_closed';
     public const RESOLUTION_PROPOSED = 'financial.completed_cash_refund_resolution_proposed';
+    public const RESOLUTION_APPROVED = 'financial.completed_cash_refund_resolution_approved';
 
     public static function authenticated(User $actor): void
     {
@@ -95,8 +96,11 @@ final class CompletedCashRefundRequest
         abort_unless(app()->environment(['testing', 'staging']), 503);
         app(TreasuryRegisterService::class)->authorize($actor);
         return DB::transaction(function () use ($uuid): array {
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new DomainException('gated_refund_issuance_lock');
+            }
             $this->guard();
-            $row = $this->find($uuid, false);
+            $row = $this->find($uuid, true);
             abort_unless($row !== null, 404);
             $p = $row->after;
             if (! is_array($p)) throw new DomainException('completed_cash_refund_request_conflict');
@@ -280,6 +284,180 @@ final class CompletedCashRefundRequest
             });
     }
 
+    /** Narrow no-posting resolution. A counted balance is not a general certification. */
+    public function approveResolution(User $actor, string $uuid, string $confirmation, DateTimeImmutable $now): array
+    {
+        self::authenticated($actor);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        $confirmation = trim($confirmation);
+        if (mb_strlen($confirmation) < 20 || mb_strlen($confirmation) > 2000) {
+            throw new DomainException('completed_refund_resolution_input');
+        }
+        $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
+            function () use ($actor, $uuid, $confirmation, $date): array {
+                DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
+                if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new DomainException('gated_refund_issuance_lock');
+                }
+                $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+                self::authenticated($actor);
+                app(TreasuryRegisterService::class)->authorize($actor);
+                $this->guard();
+                $request = $this->find($uuid, true);
+                abort_unless($request !== null, 404);
+                $closed = $this->decision($request);
+                if ($closed === null) throw new DomainException('completed_refund_resolution_closed_request_required');
+                $sources = $this->resolutionSources($request, $closed, (int) $actor->id);
+                $old = $this->verifiedResolution($request, $closed);
+                if ($old !== null) {
+                    if ((int) $old->actor_user_id !== (int) $actor->id || $old->after['confirmation'] !== $confirmation) {
+                        throw new DomainException('completed_refund_resolution_conflict');
+                    }
+                    return ['created' => false, 'incident_unresolved' => false, 'resolution' => $old->after];
+                }
+                $p = $sources['proposal']->after;
+                $accountId = $p['account_id'];
+                if ($this->unresolvedForAccount($accountId)['count'] !== 1
+                    || app(HeldCashReservation::class)->unpostedCashRefundMinor() !== 0) {
+                    throw new DomainException('completed_refund_resolution_competing_incidents');
+                }
+                foreach (AuditEvent::query()->where('event', self::RESOLUTION_APPROVED)->lockForUpdate()->get() as $approval) {
+                    if (($approval->after['count_id'] ?? null) === $p['count_id']) {
+                        throw new DomainException('completed_refund_resolution_count_reused');
+                    }
+                }
+                app(TreasuryCashCountService::class)->assertFreshEqualObservation($accountId, $p['count_id'], $date);
+                if ($p['proposed_on'] !== $date
+                    || app(HeldCashRecordedLiquidityEvidence::class)->balance($accountId, $date) !== $p['counted_minor']) {
+                    throw new DomainException('completed_refund_resolution_stale_count');
+                }
+                $proof = $sources['identity'] + ['approved_on' => $date, 'confirmation' => $confirmation];
+                app(AuditLogger::class)->recordRequired(self::RESOLUTION_APPROVED, [
+                    'entity_type' => 'completed_cash_refund_request', 'entity_id' => $uuid,
+                    'actor_user_id' => $actor->id, 'source' => 'internal', 'after' => $proof]);
+                if ($this->verifiedResolution($request, $closed) === null) {
+                    throw new DomainException('completed_refund_resolution_conflict');
+                }
+                return ['created' => true, 'incident_unresolved' => false, 'resolution' => $proof];
+            });
+    }
+
+    /** Fingerprint historical source rows; never compare today's balance to an old count on replay. */
+    private function resolutionSources(AuditEvent $request, AuditEvent $closed, int $approver): array
+    {
+        $fail = 'completed_refund_resolution_evidence';
+        $p = $request->after;
+        $this->assertIntent($request, self::intent($p['payment_id'], $p['account_id'], $p['amount'],
+            $p['reference'], $p['date'], $p['reason'], $p['evidence'], $request->entity_id, (int) $request->actor_user_id));
+        $proposals = AuditEvent::query()->where('event', self::RESOLUTION_PROPOSED)
+            ->where('entity_id', $request->entity_id)->lockForUpdate()->get();
+        if ($proposals->count() !== 1) throw new DomainException($fail);
+        $proposal = $proposals->first();
+        $q = $proposal->after;
+        if (! is_array($q) || $proposal->entity_type !== 'completed_cash_refund_request' || $proposal->source !== 'internal'
+            || (int) $proposal->id <= (int) $closed->id || (int) $proposal->actor_user_id <= 0
+            || ($q['request_id'] ?? null) !== (int) $request->id || ($q['decision_id'] ?? null) !== (int) $closed->id
+            || ($q['operation_uuid'] ?? null) !== $request->entity_id || ($q['account_id'] ?? null) !== $p['account_id']
+            || ($q['payment_id'] ?? null) !== $p['payment_id'] || ($q['claimed_amount'] ?? null) !== $p['amount']
+            || ($q['reference'] ?? null) !== $p['reference'] || ($q['incident_unresolved'] ?? null) !== true
+            || ! in_array($q['classification'] ?? null, ['no_disbursement', 'cash_returned'], true)
+            || ($q['variance_minor'] ?? null) !== 0 || ! is_int($q['counted_minor'] ?? null)
+            || $q['counted_minor'] !== ($q['recorded_minor'] ?? null)
+            || ! is_int($q['count_id'] ?? null) || ! is_int($q['review_id'] ?? null)
+            || ! is_string($q['evidence'] ?? null) || mb_strlen(trim($q['evidence'])) < 20
+            || ! is_string($q['proposed_on'] ?? null)) {
+            throw new DomainException($fail);
+        }
+        if (DB::table('financial_posting_operations')->where('operation_uuid', $request->entity_id)->lockForUpdate()->first()
+            || PaymentRefund::query()->where('disbursement_reference', $p['reference'])->lockForUpdate()->first()) {
+            throw new DomainException($fail);
+        }
+        $payment = Payment::query()->lockForUpdate()->findOrFail($p['payment_id']);
+        $count = DB::table('treasury_cash_counts')->where('id', $q['count_id'])->lockForUpdate()->first();
+        $review = DB::table('treasury_cash_count_reviews')->where('id', $q['review_id'])->lockForUpdate()->first();
+        $o = DB::table('audit_events')->where('id', $q['count_audit_id'])->lockForUpdate()->first();
+        $r = DB::table('audit_events')->where('id', $q['review_audit_id'])->lockForUpdate()->first();
+        if (! $count || ! $review || ! $o || ! $r
+            || (int) $count->treasury_account_id !== $p['account_id']
+            || (int) $review->treasury_cash_count_id !== (int) $count->id || ! (bool) $review->accepted
+            || (int) $count->counted_by === (int) $review->reviewed_by
+            || \App\Support\TreasuryMoney::document($count->counted_minor) !== $q['counted_minor']
+            || \App\Support\TreasuryMoney::signed($count->recorded_minor) !== $q['recorded_minor']
+            || \App\Support\TreasuryMoney::signed($count->variance_minor) !== 0
+            || $count->ledger_hash !== $q['ledger_hash']
+            || $o->event !== 'treasury.cash_count_recorded' || $o->entity_type !== 'treasury_cash_count'
+            || (string) $o->entity_id !== (string) $count->id || (int) $o->actor_user_id !== (int) $count->counted_by
+            || $r->event !== 'treasury.cash_count_reviewed' || $r->entity_type !== 'treasury_cash_count_review'
+            || (string) $r->entity_id !== (string) $review->id || (int) $r->actor_user_id !== (int) $review->reviewed_by
+            || (int) $o->id <= (int) $closed->id || (int) $r->id <= (int) $o->id || (int) $proposal->id <= (int) $r->id
+            || DB::table('treasury_cash_adjustments')->where('treasury_cash_count_id', $count->id)->lockForUpdate()->first()) {
+            throw new DomainException($fail);
+        }
+        $excluded = [(int) $request->actor_user_id, (int) $payment->user_id];
+        if ($payment->cash_session_id !== null) {
+            $excluded[] = (int) \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id)->user_id;
+        }
+        if (in_array((int) $proposal->actor_user_id, $excluded, true)
+            || in_array((int) $count->counted_by, $excluded, true)
+            || in_array((int) $review->reviewed_by, $excluded, true)
+            || $approver <= 0 || in_array($approver, array_merge($excluded, [(int) $closed->actor_user_id,
+                (int) $proposal->actor_user_id, (int) $count->counted_by, (int) $review->reviewed_by]), true)) {
+            throw new DomainException('completed_refund_resolution_independence');
+        }
+        $observation = json_decode($o->after, true, 512, JSON_THROW_ON_ERROR);
+        $reviewAudit = json_decode($r->after, true, 512, JSON_THROW_ON_ERROR);
+        if (($observation['ledger_hash'] ?? null) !== $q['ledger_hash']
+            || ($observation['counted_minor'] ?? null) !== $q['counted_minor']
+            || ($observation['recorded_minor'] ?? null) !== $q['recorded_minor']
+            || ($observation['variance_minor'] ?? null) !== 0
+            || ($observation['reference'] ?? null) !== $count->reference
+            || ($observation['evidence'] ?? null) !== $count->evidence
+            || (int) ($reviewAudit['treasury_cash_count_id'] ?? 0) !== (int) $count->id
+            || ($reviewAudit['accepted'] ?? null) !== true
+            || ($reviewAudit['evidence'] ?? null) !== $review->evidence
+            || ($reviewAudit['financial_adjustment_created'] ?? null) !== false) {
+            throw new DomainException($fail);
+        }
+        $fingerprint = static function (array $data): string {
+            ksort($data);
+            return hash('sha256', json_encode($data, JSON_THROW_ON_ERROR));
+        };
+        return ['proposal' => $proposal, 'identity' => [
+            'request_id' => (int) $request->id, 'decision_id' => (int) $closed->id,
+            'proposal_id' => (int) $proposal->id, 'operation_uuid' => $request->entity_id,
+            'account_id' => $p['account_id'], 'count_id' => (int) $count->id, 'classification' => $q['classification'],
+            'proposal_hash' => $fingerprint($q), 'count_hash' => $fingerprint((array) $count),
+            'review_hash' => $fingerprint((array) $review), 'observation_hash' => $fingerprint((array) $o),
+            'review_audit_hash' => $fingerprint((array) $r), 'financial_posting_created' => false,
+        ]];
+    }
+
+    private function verifiedResolution(AuditEvent $request, AuditEvent $closed): ?AuditEvent
+    {
+        $rows = AuditEvent::query()->where('event', self::RESOLUTION_APPROVED)
+            ->where('entity_id', $request->entity_id)->lockForUpdate()->get();
+        if ($rows->count() > 1) throw new DomainException('completed_refund_resolution_conflict');
+        $approval = $rows->first();
+        if ($approval === null) return null;
+        $sources = $this->resolutionSources($request, $closed, (int) $approval->actor_user_id);
+        $p = $approval->after;
+        if ($approval->entity_type !== 'completed_cash_refund_request' || $approval->source !== 'internal'
+            || (int) $approval->id <= (int) $sources['proposal']->id || ! is_array($p)
+            || count($p) !== count($sources['identity']) + 2
+            || ($p['approved_on'] ?? null) !== $sources['proposal']->after['proposed_on']
+            || ! is_string($p['confirmation'] ?? null) || mb_strlen(trim($p['confirmation'])) < 20
+            || mb_strlen($p['confirmation']) > 2000) {
+            throw new DomainException('completed_refund_resolution_conflict');
+        }
+        foreach ($sources['identity'] as $key => $value) {
+            if (! array_key_exists($key, $p) || $p[$key] !== $value) {
+                throw new DomainException('completed_refund_resolution_conflict');
+            }
+        }
+        return $approval;
+    }
+
     /** A closed review is not a cash recovery. Caller owns the issuance fence. */
     public function assertNoUnresolvedForAccount(int $accountId): void
     {
@@ -307,7 +485,9 @@ final class CompletedCashRefundRequest
             $intent = self::intent($p['payment_id'], $p['account_id'], $p['amount'], $p['reference'],
                 $p['date'], $p['reason'], $p['evidence'], $row->entity_id, (int) $row->actor_user_id);
             $this->assertIntent($row, $intent);
-            if ($this->decision($row) !== null
+            $closed = $this->decision($row);
+            if ($closed !== null && $this->verifiedResolution($row, $closed) !== null) continue;
+            if ($closed !== null
                 || ! DB::table('financial_posting_operations')->where('operation_uuid', $row->entity_id)->lockForUpdate()->first()) {
                 $count++;
                 $claimed = \App\Support\SignedMinor::add($claimed, FinancialAmount::parse($intent['amount'])->minor);
@@ -344,10 +524,12 @@ final class CompletedCashRefundRequest
         $op = DB::table('financial_posting_operations')->where('operation_uuid', $request->entity_id)->exists();
         $closed = $this->decision($request);
         if ($closed !== null && $op) throw new DomainException('completed_cash_refund_decision_conflict');
+        $resolution = $closed === null ? null : $this->verifiedResolution($request, $closed);
         // An operation UUID alone is not a verified posting.
         return ['status' => $closed?->after['decision'] ?? ($op ? 'posting_recorded_unverified' : 'pending'),
             'operation_exists' => $op, 'completion_verified' => false,
-            'incident_unresolved' => true,
+            'incident_unresolved' => $resolution === null,
+            'resolution' => $resolution === null ? null : $resolution->after + ['approved_by' => (int) $resolution->actor_user_id],
             'decision' => $closed === null ? null : $closed->after + ['decided_by' => (int) $closed->actor_user_id]];
     }
 
@@ -390,7 +572,8 @@ final class CompletedCashRefundRequest
     {
         if (! app(CompletedCashRefundRequestProtection::class)->active()
             || ! app(CompletedCashRefundDecisionProtection::class)->active()
-            || ! app(CompletedCashRefundResolutionProposalProtection::class)->active()) {
+            || ! app(CompletedCashRefundResolutionProposalProtection::class)->active()
+            || ! app(CompletedCashRefundResolutionApprovalProtection::class)->active()) {
             throw new DomainException('completed_cash_refund_request_protection_missing');
         }
     }

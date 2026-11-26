@@ -1,7 +1,7 @@
-name: Prospective refund incident resolution proposal
+name: Prospective refund incident resolution approval
 on:
   push:
-    branches: ['release/prospective-refund-incident-resolution-proposal']
+    branches: ['release/prospective-refund-incident-resolution-approval']
   workflow_dispatch:
 permissions:
   contents: read
@@ -37,7 +37,7 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify independent non-operative resolution proposal
+      - name: Verify independent refund resolution approval
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_resolution_proposal_preserves_cash_fence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     runs-on: ubuntu-24.04
@@ -97,5 +97,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify independent non-operative resolution proposal
+      - name: Verify independent refund resolution approval
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_resolution_proposal_preserves_cash_fence' tests/Feature/GatedCashCountAdjustmentWriterTest.php

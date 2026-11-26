@@ -142,6 +142,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/completed-cash-refund-requests/{uuid}/approve', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'approve'])->whereUuid('uuid');
     Route::post('/completed-cash-refund-requests/{uuid}/close', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'close'])->whereUuid('uuid');
     Route::post('/completed-cash-refund-requests/{uuid}/resolution-proposal', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'proposeResolution'])->whereUuid('uuid');
+    Route::post('/completed-cash-refund-requests/{uuid}/resolution-approve', [\App\Http\Controllers\Api\CompletedCashRefundController::class, 'approveResolution'])->whereUuid('uuid');
     Route::post('/payments/{id}/transfer-account', [PaymentController::class, 'transferAccount'])->whereNumber('id');
     Route::apiResource('payments', PaymentController::class)->parameters(['payments' => 'id']);
 

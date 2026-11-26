@@ -1314,6 +1314,36 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $proof = $this->gate(fn () => app(\App\Services\ActiveHeldCashRelease::class)->currentLiquidity($id));
         $this->assertSame(1, $proof['unresolved_refund_incident_count']);
         $this->assertSame(0, $proof['available_for_ordinary_outflow_minor']);
+        $approval = $root.$uuid.'/resolution-approve';
+        $input = ['confirmation' => 'Independent investigation confirms no cash left the treasury'];
+        $approver = $this->actor();
+        foreach ([$requester, $proposer, $reviewer, $counter, $countReviewer] as $excluded) {
+            \Laravel\Sanctum\Sanctum::actingAs($excluded);
+            $this->postJson($approval, $input)->assertConflict();
+        }
+        \Laravel\Sanctum\Sanctum::actingAs($approver);
+        $this->postJson($approval, $input + ['reviewer_id' => $reviewer->id])->assertUnprocessable();
+        $this->postJson($approval, $input)->assertOk()->assertJsonPath('created', true)
+            ->assertJsonPath('incident_unresolved', false);
+        $this->postJson($approval, $input)->assertOk()->assertJsonPath('created', false);
+        $this->postJson($approval, ['confirmation' => self::EVIDENCE])->assertConflict();
+        $this->getJson($root.$uuid)->assertOk()->assertJsonPath('status', 'rejected')
+            ->assertJsonPath('incident_unresolved', false)->assertJsonPath('resolution.approved_by', $approver->id);
+        $this->assertEquals($before, $snapshot());
+        $this->gate(fn () => app(\App\Services\CompletedCashRefundRequest::class)->assertNoUnresolvedForAccount($id));
+        $proof = $this->gate(fn () => app(\App\Services\ActiveHeldCashRelease::class)->currentLiquidity($id));
+        $this->assertSame(0, $proof['unresolved_refund_incident_count']);
+        $this->assertFalse($proof['incident_outflow_blocked']);
+        $approved = DB::table('audit_events')->where('event', 'financial.completed_cash_refund_resolution_approved')->sole();
+        foreach ([fn () => DB::table('audit_events')->where('id', $approved->id)->update(['after' => '{}']),
+            fn () => DB::table('audit_events')->where('id', $approved->id)->delete()] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Resolution approval evidence was mutable.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial approval audit is immutable or invalid', $error->getMessage());
+            }
+        }
     }
 
     public function test_release_completed_refund_lifecycle_preserves_rejected_and_withdrawn_incidents(): void
