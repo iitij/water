@@ -103,8 +103,14 @@ final class FinancialCloseJournalProtection
 
     public function install(): void
     {
+        // Verify every existing definition before creating any missing guard.
+        // MySQL DDL commits implicitly; never partially install on a known mismatch.
+        $missing = [];
         foreach ($this->definitions() as $name => $definition) {
-            if (! $this->verified($name, $definition)) DB::unprepared("CREATE TRIGGER {$name} {$definition[2]}");
+            if (! $this->verified($name, $definition)) $missing[$name] = $definition;
+        }
+        foreach ($missing as $name => $definition) {
+            DB::unprepared("CREATE TRIGGER {$name} {$definition[2]}");
         }
         if (! $this->active()) throw new \LogicException('Financial close journal protection incomplete.');
     }
