@@ -7863,6 +7863,184 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
     }
 
+    public function test_held_period_rollforward_preserves_prior_cutoff_and_owner_carry(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $firstId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $diagnostic = app(\App\Services\FinancialHeldLiabilityPeriodDiagnostic::class);
+        $inspect = fn (int $id) => DB::transaction(fn () => $diagnostic->inspect($id));
+        $first = $inspect($firstId);
+        $row = $first['rows'][0];
+        $this->assertSame($lot, $row['liability_id']);
+        $this->assertSame((int) $account['id'], $row['account_id']);
+        $this->assertSame(25, $row['recognized_minor']);
+        $this->assertSame(25, $row['assigned_minor']);
+        $this->assertSame(20, $row['credited_minor']);
+        $this->assertSame(0, $row['paid_minor']);
+        $this->assertSame(0, $row['recorded_opening_identified_minor']);
+        $this->assertSame(0, $row['recorded_closing_unidentified_minor']);
+        $this->assertSame(5, $row['recorded_closing_identified_minor']);
+        $this->assertSame([['assignment_uuid' => self::NEXT, 'subscriber_id' => (int) $subscriber->id,
+            'recorded_opening_minor' => 0, 'recorded_closing_minor' => 5]], $row['owners']);
+        $nextId = DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        app(\App\Services\TreasuryHeldCashLiabilityService::class)->credit($this->actor(), self::NEXT, 5,
+            'QA-NEXT-MONTH-CREDIT', self::EVIDENCE, '88888888-8888-4888-8888-888888888888', '2026-12-02', $later);
+        $tables = ['treasury_held_cash_liabilities', 'treasury_held_cash_assignments', 'treasury_held_cash_credits',
+            'transactions', 'treasury_postings', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $this->assertSame($first, $inspect($firstId));
+        $second = $inspect((int) $nextId);
+        $this->assertSame(5, $second['totals']['recorded_opening_identified_minor']);
+        $this->assertSame(0, $second['totals']['recognized_minor']);
+        $this->assertSame(0, $second['totals']['assigned_minor']);
+        $this->assertSame(5, $second['totals']['credited_minor']);
+        $this->assertSame(0, $second['totals']['recorded_closing_identified_minor']);
+        $this->assertSame(5, $second['rows'][0]['owners'][0]['recorded_opening_minor']);
+        $this->assertSame(0, $second['rows'][0]['owners'][0]['recorded_closing_minor']);
+        $this->assertTrue($second['registered_held_subledger_rollforward_verified']);
+        $this->assertFalse($second['independent_opening_verified']);
+        $this->assertFalse($second['all_liabilities_verified']);
+        $this->assertFalse($second['closure_authorized']);
+        $this->assertEquals($before, $snapshot());
+    }
+
+    public function test_period_movements_preserve_owner_gross_effects_and_do_not_invent_balances(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($issuer, [
+            'code' => 'QA-MOVEMENT-BANK', 'name' => 'Synthetic bank',
+            'channel' => 'bank', 'opening_on' => '2026-11-25', 'opening_amount' => '5.00',
+            'opening_reference' => 'QA-MOVEMENT-BANK-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '55555555-5555-4555-8555-555555555555', $this->nowAt())['account'];
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.30',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $destination = Subscriber::create(['name' => 'Synthetic movement recipient',
+            'square_id' => $subscriber->square_id, 'status' => 'active']);
+        app(\App\Services\GatedInvoiceTransferWriter::class)->transfer($reviewer, (int) $receipt->id,
+            (int) $destination->id, 'Independent documented transfer', self::EVIDENCE,
+            '77777777-7777-4777-8777-777777777777', $this->nowAt());
+        $tables = ['transactions', 'treasury_postings', 'financial_posting_operations', 'financial_posting_events',
+            'audit_events', 'financial_period_closures'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $inspect = fn () => $this->gate(fn (array $context) =>
+            app(\App\Services\FinancialPeriodMovementDiagnostic::class)->inspect($context['period_id']));
+        $result = $inspect();
+        $this->assertTrue($result['recorded_movements_verified']);
+        $this->assertFalse($result['opening_verified']);
+        $this->assertFalse($result['period_closing_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertFalse($result['liability_rollforward_verified']);
+        $rows = collect($result['rows'])->keyBy(fn ($row) => $row['sector'].':'.$row['key']);
+        $this->assertSame(50, $rows['subscriber:'.$subscriber->id]['incoming_minor']);
+        $this->assertSame(30, $rows['subscriber:'.$subscriber->id]['outgoing_minor']);
+        $this->assertSame(20, $rows['subscriber:'.$subscriber->id]['net_movement_minor']);
+        $this->assertSame(30, $rows['subscriber:'.$destination->id]['net_movement_minor']);
+        $this->assertSame(10000, $rows['cash:'.$account['id']]['recorded_opening_document_minor']);
+        $this->assertSame(25, $rows['cash:'.$account['id']]['net_movement_minor']);
+        $this->assertSame(500, $rows['bank:'.$bank['id']]['recorded_opening_document_minor']);
+        $this->assertSame(0, $rows['bank:'.$bank['id']]['net_movement_minor']);
+        $this->assertSame(-25, $rows['held_liability_effect:lot-'.$lot]['net_movement_minor']);
+        $this->assertSame(5, $rows['held_liability_effect:assignment-'.self::NEXT]['net_movement_minor']);
+        $this->assertSame(50, $result['sector_totals']['subscriber']['net_movement_minor']);
+        $this->assertSame(-20, $result['sector_totals']['held_liability_effect']['net_movement_minor']);
+        foreach ($result['rows'] as $row) {
+            $this->assertNull($row['opening_minor']);
+            $this->assertNull($row['closing_minor']);
+        }
+        $this->assertSame(DB::table('financial_posting_events')->count(), $result['registry_events']);
+        $this->assertSame($result, $inspect());
+        $this->assertEquals($before, $snapshot());
+    }
+
+    public function test_period_movements_with_missing_registry_source_publish_no_partial_totals(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $receipt = app(PaymentService::class)->collectPayment($subscriber, '0.30');
+        $entry = DB::table('transactions')->where('reference_type', Payment::class)
+            ->where('reference_id', $receipt->id)->sole();
+        $result = $this->gate(fn (array $context) =>
+            app(\App\Services\FinancialPeriodMovementDiagnostic::class)->inspect($context['period_id']));
+        $this->assertFalse($result['recorded_movements_verified']);
+        $this->assertSame([], $result['rows']);
+        $this->assertSame([], $result['sector_totals']);
+        $this->assertNull($result['movement_hash']);
+        $this->assertContains(['code' => 'required_registry_leg_missing_or_duplicate', 'source' => 'ledger_transaction',
+            'id' => $entry->id.':subscriber'], $result['source_issues']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseHas('payments', ['id' => $receipt->id]);
+    }
+
+    public function test_close_evidence_unresolved_cash_claims_remain_visible_until_signed_settlement(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'keys' => $keys, 'service' => $service] = $this->mixedAtomicControl();
+        $actor = $f['approver'];
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $tables = ['financial_scopes', 'financial_periods', 'financial_posting_operations', 'financial_posting_events',
+            'payment_refunds', 'transactions', 'treasury_postings', 'audit_events', 'financial_period_closures'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $result = $diagnostic->inspect($actor, $periodId, $this->nowAt());
+        $this->assertSame(0, $result['refund_batch_coverage']['groups']);
+        $this->assertSame(2, $result['refund_incidents']['count']);
+        $this->assertSame(10, $result['refund_incidents']['claimed_minor']);
+        $this->assertSame(0, $result['refund_incidents']['unposted_cash_refund_minor']);
+        $this->assertContains('unresolved_refund_incidents', $result['blockers']);
+        $this->assertContains('period_not_ended', $result['blockers']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame($result, $diagnostic->inspect($actor, $periodId, $this->nowAt()));
+        $service->postMixedResolution($actor, $f['id'], $f['proposalIds'], $ids, self::EVIDENCE, $this->nowAt());
+        $after = $snapshot();
+        $resolved = $diagnostic->inspect($actor, $periodId, $this->nowAt());
+        $this->assertSame(1, $resolved['refund_batch_coverage']['groups']);
+        $this->assertSame(2, $resolved['refund_batch_coverage']['members']);
+        $this->assertTrue($resolved['refund_batch_coverage']['batch_audits_verified']);
+        $this->assertSame(0, $resolved['refund_incidents']['count']);
+        $this->assertSame(0, $resolved['refund_incidents']['claimed_minor']);
+        $this->assertNotContains('unresolved_refund_incidents', $resolved['blockers']);
+        $this->assertFalse($resolved['source_coverage_verified']);
+        $this->assertFalse($resolved['closure_authorized']);
+        $this->assertEquals($after, $snapshot());
+    }
+
+    public function test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure(): void
+    {
+        $actor = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->sole()->id;
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T08:00:00+03:00'));
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $result = $diagnostic->inspect($actor, $periodId, now()->toDateTimeImmutable());
+        $this->assertTrue($result['period_ended']);
+        $this->assertSame('2026-11-30', $result['settlement_through']);
+        $this->assertNull($result['current_subscriber_diagnostic']);
+        $this->assertNull($result['snapshot_continuity']);
+        $this->assertContains('independent_opening_source_unverified', $result['blockers']);
+        $this->assertContains('period_end_balances_unverified', $result['blockers']);
+        $this->assertContains('complete_writer_coverage_unverified', $result['blockers']);
+        $this->assertFalse($result['period_end_balances_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseCount('financial_close_commands', 0);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+        $this->rejects('close_evidence_requires_outer_gate', fn () => DB::transaction(fn () =>
+            $diagnostic->inspect($actor, $periodId, now()->toDateTimeImmutable())));
+    }
+
     public function test_round140_registered_documents_match_both_directions_without_authorizing_close(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
@@ -7941,13 +8119,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $reviewer = $this->actor();
         $receipt = app(PaymentService::class)->collectPayment($subscriber, '10.00');
         $entry = DB::table('transactions')->where('reference_type', Payment::class)->where('reference_id', $receipt->id)->sole();
+        // Create the deliberately legacy synthetic refund before registering its receipt.
+        // Once registered, the ordinary refund path must reject; do not weaken that guard.
+        $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $reviewer, '1.00',
+            'QA-R140-REFUND', 'treasury_cash', '2026-11-25', 'Independent documented excess credit refund', self::EVIDENCE);
+        $posting = app(TreasuryRegisterService::class)->post($reviewer, (int) $account['id'], 'payment_refund', (int) $refund->id);
         app(FinancialWriteGate::class)->withinOpenPeriod('water', '2026-11-24', $this->nowAt(), function (array $context) use ($entry): void {
             $leg = app(\App\Services\FinancialLedgerEvidence::class)->leg((int) $entry->id);
             $this->assertTrue(app(FinancialPostingRegistry::class)->record($context, '66666666-6666-4666-8666-666666666666', [$leg], $this->nowAt()));
         });
-        $refund = app(\App\Services\PaymentRefundService::class)->record($receipt, $reviewer, '1.00',
-            'QA-R140-REFUND', 'treasury_cash', '2026-11-25', 'Independent documented excess credit refund', self::EVIDENCE);
-        $posting = app(TreasuryRegisterService::class)->post($reviewer, (int) $account['id'], 'payment_refund', (int) $refund->id);
         $refundEntry = DB::table('transactions')->where('reference_type', \App\Models\PaymentRefund::class)->where('reference_id', $refund->id)->sole();
         $this->gate(function (array $context) use ($refundEntry, $posting): void {
             $registry = app(FinancialPostingRegistry::class);
