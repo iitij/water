@@ -182,8 +182,12 @@ final class HeldCashReleaseProposalService
                     $marker = DB::table('held_cash_active_releases')->where('journal_id', $old->id)->lockForUpdate()->first();
                     $this->need($marker !== null, 'active_held_release_no_shadow_adoption');
                     $this->verifiedActiveState($proof);
-                    $row = (array) $old;
-                    unset($row['id']);
+                    $row = [];
+                    foreach (['proposal_uuid', 'credit_id', 'treasury_account_id', 'revision_id', 'period_id',
+                        'kind', 'amount_minor', 'applied_minor', 'before_minor', 'after_minor', 'allocation_hash',
+                        'effective_on', 'operation_uuid', 'actor_id', 'evidence'] as $key) {
+                        $row[$key] = $old->$key;
+                    }
                     foreach (['credit_id', 'treasury_account_id', 'revision_id', 'period_id', 'amount_minor',
                         'applied_minor', 'before_minor', 'after_minor', 'actor_id'] as $key) {
                         $row[$key] = SignedMinor::parse($row[$key]);
