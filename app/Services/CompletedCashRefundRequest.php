@@ -26,6 +26,20 @@ final class CompletedCashRefundRequest
     public const SOURCE_ATTESTED = 'financial.completed_cash_refund_source_attested';
     public const RESOLUTION_APPROVED = 'financial.completed_cash_refund_resolution_approved';
 
+    /** Unsigned historical algorithms remain exercisable only in isolated synthetic QA.
+     * Neither deployment configuration nor a caller may enable them in staging.
+     */
+    public static function requireSignedNewSettlement(): void
+    {
+        if (app()->environment('testing')
+            && config('financial_candidate.qa_legacy_unsigned_refund_fixture') === true
+            && ((DB::getDriverName() === 'sqlite' && DB::getDatabaseName() === ':memory:')
+                || (DB::getDriverName() === 'mysql' && DB::getDatabaseName() === 'water_test'))) {
+            return;
+        }
+        throw new DomainException('completed_refund_signed_source_required');
+    }
+
     public static function authenticated(User $actor): void
     {
         $authenticated = auth('sanctum')->user();
@@ -498,6 +512,7 @@ final class CompletedCashRefundRequest
                     || app(HeldCashRecordedLiquidityEvidence::class)->balance($accountId, $date) !== $p['counted_minor']) {
                     throw new DomainException('completed_refund_resolution_stale_count');
                 }
+                self::requireSignedNewSettlement();
                 $proof = $sources['identity'] + ['approved_on' => $date, 'confirmation' => $confirmation];
                 app(AuditLogger::class)->recordRequired(self::RESOLUTION_APPROVED, [
                     'entity_type' => 'completed_cash_refund_request', 'entity_id' => $uuid,
@@ -736,7 +751,7 @@ final class CompletedCashRefundRequest
 
     public function mixedSourcePlanLocked(User $actor, int $accountId, array $proposalIds, array $attestationIds, string $date): array
     {
-        $plan = $this->mixedResolutionPlanLocked($actor, $accountId, $proposalIds, $date);
+        $plan = $this->mixedResolutionPlanLocked($actor, $accountId, $proposalIds, $date, true);
         ksort($proposalIds);
         ksort($attestationIds);
         if (array_keys($proposalIds) !== array_keys($attestationIds)) {
@@ -777,7 +792,7 @@ final class CompletedCashRefundRequest
     }
 
     /** Read-only mixed arithmetic review; not an operative writer. */
-    private function mixedResolutionPlanLocked(User $actor, int $accountId, array $proposalIds, string $date): array
+    private function mixedResolutionPlanLocked(User $actor, int $accountId, array $proposalIds, string $date, bool $signed = false): array
     {
         $context = FinancialWriteGate::currentContext();
         self::authenticated($actor);
@@ -785,7 +800,7 @@ final class CompletedCashRefundRequest
         app(TreasuryRegisterService::class)->authorize($actor);
         $this->guard();
         if ($context['scope'] !== 'water' || $context['effective_on'] !== $date
-            || $accountId <= 0 || count($proposalIds) < 2 || count($proposalIds) > 50) {
+            || $accountId <= 0 || count($proposalIds) < ($signed ? 1 : 2) || count($proposalIds) > 50) {
             throw new DomainException('completed_refund_batch_selection');
         }
         foreach ($proposalIds as $uuid => $id) {
@@ -830,7 +845,7 @@ final class CompletedCashRefundRequest
                 $postingTotal = \App\Support\SignedMinor::add($postingTotal, FinancialAmount::parse($request->after['amount'])->minor);
             }
         }
-        if ($postingTotal >= $total) {
+        if ($postingTotal > $total || (! $signed && $postingTotal === $total)) {
             throw new DomainException('completed_refund_mixed_classification_required');
         }
         $shared = null;
@@ -949,7 +964,7 @@ final class CompletedCashRefundRequest
         self::authenticated($reviewer);
         abort_unless(app()->environment(['testing', 'staging']), 503);
         $this->guard();
-        if ($accountId <= 0 || count($proposalIds) < 2 || count($proposalIds) > 50) {
+        if ($accountId <= 0 || count($proposalIds) < ($attestationIds === null ? 2 : 1) || count($proposalIds) > 50) {
             throw new DomainException('completed_refund_batch_selection');
         }
         ksort($proposalIds);
@@ -960,7 +975,7 @@ final class CompletedCashRefundRequest
         $group = $this->verifiedBatchResolution($first, $closed);
         if ($group === null) return null;
         $p = $group->after;
-        $mixed = ($p['format'] ?? null) === 'mixed-v1';
+        $mixed = in_array($p['format'] ?? null, ['mixed-v1', 'signed-v2'], true);
         if ($mixed !== ($attestationIds !== null)) throw new DomainException('completed_refund_batch_conflict');
         if ($mixed) {
             ksort($attestationIds);
@@ -1044,7 +1059,7 @@ final class CompletedCashRefundRequest
         $group = $this->batchAuditForCount($countId);
         if ($group === null) return null;
         $p = $group->after;
-        if (($p['format'] ?? null) === 'mixed-v1') return $this->verifiedMixedBatch($request, $current, $group, $countId);
+        if (in_array($p['format'] ?? null, ['mixed-v1', 'signed-v2'], true)) return $this->verifiedMixedBatch($request, $current, $group, $countId);
         $fail = 'completed_refund_batch_conflict';
         if (! is_array($p) || count($p) !== 11 || $group->entity_type !== 'completed_cash_refund_request'
             || $group->source !== 'internal' || (int) $group->actor_user_id <= 0
@@ -1105,7 +1120,8 @@ final class CompletedCashRefundRequest
             !== $plan['observed_balance_minor']) {
             throw new DomainException('completed_refund_resolution_posting_balance');
         }
-        $proof = ['format' => 'mixed-v1', 'account_id' => $accountId, 'count_id' => $countId,
+        $format = count($ids) === 1 || $plan['posting_required_minor'] === $plan['total_claimed_minor'] ? 'signed-v2' : 'mixed-v1';
+        $proof = ['format' => $format, 'account_id' => $accountId, 'count_id' => $countId,
             'incident_count' => count($ids), 'total_claimed_minor' => $plan['total_claimed_minor'],
             'posting_required_minor' => $plan['posting_required_minor'],
             'recorded_balance_minor' => $plan['recorded_balance_minor'], 'observed_balance_minor' => $plan['observed_balance_minor'],
@@ -1139,7 +1155,7 @@ final class CompletedCashRefundRequest
             || ($p['count_id'] ?? null) !== $countId || ! is_int($p['account_id'] ?? null)
             || ! is_int($p['total_claimed_minor'] ?? null) || $p['total_claimed_minor'] <= 0
             || ! is_int($p['posting_required_minor'] ?? null) || $p['posting_required_minor'] < 0
-            || $p['posting_required_minor'] >= $p['total_claimed_minor']
+            || $p['posting_required_minor'] > $p['total_claimed_minor']
             || ($p['financial_posting_created'] ?? null) !== ($p['posting_required_minor'] > 0)
             || ! is_int($p['recorded_balance_minor'] ?? null) || ! is_int($p['observed_balance_minor'] ?? null)
             || ! is_string($p['approved_on'] ?? null) || ! is_string($p['confirmation'] ?? null)
@@ -1151,11 +1167,13 @@ final class CompletedCashRefundRequest
         }
         $ids = json_decode($p['proposal_ids_json'], true, 512, JSON_THROW_ON_ERROR);
         $binding = json_decode($p['source_binding_json'], true, 512, JSON_THROW_ON_ERROR);
-        if (! is_array($ids) || count($ids) < 2 || count($ids) > 50 || count($ids) !== ($p['incident_count'] ?? null)
+        if (! is_array($ids) || count($ids) < 1 || count($ids) > 50 || count($ids) !== ($p['incident_count'] ?? null)
             || ($ids[$request->entity_id] ?? null) !== (int) $current->id || count(array_unique(array_values($ids))) !== count($ids)
             || ! is_array($binding) || ! is_array($binding['sources'] ?? null) || count($binding['sources']) !== count($ids)) {
             throw new DomainException($fail);
         }
+        $format = count($ids) === 1 || $p['posting_required_minor'] === $p['total_claimed_minor'] ? 'signed-v2' : 'mixed-v1';
+        if (($p['format'] ?? null) !== $format) throw new DomainException($fail);
         $this->verifyGroupRevisionMembership($p['account_id'], $countId, $ids, true);
         $reviewer = User::query()->lockForUpdate()->findOrFail($group->actor_user_id);
         $total = $postingTotal = 0;
@@ -1284,6 +1302,7 @@ final class CompletedCashRefundRequest
             return null;
         }
         $plan = $this->postingResolutionPlanLocked($reviewer, $request->entity_id, $context['effective_on']);
+        self::requireSignedNewSettlement();
         return $plan['sources']['identity'] + [
             'approved_on' => $context['effective_on'], 'confirmation' => $confirmation,
             'observed_balance_minor' => $plan['sources']['proposal']->after['counted_minor'],
