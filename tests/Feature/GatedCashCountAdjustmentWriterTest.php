@@ -1303,13 +1303,18 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     private function mixedAtomicControl(int $variance = -6, array $classifications = ['posting_required', 'cash_returned']): array
     {
         $f = $this->batchResolutionControl($variance, '1.00', $classifications);
+        return ['f' => $f] + $this->signedResolutionSources($f['proposalIds']);
+    }
+
+    private function signedResolutionSources(array $proposalIds): array
+    {
         $service = app(\App\Services\CompletedCashRefundRequest::class);
         $recorder = $this->actor();
         $byteReviewer = $this->actor();
         $sourceReviewer = $this->actor();
         $ids = [];
         $keys = [];
-        foreach ($f['proposalIds'] as $uuid => $proposal) {
+        foreach ($proposalIds as $uuid => $proposal) {
             $issuer = 'qa-source-'.count($ids);
             $reference = 'QA-DOC-'.count($ids);
             $sourceRef = 'QA-EXTERNAL-'.count($ids);
@@ -1331,7 +1336,128 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 $issuer, $sourceRef, $sig, 'Independent reviewer inspected the synthetic source statement', $this->nowAt());
             $ids[$uuid] = $attest['attestation_id'];
         }
-        return compact('f', 'ids', 'keys', 'service');
+        return compact('ids', 'keys', 'service');
+    }
+
+    public function test_release_refund_signed_single_posting_blocks_unsigned_and_replays_exactly(): void
+    {
+        $f = $this->resolutionControl('posting_required', -6);
+        $proposal = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_proposed')->sole();
+        $proposalIds = [$f['uuid'] => (int) $proposal->id];
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $this->assertNotTrue(config('financial_candidate.qa_legacy_unsigned_refund_fixture'));
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $confirmation = 'Independent verified signed evidence supports the completed cash settlement';
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $this->rejects('completed_refund_signed_source_required', fn () =>
+            $service->postResolution($f['approver'], $f['uuid'], $confirmation, $this->nowAt(), (int) $proposal->id));
+        $this->postJson($f['root'].$f['uuid'].'/resolution-post', ['confirmation' => $confirmation,
+            'proposal_id' => (int) $proposal->id])->assertConflict();
+        $this->assertEquals($before, $snapshot());
+        ['ids' => $ids, 'keys' => $keys] = $this->signedResolutionSources($proposalIds);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $beforeSigned = $snapshot();
+        $this->rejects('completed_refund_mixed_source_selection', fn () =>
+            $service->postMixedResolution($f['approver'], $f['id'], $proposalIds, [], $confirmation, $this->nowAt()));
+        config(['financial_candidate.refund_source_public_keys' => []]);
+        $post = fn () => $service->postMixedResolution($f['approver'], $f['id'], $proposalIds, $ids, $confirmation, $this->nowAt());
+        $this->rejects('completed_refund_source_untrusted', $post);
+        $this->assertEquals($beforeSigned, $snapshot());
+        config(['financial_candidate.refund_source_public_keys' => $keys]);
+        $result = $post();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame('signed-v2', $result['batch']['format']);
+        $this->assertSame(1, $result['batch']['incident_count']);
+        $this->assertSame(6, $result['batch']['posting_required_minor']);
+        $this->assertSame(1, DB::table('payment_refunds')->count());
+        $legs = DB::table('financial_posting_events')->where('operation_uuid', $f['uuid'])->orderBy('leg')->get();
+        $this->assertSame(['subscriber', 'treasury'], $legs->pluck('leg')->all());
+        $this->assertSame([-6, -6], $legs->map(fn ($leg) => (int) $leg->amount_minor)->all());
+        $after = $snapshot();
+        config(['financial_candidate.refund_source_public_keys' => []]);
+        $this->assertFalse($post()['registry_created']);
+        $this->assertEquals($after, $snapshot());
+        $this->assertSame(['count' => 0, 'claimed_minor' => 0], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+    }
+
+    public function test_release_refund_signed_single_nonposting_blocks_unsigned_closure(): void
+    {
+        $f = $this->resolutionControl();
+        $proposal = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_proposed')->sole();
+        $proposalIds = [$f['uuid'] => (int) $proposal->id];
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $confirmation = 'Independent signed evidence confirms no net cash disbursement';
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->rejects('completed_refund_signed_source_required', fn () =>
+            $service->approveResolution($f['approver'], $f['uuid'], $confirmation, $this->nowAt(), (int) $proposal->id));
+        $this->assertSame(['count' => 1, 'claimed_minor' => 6], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        ['ids' => $ids] = $this->signedResolutionSources($proposalIds);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $post = fn () => $service->postMixedResolution($f['approver'], $f['id'], $proposalIds, $ids, $confirmation, $this->nowAt());
+        $result = $post();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame('signed-v2', $result['batch']['format']);
+        $this->assertFalse($result['batch']['financial_posting_created']);
+        $this->assertFalse($post()['registry_created']);
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame(['count' => 0, 'claimed_minor' => 0], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+    }
+
+    public function test_release_refund_signed_full_group_blocks_unsigned_batch_and_posts_exact_legs(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl(-10, ['posting_required', 'posting_required']);
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $confirmation = 'Independent signed evidence confirms both completed cash refunds';
+        $this->rejects('completed_refund_signed_source_required', fn () =>
+            $service->postBatchResolution($f['approver'], $f['id'], $f['proposalIds'], $confirmation, $this->nowAt()));
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $post = fn () => $service->postMixedResolution($f['approver'], $f['id'], $f['proposalIds'], $ids, $confirmation, $this->nowAt());
+        $result = $post();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame('signed-v2', $result['batch']['format']);
+        $this->assertSame(10, $result['batch']['posting_required_minor']);
+        $this->assertSame(2, DB::table('payment_refunds')->count());
+        foreach ([$f['uuid'] => -6, $f['second'] => -4] as $uuid => $minor) {
+            $legs = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+            $this->assertSame(['subscriber', 'treasury'], $legs->pluck('leg')->all());
+            $this->assertSame([$minor, $minor], $legs->map(fn ($leg) => (int) $leg->amount_minor)->all());
+        }
+        $this->assertSame(['count' => 0, 'claimed_minor' => 0], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        config(['financial_candidate.refund_source_public_keys' => []]);
+        $this->assertFalse($post()['registry_created']);
+        $this->assertSame(2, DB::table('payment_refunds')->count());
+    }
+
+    public function test_release_refund_signed_policy_blocks_direct_pending_approval_and_staging_fixture_override(): void
+    {
+        $f = $this->resolutionControl();
+        $request = AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')->sole();
+        $uuid = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        \Laravel\Sanctum\Sanctum::actingAs($f['requester']);
+        $this->postJson('/api/payments/'.$request->after['payment_id'].'/completed-cash-refund-requests',
+            array_replace($f['data'], ['operation_uuid' => $uuid, 'reference' => 'QA-SIGNED-PENDING']))->assertOk();
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->rejects('completed_refund_signed_source_required', fn () =>
+            $service->approve($f['approver'], $uuid, self::EVIDENCE, $this->nowAt()));
+        $this->postJson($f['root'].$uuid.'/approve', ['confirmation' => self::EVIDENCE])->assertConflict();
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 12], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
+        app()->instance('env', 'staging');
+        try {
+            $this->rejects('completed_refund_signed_source_required', fn () =>
+                \App\Services\CompletedCashRefundRequest::requireSignedNewSettlement());
+        } finally {
+            app()->instance('env', 'testing');
+            config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => false]);
+        }
     }
 
     private function assertMixedSettlementRace(bool $differentReviewer, bool $zeroPosting = false): void
@@ -2220,6 +2346,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_refund_batch_controls_cumulative_receipt_limit_rolls_back_first_member(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         $f = $this->batchResolutionControl(-10, '0.09');
         $service = app(\App\Services\CompletedCashRefundRequest::class);
         $payment = Payment::findOrFail(AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')
@@ -2268,6 +2396,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_refund_batch_controls_immutable_group_and_exact_replay(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         $f = $this->batchResolutionControl();
         $service = app(\App\Services\CompletedCashRefundRequest::class);
         $confirmation = 'Independent proof confirms both original cash refunds were disbursed';
@@ -2312,6 +2442,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_refund_batch_atomic_posts_all_claims_once(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         $f = $this->batchResolutionControl();
         $service = app(\App\Services\CompletedCashRefundRequest::class);
         $payment = Payment::findOrFail(AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')
@@ -2351,6 +2483,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_refund_batch_atomic_rolls_back_when_final_group_audit_fails(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         $f = $this->batchResolutionControl();
         $service = app(\App\Services\CompletedCashRefundRequest::class);
         $tables = ['payments', 'subscribers', 'invoices', 'payment_refunds', 'transactions', 'treasury_postings',
@@ -2545,6 +2679,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame('water_test', DB::getDatabaseName());
         $this->assertSame(0, DB::transactionLevel());
         $this->assertTrue(function_exists('pcntl_fork') && function_exists('posix_kill'));
+        if ($attestationIds === null && $renewCountId === null) {
+            config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
+        }
         $actors = [(int) $f['approver']->id, (int) ($differentReviewer ? $this->actor()->id : $f['approver']->id)];
         $dir = sys_get_temp_dir().'/water-refund-race-'.\Illuminate\Support\Str::uuid();
         mkdir($dir, 0700);
@@ -2696,6 +2833,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_refund_revision_new_count_requires_exact_revision_approval(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         $f = $this->resolutionControl();
         $old = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_proposed')->sole();
         $endpoint = $f['root'].$f['uuid'].'/resolution-proposal';
@@ -2737,6 +2876,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_refund_revision_posting_requires_current_proposal(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         $f = $this->resolutionControl('posting_required', -6);
         $old = AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_proposed')->sole();
         $counts = app(TreasuryCashCountService::class);
@@ -2830,6 +2971,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_refund_atomic_resolution_rollback_after_both_legs_before_approval(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         $f = $this->resolutionControl('posting_required', -6);
         $uuid = $f['uuid'];
         $request = AuditEvent::query()->where('event', 'financial.completed_cash_refund_requested')->sole();
@@ -2903,6 +3046,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_refund_atomic_resolution_posts_exact_two_legs_once(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         $f = $this->resolutionControl('posting_required', -6);
         $endpoint = $f['root'].$f['uuid'].'/resolution-post';
         $input = ['confirmation' => 'Independent proof confirms the original cash refund was disbursed'];
@@ -3029,6 +3174,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_refund_resolution_proposal_preserves_cash_fence(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         [, , $account, , $lot, $subscriber] = $this->held();
         $issuer = $this->actor();
         $requester = $this->actor();
@@ -3139,6 +3286,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_completed_refund_lifecycle_preserves_rejected_and_withdrawn_incidents(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         [, , $account, , $lot, $subscriber] = $this->held();
         $issuer = $this->actor();
         $requester = $this->actor();
@@ -3241,6 +3390,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_release_completed_cash_refund_preserves_factual_deficit_and_exact_identity(): void
     {
+        // Explicit synthetic fixture for historical unsigned algorithm regression only.
+        config(['financial_candidate.qa_legacy_unsigned_refund_fixture' => true]);
         [, , $account, , $lot, $subscriber] = $this->held();
         $actor = $this->actor();
         $reviewer = $this->actor();

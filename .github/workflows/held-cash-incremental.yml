@@ -1,12 +1,13 @@
-name: Prospective refund renewal membership integrity
+name: Prospective refund signed settlement policy
 on:
-  push:
+  pull_request:
     branches: ['release/prospective-refund-renewal-membership']
-  workflow_dispatch:
+    types: [opened, synchronize, reopened]
 permissions:
   contents: read
 jobs:
   sqlite:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/prospective-refund-signed-settlement'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -22,6 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
@@ -37,9 +39,10 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify group membership and affected renewal regressions
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_(renewal_membership_|group_renewal_|revision_posting_requires_current_proposal)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify signed single and group settlement plus affected legacy regressions
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_(refund_signed_|refund_mixed_atomic_|refund_batch_controls_immutable_group_and_exact_replay|refund_revision_posting_requires_current_proposal|completed_cash_refund_preserves_factual_deficit_and_exact_identity)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/prospective-refund-signed-settlement'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -74,6 +77,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha }}
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.4'
@@ -97,7 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify group membership and affected renewal regressions
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_(renewal_membership_|group_renewal_|revision_posting_requires_current_proposal)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
-      - name: Verify independent MySQL group renewal contention
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_renewal_race_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify signed single and group settlement plus affected legacy regressions
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_(refund_signed_|refund_mixed_atomic_|refund_batch_controls_immutable_group_and_exact_replay|refund_revision_posting_requires_current_proposal|completed_cash_refund_preserves_factual_deficit_and_exact_identity)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
