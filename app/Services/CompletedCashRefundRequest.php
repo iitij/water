@@ -585,6 +585,67 @@ final class CompletedCashRefundRequest
             });
     }
 
+    /** Validate all source statements within the same scope-first transaction as the arithmetic.
+     * This is not an executable settlement or a transferable authorization token.
+     */
+    public function mixedSourceReadiness(User $actor, int $accountId, array $proposalIds, array $attestationIds,
+        DateTimeImmutable $now): array
+    {
+        self::authenticated($actor);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
+            function () use ($actor, $accountId, $proposalIds, $attestationIds, $date): array {
+                DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
+                if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new DomainException('gated_refund_issuance_lock');
+                }
+                $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+                return $this->mixedSourcePlanLocked($actor, $accountId, $proposalIds, $attestationIds, $date);
+            });
+    }
+
+    private function mixedSourcePlanLocked(User $actor, int $accountId, array $proposalIds, array $attestationIds, string $date): array
+    {
+        $plan = $this->mixedResolutionPlanLocked($actor, $accountId, $proposalIds, $date);
+        ksort($proposalIds);
+        ksort($attestationIds);
+        if (array_keys($proposalIds) !== array_keys($attestationIds)) {
+            throw new DomainException('completed_refund_mixed_source_selection');
+        }
+        foreach ($attestationIds as $id) {
+            if (! is_int($id) || $id <= 0) throw new DomainException('completed_refund_mixed_source_selection');
+        }
+        if (count(array_unique(array_values($attestationIds))) !== count($attestationIds)) {
+            throw new DomainException('completed_refund_mixed_source_selection');
+        }
+        $evidence = [];
+        foreach ($plan['items'] as $item) {
+            $uuid = $item['operation_uuid'];
+            $id = $attestationIds[$uuid];
+            $proof = $this->withDocumentContextLocked($actor, $uuid, $item['proposal_id'], $date,
+                function (User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal, array $excluded, string $date)
+                    use ($id): array {
+                    return $this->revalidateSourceProofLocked($actor, $request, $closed, $proposal, $excluded, $date, $id);
+                });
+            $evidence[] = ['operation_uuid' => $uuid, 'proposal_id' => $item['proposal_id'],
+                'proposal_hash' => $item['proposal_hash'], 'classification' => $item['classification'],
+                'claimed_minor' => $item['claimed_minor'], 'attestation_id' => $id,
+                'attestation_hash' => $proof['attestation_hash'], 'public_key_sha256' => $proof['public_key_sha256']];
+        }
+        // Bind the complete ordered selection, date, reviewer, and cash amounts.
+        // Digest is for comparison/audit only, not a reusable write capability.
+        $binding = ['version' => 1, 'reviewer_id' => (int) $actor->id, 'effective_on' => $date,
+            'account_id' => $accountId, 'count_id' => $plan['count_id'],
+            'recorded_balance_minor' => $plan['recorded_balance_minor'],
+            'observed_balance_minor' => $plan['observed_balance_minor'],
+            'total_claimed_minor' => $plan['total_claimed_minor'],
+            'posting_required_minor' => $plan['posting_required_minor'], 'sources' => $evidence];
+        return $plan + ['all_source_signatures_revalidated' => true, 'source_binding' => $binding,
+            'source_binding_sha256' => hash('sha256', json_encode($binding, JSON_THROW_ON_ERROR)),
+            'physical_facts_automatically_verified' => false];
+    }
+
     /** Read-only mixed arithmetic review; not an operative writer. */
     private function mixedResolutionPlanLocked(User $actor, int $accountId, array $proposalIds, string $date): array
     {
@@ -1235,54 +1296,61 @@ final class CompletedCashRefundRequest
         return $this->withDocumentContext($actor, $uuid, $proposalId, $now,
             function (User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal, array $excluded, string $date)
                 use ($attestationId): array {
-                $fail = 'completed_refund_source_evidence';
-                $audit = AuditEvent::query()->where('event', self::SOURCE_ATTESTED)->whereKey($attestationId)
-                    ->lockForUpdate()->first();
-                $q = $audit?->after;
-                if ($audit === null || ! is_array($q) || count($q) !== 16
-                    || $audit->entity_type !== 'completed_cash_refund_request' || $audit->source !== 'internal'
-                    || (int) $audit->actor_user_id <= 0 || ($q['operation_uuid'] ?? null) !== $request->entity_id
-                    || ($q['proposal_id'] ?? null) !== (int) $proposal->id || ! is_int($q['document_id'] ?? null)
-                    || $q['document_id'] <= 0 || ! is_string($q['issuer'] ?? null)
-                    || ! preg_match('/\A[a-z0-9][a-z0-9_-]{2,63}\z/', $q['issuer'])
-                    || ! is_string($q['source_reference'] ?? null)
-                    || ! preg_match('/\A[A-Z0-9][A-Z0-9._\/-]{2,149}\z/', $q['source_reference'])
-                    || ! is_string($q['signature'] ?? null) || ! is_string($q['substantive_review'] ?? null)
-                    || mb_strlen(trim($q['substantive_review'])) < 20 || mb_strlen($q['substantive_review']) > 2000
-                    || ! is_string($q['attested_on'] ?? null) || ! preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $q['attested_on'])
-                    || $q['attested_on'] > $date) {
-                    throw new DomainException($fail);
-                }
-                // Reconstruct the original signed statement and compare every
-                // recorded field. Consult the current configured public key;
-                // never trust a caller-provided key or stored success flag.
-                [$expected, $document, $review] = $this->sourceProofLocked($request, $closed, $proposal, $excluded,
-                    (int) $audit->actor_user_id, $q['document_id'], $q['issuer'], $q['source_reference'],
-                    $q['signature'], $q['substantive_review'], $q['attested_on']);
-                if ($audit->entity_id !== $document->after['sha256'] || (int) $audit->id <= (int) $review->id
-                    || $this->proposalHash($q) !== $this->proposalHash($expected)) {
-                    throw new DomainException($fail);
-                }
-                if (in_array((int) $actor->id, [...$excluded, (int) $document->actor_user_id,
-                    (int) $review->actor_user_id, (int) $audit->actor_user_id], true)) {
-                    throw new DomainException('completed_refund_document_independence');
-                }
-                foreach (AuditEvent::query()->where('event', self::SOURCE_ATTESTED)->orderBy('id')->lockForUpdate()->get() as $other) {
-                    if ((int) $other->id === (int) $audit->id) continue;
-                    $p = $other->after;
-                    if (! is_array($p) || ! is_int($p['document_id'] ?? null)
-                        || ! is_string($p['issuer'] ?? null) || ! is_string($p['source_reference'] ?? null)
-                        || $p['document_id'] === $q['document_id']
-                        || ($p['issuer'] === $q['issuer'] && $p['source_reference'] === $q['source_reference'])) {
-                        throw new DomainException('completed_refund_source_conflict');
-                    }
-                }
-                return ['attestation_id' => (int) $audit->id, 'attestation_hash' => $this->proposalHash($q),
-                    'proposal_id' => (int) $proposal->id, 'operation_uuid' => $request->entity_id,
-                    'public_key_sha256' => $q['public_key_sha256'], 'trusted_signature_revalidated' => true,
-                    'physical_fact_automatically_verified' => false, 'financial_posting_created' => false,
-                    'spending_authorized' => false, 'closure_authorized' => false, 'incident_unresolved' => true];
+                return $this->revalidateSourceProofLocked($actor, $request, $closed, $proposal, $excluded, $date, $attestationId);
             });
+    }
+
+    private function revalidateSourceProofLocked(User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal,
+        array $excluded, string $date, int $attestationId): array
+    {
+        FinancialWriteGate::currentContext();
+        $fail = 'completed_refund_source_evidence';
+        $audit = AuditEvent::query()->where('event', self::SOURCE_ATTESTED)->whereKey($attestationId)
+            ->lockForUpdate()->first();
+        $q = $audit?->after;
+        if ($audit === null || ! is_array($q) || count($q) !== 16
+            || $audit->entity_type !== 'completed_cash_refund_request' || $audit->source !== 'internal'
+            || (int) $audit->actor_user_id <= 0 || ($q['operation_uuid'] ?? null) !== $request->entity_id
+            || ($q['proposal_id'] ?? null) !== (int) $proposal->id || ! is_int($q['document_id'] ?? null)
+            || $q['document_id'] <= 0 || ! is_string($q['issuer'] ?? null)
+            || ! preg_match('/\A[a-z0-9][a-z0-9_-]{2,63}\z/', $q['issuer'])
+            || ! is_string($q['source_reference'] ?? null)
+            || ! preg_match('/\A[A-Z0-9][A-Z0-9._\/-]{2,149}\z/', $q['source_reference'])
+            || ! is_string($q['signature'] ?? null) || ! is_string($q['substantive_review'] ?? null)
+            || mb_strlen(trim($q['substantive_review'])) < 20 || mb_strlen($q['substantive_review']) > 2000
+            || ! is_string($q['attested_on'] ?? null) || ! preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $q['attested_on'])
+            || $q['attested_on'] > $date) {
+            throw new DomainException($fail);
+        }
+        // Reconstruct the original signed statement and compare every
+        // recorded field. Consult the current configured public key;
+        // never trust a caller-provided key or stored success flag.
+        [$expected, $document, $review] = $this->sourceProofLocked($request, $closed, $proposal, $excluded,
+            (int) $audit->actor_user_id, $q['document_id'], $q['issuer'], $q['source_reference'],
+            $q['signature'], $q['substantive_review'], $q['attested_on']);
+        if ($audit->entity_id !== $document->after['sha256'] || (int) $audit->id <= (int) $review->id
+            || $this->proposalHash($q) !== $this->proposalHash($expected)) {
+            throw new DomainException($fail);
+        }
+        if (in_array((int) $actor->id, [...$excluded, (int) $document->actor_user_id,
+            (int) $review->actor_user_id, (int) $audit->actor_user_id], true)) {
+            throw new DomainException('completed_refund_document_independence');
+        }
+        foreach (AuditEvent::query()->where('event', self::SOURCE_ATTESTED)->orderBy('id')->lockForUpdate()->get() as $other) {
+            if ((int) $other->id === (int) $audit->id) continue;
+            $p = $other->after;
+            if (! is_array($p) || ! is_int($p['document_id'] ?? null)
+                || ! is_string($p['issuer'] ?? null) || ! is_string($p['source_reference'] ?? null)
+                || $p['document_id'] === $q['document_id']
+                || ($p['issuer'] === $q['issuer'] && $p['source_reference'] === $q['source_reference'])) {
+                throw new DomainException('completed_refund_source_conflict');
+            }
+        }
+        return ['attestation_id' => (int) $audit->id, 'attestation_hash' => $this->proposalHash($q),
+            'proposal_id' => (int) $proposal->id, 'operation_uuid' => $request->entity_id,
+            'public_key_sha256' => $q['public_key_sha256'], 'trusted_signature_revalidated' => true,
+            'physical_fact_automatically_verified' => false, 'financial_posting_created' => false,
+            'spending_authorized' => false, 'closure_authorized' => false, 'incident_unresolved' => true];
     }
 
     private function validateDocumentInput(string $reference, string $bytes): void
@@ -1309,41 +1377,55 @@ final class CompletedCashRefundRequest
                 self::authenticated($actor);
                 app(TreasuryRegisterService::class)->authorize($actor);
                 $this->guard();
-                $request = $this->find($uuid, true);
-                abort_unless($request !== null, 404);
-                $p = $request->after;
-                $this->assertIntent($request, self::intent($p['payment_id'], $p['account_id'], $p['amount'],
-                    $p['reference'], $p['date'], $p['reason'], $p['evidence'], $uuid, (int) $request->actor_user_id));
-                $closed = $this->decision($request);
-                if ($closed === null || $this->verifiedResolution($request, $closed) !== null
-                    || DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()) {
-                    throw new DomainException('completed_refund_document_conflict');
-                }
-                $chain = $this->proposalChain($request, $closed);
-                if ($chain === []) throw new DomainException('completed_refund_resolution_evidence');
-                $proposal = end($chain);
-                $this->assertExpectedProposal($proposal, $proposalId);
-                $q = $proposal->after;
-                if (! in_array($q['classification'] ?? null, ['posting_required', 'cash_returned', 'no_disbursement'], true)
-                    || ($q['request_id'] ?? null) !== (int) $request->id || ($q['decision_id'] ?? null) !== (int) $closed->id
-                    || ($q['operation_uuid'] ?? null) !== $uuid || ($q['account_id'] ?? null) !== $p['account_id']
-                    || ($q['payment_id'] ?? null) !== $p['payment_id'] || ($q['claimed_amount'] ?? null) !== $p['amount']
-                    || ($q['reference'] ?? null) !== $p['reference']) throw new DomainException('completed_refund_document_conflict');
-                $payment = Payment::query()->lockForUpdate()->findOrFail($p['payment_id']);
-                $count = DB::table('treasury_cash_counts')->where('id', $q['count_id'])->lockForUpdate()->first();
-                $review = DB::table('treasury_cash_count_reviews')->where('id', $q['review_id'])->lockForUpdate()->first();
-                if (! $count || ! $review || (int) $count->treasury_account_id !== $p['account_id']
-                    || (int) $review->treasury_cash_count_id !== (int) $count->id || ! (bool) $review->accepted) {
-                    throw new DomainException('completed_refund_document_conflict');
-                }
-                $excluded = [(int) $request->actor_user_id, (int) $closed->actor_user_id, (int) $payment->user_id,
-                    (int) $count->counted_by, (int) $review->reviewed_by];
-                foreach ($chain as $item) $excluded[] = (int) $item->actor_user_id;
-                if ($payment->cash_session_id !== null) {
-                    $excluded[] = (int) \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id)->user_id;
-                }
-                return $action($actor, $request, $closed, $proposal, $excluded, $date);
+                return $this->withDocumentContextLocked($actor, $uuid, $proposalId, $date, $action);
             });
+    }
+
+    private function withDocumentContextLocked(User $actor, string $uuid, int $proposalId, string $date, callable $action): array
+    {
+        $context = FinancialWriteGate::currentContext();
+        self::authenticated($actor);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        app(TreasuryRegisterService::class)->authorize($actor);
+        $this->guard();
+        if ($context['scope'] !== 'water' || $context['effective_on'] !== $date || $proposalId <= 0
+            || ! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+            throw new DomainException('completed_refund_document_input');
+        }
+        $request = $this->find($uuid, true);
+        abort_unless($request !== null, 404);
+        $p = $request->after;
+        $this->assertIntent($request, self::intent($p['payment_id'], $p['account_id'], $p['amount'],
+            $p['reference'], $p['date'], $p['reason'], $p['evidence'], $uuid, (int) $request->actor_user_id));
+        $closed = $this->decision($request);
+        if ($closed === null || $this->verifiedResolution($request, $closed) !== null
+            || DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first()) {
+            throw new DomainException('completed_refund_document_conflict');
+        }
+        $chain = $this->proposalChain($request, $closed);
+        if ($chain === []) throw new DomainException('completed_refund_resolution_evidence');
+        $proposal = end($chain);
+        $this->assertExpectedProposal($proposal, $proposalId);
+        $q = $proposal->after;
+        if (! in_array($q['classification'] ?? null, ['posting_required', 'cash_returned', 'no_disbursement'], true)
+            || ($q['request_id'] ?? null) !== (int) $request->id || ($q['decision_id'] ?? null) !== (int) $closed->id
+            || ($q['operation_uuid'] ?? null) !== $uuid || ($q['account_id'] ?? null) !== $p['account_id']
+            || ($q['payment_id'] ?? null) !== $p['payment_id'] || ($q['claimed_amount'] ?? null) !== $p['amount']
+            || ($q['reference'] ?? null) !== $p['reference']) throw new DomainException('completed_refund_document_conflict');
+        $payment = Payment::query()->lockForUpdate()->findOrFail($p['payment_id']);
+        $count = DB::table('treasury_cash_counts')->where('id', $q['count_id'])->lockForUpdate()->first();
+        $review = DB::table('treasury_cash_count_reviews')->where('id', $q['review_id'])->lockForUpdate()->first();
+        if (! $count || ! $review || (int) $count->treasury_account_id !== $p['account_id']
+            || (int) $review->treasury_cash_count_id !== (int) $count->id || ! (bool) $review->accepted) {
+            throw new DomainException('completed_refund_document_conflict');
+        }
+        $excluded = [(int) $request->actor_user_id, (int) $closed->actor_user_id, (int) $payment->user_id,
+            (int) $count->counted_by, (int) $review->reviewed_by];
+        foreach ($chain as $item) $excluded[] = (int) $item->actor_user_id;
+        if ($payment->cash_session_id !== null) {
+            $excluded[] = (int) \App\Models\CashSession::query()->lockForUpdate()->findOrFail($payment->cash_session_id)->user_id;
+        }
+        return $action($actor, $request, $closed, $proposal, $excluded, $date);
     }
 
     private function documentIdentity(AuditEvent $request, AuditEvent $closed, AuditEvent $proposal): array

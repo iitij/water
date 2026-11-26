@@ -1300,6 +1300,73 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'counter', 'countReviewer', 'amount', 'count', 'proposalIds', 'balance', 'counted');
     }
 
+    public function test_release_refund_mixed_source_plan_requires_complete_independent_current_sources(): void
+    {
+        $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);
+        $service = app(\App\Services\CompletedCashRefundRequest::class);
+        $recorder = $this->actor();
+        $byteReviewer = $this->actor();
+        $sourceReviewer = $this->actor();
+        $ids = [];
+        $keys = [];
+        foreach ($f['proposalIds'] as $uuid => $proposal) {
+            $issuer = 'qa-source-'.count($ids);
+            $reference = 'QA-DOC-'.count($ids);
+            $sourceRef = 'QA-EXTERNAL-'.count($ids);
+            $bytes = 'Synthetic QA evidence for the exact claim '.$uuid;
+            \Laravel\Sanctum\Sanctum::actingAs($recorder);
+            $doc = $service->recordResolutionDocument($recorder, $uuid, $proposal, $reference, $bytes, $this->nowAt());
+            \Laravel\Sanctum\Sanctum::actingAs($byteReviewer);
+            $service->reviewResolutionDocument($byteReviewer, $uuid, $proposal, $doc['document_id'], $reference, $bytes,
+                'Independent reviewer compared the original document bytes', $this->nowAt());
+            $pair = sodium_crypto_sign_keypair();
+            $secret = sodium_crypto_sign_secretkey($pair);
+            $keys[$issuer] = base64_encode(sodium_crypto_sign_publickey($pair));
+            config(['financial_candidate.refund_source_public_keys' => $keys]);
+            $sig = base64_encode(sodium_crypto_sign_detached(
+                \App\Services\CompletedCashRefundRequest::sourceStatement($doc['document'], $issuer, $sourceRef), $secret));
+            sodium_memzero($secret);
+            \Laravel\Sanctum\Sanctum::actingAs($sourceReviewer);
+            $attest = $service->attestResolutionSource($sourceReviewer, $uuid, $proposal, $doc['document_id'],
+                $issuer, $sourceRef, $sig, 'Independent reviewer inspected the synthetic source statement', $this->nowAt());
+            $ids[$uuid] = $attest['attestation_id'];
+        }
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $review = fn (array $selected) => $service->mixedSourceReadiness(
+            $f['approver'], $f['id'], $f['proposalIds'], $selected, $this->nowAt());
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $this->rejects('completed_refund_mixed_source_selection', fn () => $review([$f['uuid'] => $ids[$f['uuid']]]));
+        $this->rejects('completed_refund_mixed_source_selection', fn () => $review(array_fill_keys(array_keys($ids), reset($ids))));
+        $this->rejects('completed_refund_source_evidence', fn () => $review(array_combine(array_keys($ids), array_reverse(array_values($ids)))));
+        $plan = $review($ids);
+        $this->assertTrue($plan['all_source_signatures_revalidated']);
+        $this->assertSame(10, $plan['total_claimed_minor']);
+        $this->assertSame(6, $plan['posting_required_minor']);
+        $this->assertSame(array_values($ids), array_column($plan['source_binding']['sources'], 'attestation_id'));
+        $this->assertSame(64, strlen($plan['source_binding_sha256']));
+        $this->assertSame($plan, $review(array_reverse($ids, true)));
+        foreach (['physical_facts_automatically_verified', 'closure_authorized', 'financial_posting_created', 'spending_authorized',
+            'writer_eligibility_verified'] as $field) {
+            $this->assertFalse($plan[$field]);
+        }
+        $this->assertTrue($plan['incident_unresolved']);
+        config(['financial_candidate.refund_source_public_keys' => ['qa-source-0' => $keys['qa-source-0']]]);
+        $this->rejects('completed_refund_source_untrusted', fn () => $review($ids));
+        config(['financial_candidate.refund_source_public_keys' => $keys]);
+        \Laravel\Sanctum\Sanctum::actingAs($sourceReviewer);
+        $this->rejects('completed_refund_document_independence', fn () =>
+            $service->mixedSourceReadiness($sourceReviewer, $f['id'], $f['proposalIds'], $ids, $this->nowAt()));
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->assertSame($plan, $review($ids));
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () => $service->unresolvedForAccount($f['id'])));
+        $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+    }
+
     public function test_release_refund_source_attestation_checks_trust_signature_and_independence(): void
     {
         $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);
