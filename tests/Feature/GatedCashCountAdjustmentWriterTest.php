@@ -1350,6 +1350,35 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['spending_authorized']);
         $this->assertTrue($result['incident_unresolved']);
         $this->assertFalse($attest($sourceReviewer, $signature)['created']);
+        $attestationId = $result['attestation_id'];
+        $this->rejects('completed_refund_document_independence', fn () =>
+            $service->revalidateResolutionSource($sourceReviewer, $uuid, $proposal, $attestationId, $this->nowAt()));
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $revalidate = fn () => $service->revalidateResolutionSource($f['approver'], $uuid, $proposal, $attestationId, $this->nowAt());
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $unchanged = $snapshot();
+        $verified = $revalidate();
+        $this->assertTrue($verified['trusted_signature_revalidated']);
+        $this->assertSame($attestationId, $verified['attestation_id']);
+        $this->assertSame(hash('sha256', $key), $verified['public_key_sha256']);
+        $this->assertFalse($verified['physical_fact_automatically_verified']);
+        $this->assertFalse($verified['closure_authorized']);
+        $this->assertFalse($verified['financial_posting_created']);
+        $this->assertFalse($verified['spending_authorized']);
+        $this->assertTrue($verified['incident_unresolved']);
+        $this->assertSame($verified, $revalidate());
+        config(['financial_candidate.refund_source_public_keys' => []]);
+        $this->rejects('completed_refund_source_untrusted', $revalidate);
+        $rotated = sodium_crypto_sign_publickey(sodium_crypto_sign_keypair());
+        config(['financial_candidate.refund_source_public_keys' => [$issuer => base64_encode($rotated)]]);
+        $this->rejects('completed_refund_source_signature', $revalidate);
+        config(['financial_candidate.refund_source_public_keys' => [$issuer => base64_encode($key)]]);
+        $this->assertSame($verified, $revalidate());
+        $this->rejects('completed_refund_resolution_proposal_changed', fn () =>
+            $service->revalidateResolutionSource($f['approver'], $uuid, $f['proposalIds'][$f['uuid']], $attestationId, $this->nowAt()));
+        $this->assertEquals($unchanged, $snapshot());
         $audit = AuditEvent::query()->where('event', 'financial.completed_cash_refund_source_attested')->sole();
         $before = $audit->getRawOriginal();
         foreach ([fn () => DB::table('audit_events')->where('id', $audit->id)->update(['after' => '{}']),

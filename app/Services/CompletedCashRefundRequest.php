@@ -1128,67 +1128,10 @@ final class CompletedCashRefundRequest
         return $this->withDocumentContext($actor, $uuid, $proposalId, $now,
             function (User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal, array $excluded, string $date)
                 use ($documentId, $issuer, $sourceReference, $signature, $substantiveReview): array {
+                [$proof, $document, $review] = $this->sourceProofLocked($request, $closed, $proposal, $excluded,
+                    (int) $actor->id, $documentId, $issuer, $sourceReference, $signature, $substantiveReview, $date);
+                $p = $document->after;
                 $fail = 'completed_refund_source_evidence';
-                $document = AuditEvent::query()->where('event', self::DOCUMENT_RECORDED)->whereKey($documentId)->lockForUpdate()->first();
-                $p = $document?->after;
-                if ($document === null || ! is_array($p) || count($p) !== 14
-                    || $document->source !== 'internal' || $document->entity_type !== 'completed_cash_refund_request'
-                    || ! is_string($p['sha256'] ?? null) || ! preg_match('/\A[0-9a-f]{64}\z/', $p['sha256'])
-                    || $document->entity_id !== $p['sha256'] || (int) $document->id <= (int) $proposal->id
-                    || ! is_int($p['byte_count'] ?? null) || $p['byte_count'] < 20 || $p['byte_count'] > 5 * 1024 * 1024
-                    || ! is_string($p['document_reference'] ?? null)
-                    || ! is_string($p['recorded_on'] ?? null) || $p['recorded_on'] > $date
-                    || (int) $document->actor_user_id <= 0 || in_array((int) $document->actor_user_id, $excluded, true)) {
-                    throw new DomainException($fail);
-                }
-                foreach ($this->documentIdentity($request, $closed, $proposal) as $key => $value) {
-                    if (($p[$key] ?? null) !== $value) throw new DomainException($fail);
-                }
-                $rows = AuditEvent::query()->where('event', self::DOCUMENT_REVIEWED)->where('entity_id', $p['sha256'])->lockForUpdate()->get();
-                if ($rows->count() !== 1) throw new DomainException($fail);
-                $review = $rows->first();
-                $r = $review->after;
-                if (! is_array($r) || count($r) !== 10
-                    || $review->source !== 'internal' || $review->entity_type !== 'completed_cash_refund_request'
-                    || (int) $review->id <= (int) $document->id
-                    || (int) $review->actor_user_id <= 0
-                    || in_array((int) $review->actor_user_id, [...$excluded, (int) $document->actor_user_id], true)
-                    || ($r['document_id'] ?? null) !== $documentId || ($r['document_hash'] ?? null) !== $this->proposalHash($p)
-                    || ($r['sha256'] ?? null) !== $p['sha256'] || ($r['operation_uuid'] ?? null) !== $request->entity_id
-                    || ($r['proposal_id'] ?? null) !== (int) $proposal->id
-                    || ($r['bytes_matched'] ?? null) !== true || ($r['external_authenticity_verified'] ?? null) !== false
-                    || ($r['closure_authorized'] ?? null) !== false || ! is_string($r['reviewed_on'] ?? null)
-                    || $r['reviewed_on'] < $p['recorded_on'] || $r['reviewed_on'] > $date
-                    || ! is_string($r['confirmation'] ?? null) || mb_strlen(trim($r['confirmation'])) < 20) {
-                    throw new DomainException($fail);
-                }
-                if (in_array((int) $actor->id, [...$excluded, (int) $document->actor_user_id, (int) $review->actor_user_id], true)) {
-                    throw new DomainException('completed_refund_document_independence');
-                }
-                // Trust anchors are deployment configuration, never request data.
-                $trusted = config('financial_candidate.refund_source_public_keys', []);
-                $encodedKey = is_array($trusted) ? ($trusted[$issuer] ?? null) : null;
-                if (! function_exists('sodium_crypto_sign_verify_detached') || ! is_string($encodedKey)) {
-                    throw new DomainException('completed_refund_source_untrusted');
-                }
-                $key = base64_decode($encodedKey, true);
-                if ($key === false || strlen($key) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES || base64_encode($key) !== $encodedKey) {
-                    throw new DomainException('completed_refund_source_untrusted');
-                }
-                $sig = strlen($signature) === 88 ? base64_decode($signature, true) : false;
-                $statement = self::sourceStatement($p, $issuer, $sourceReference);
-                if ($sig === false || strlen($sig) !== SODIUM_CRYPTO_SIGN_BYTES || base64_encode($sig) !== $signature
-                    || ! sodium_crypto_sign_verify_detached($sig, $statement, $key)) {
-                    throw new DomainException('completed_refund_source_signature');
-                }
-                $proof = ['document_id' => $documentId, 'document_hash' => $this->proposalHash($p),
-                    'byte_review_id' => (int) $review->id, 'byte_review_hash' => $this->proposalHash($r),
-                    'operation_uuid' => $request->entity_id, 'proposal_id' => (int) $proposal->id,
-                    'issuer' => $issuer, 'source_reference' => $sourceReference,
-                    'public_key_sha256' => hash('sha256', $key), 'statement_sha256' => hash('sha256', $statement),
-                    'signature' => $signature, 'substantive_review' => $substantiveReview, 'attested_on' => $date,
-                    'trusted_signature_verified' => true, 'physical_fact_automatically_verified' => false,
-                    'closure_authorized' => false];
                 foreach (AuditEvent::query()->where('event', self::SOURCE_ATTESTED)->orderBy('id')->lockForUpdate()->get() as $old) {
                     $q = $old->after;
                     if (! is_array($q) || ! is_string($q['issuer'] ?? null) || ! is_string($q['source_reference'] ?? null)
@@ -1208,6 +1151,137 @@ final class CompletedCashRefundRequest
                     'actor_user_id' => $actor->id, 'source' => 'internal', 'after' => $proof]);
                 return ['created' => true, 'attestation_id' => (int) $row->id, 'attestation' => $proof,
                     'incident_unresolved' => true, 'financial_posting_created' => false, 'spending_authorized' => false];
+            });
+    }
+
+    /** Shared exact validation for recording and pending-use revalidation. */
+    private function sourceProofLocked(AuditEvent $request, AuditEvent $closed, AuditEvent $proposal,
+        array $excluded, int $attesterId, int $documentId, string $issuer, string $sourceReference,
+        string $signature, string $substantiveReview, string $date): array
+    {
+        $fail = 'completed_refund_source_evidence';
+        $document = AuditEvent::query()->where('event', self::DOCUMENT_RECORDED)->whereKey($documentId)->lockForUpdate()->first();
+        $p = $document?->after;
+        if ($document === null || ! is_array($p) || count($p) !== 14
+            || $document->source !== 'internal' || $document->entity_type !== 'completed_cash_refund_request'
+            || ! is_string($p['sha256'] ?? null) || ! preg_match('/\A[0-9a-f]{64}\z/', $p['sha256'])
+            || $document->entity_id !== $p['sha256'] || (int) $document->id <= (int) $proposal->id
+            || ! is_int($p['byte_count'] ?? null) || $p['byte_count'] < 20 || $p['byte_count'] > 5 * 1024 * 1024
+            || ! is_string($p['document_reference'] ?? null)
+            || ! is_string($p['recorded_on'] ?? null) || $p['recorded_on'] > $date
+            || (int) $document->actor_user_id <= 0 || in_array((int) $document->actor_user_id, $excluded, true)) {
+            throw new DomainException($fail);
+        }
+        foreach ($this->documentIdentity($request, $closed, $proposal) as $key => $value) {
+            if (($p[$key] ?? null) !== $value) throw new DomainException($fail);
+        }
+        $rows = AuditEvent::query()->where('event', self::DOCUMENT_REVIEWED)->where('entity_id', $p['sha256'])->lockForUpdate()->get();
+        if ($rows->count() !== 1) throw new DomainException($fail);
+        $review = $rows->first();
+        $r = $review->after;
+        if (! is_array($r) || count($r) !== 10
+            || $review->source !== 'internal' || $review->entity_type !== 'completed_cash_refund_request'
+            || (int) $review->id <= (int) $document->id
+            || (int) $review->actor_user_id <= 0
+            || in_array((int) $review->actor_user_id, [...$excluded, (int) $document->actor_user_id], true)
+            || ($r['document_id'] ?? null) !== $documentId || ($r['document_hash'] ?? null) !== $this->proposalHash($p)
+            || ($r['sha256'] ?? null) !== $p['sha256'] || ($r['operation_uuid'] ?? null) !== $request->entity_id
+            || ($r['proposal_id'] ?? null) !== (int) $proposal->id
+            || ($r['bytes_matched'] ?? null) !== true || ($r['external_authenticity_verified'] ?? null) !== false
+            || ($r['closure_authorized'] ?? null) !== false || ! is_string($r['reviewed_on'] ?? null)
+            || $r['reviewed_on'] < $p['recorded_on'] || $r['reviewed_on'] > $date
+            || ! is_string($r['confirmation'] ?? null) || mb_strlen(trim($r['confirmation'])) < 20) {
+            throw new DomainException($fail);
+        }
+        if (in_array($attesterId, [...$excluded, (int) $document->actor_user_id, (int) $review->actor_user_id], true)) {
+            throw new DomainException('completed_refund_document_independence');
+        }
+        // Trust anchors are deployment configuration, never request data.
+        $trusted = config('financial_candidate.refund_source_public_keys', []);
+        $encodedKey = is_array($trusted) ? ($trusted[$issuer] ?? null) : null;
+        if (! function_exists('sodium_crypto_sign_verify_detached') || ! is_string($encodedKey)) {
+            throw new DomainException('completed_refund_source_untrusted');
+        }
+        $key = base64_decode($encodedKey, true);
+        if ($key === false || strlen($key) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES || base64_encode($key) !== $encodedKey) {
+            throw new DomainException('completed_refund_source_untrusted');
+        }
+        $sig = strlen($signature) === 88 ? base64_decode($signature, true) : false;
+        $statement = self::sourceStatement($p, $issuer, $sourceReference);
+        if ($sig === false || strlen($sig) !== SODIUM_CRYPTO_SIGN_BYTES || base64_encode($sig) !== $signature
+            || ! sodium_crypto_sign_verify_detached($sig, $statement, $key)) {
+            throw new DomainException('completed_refund_source_signature');
+        }
+        $proof = ['document_id' => $documentId, 'document_hash' => $this->proposalHash($p),
+            'byte_review_id' => (int) $review->id, 'byte_review_hash' => $this->proposalHash($r),
+            'operation_uuid' => $request->entity_id, 'proposal_id' => (int) $proposal->id,
+            'issuer' => $issuer, 'source_reference' => $sourceReference,
+            'public_key_sha256' => hash('sha256', $key), 'statement_sha256' => hash('sha256', $statement),
+            'signature' => $signature, 'substantive_review' => $substantiveReview, 'attested_on' => $date,
+            'trusted_signature_verified' => true, 'physical_fact_automatically_verified' => false,
+            'closure_authorized' => false];
+        return [$proof, $document, $review];
+    }
+
+    /**
+     * Non-operative, current-trust check for an unresolved claim. Revocation or
+     * rotation invalidates pending evidence, never deletes the historical audit.
+     * This method deliberately does not reinterpret already posted history.
+     */
+    public function revalidateResolutionSource(User $actor, string $uuid, int $proposalId, int $attestationId,
+        DateTimeImmutable $now): array
+    {
+        if ($attestationId <= 0) throw new DomainException('completed_refund_source_input');
+        return $this->withDocumentContext($actor, $uuid, $proposalId, $now,
+            function (User $actor, AuditEvent $request, AuditEvent $closed, AuditEvent $proposal, array $excluded, string $date)
+                use ($attestationId): array {
+                $fail = 'completed_refund_source_evidence';
+                $audit = AuditEvent::query()->where('event', self::SOURCE_ATTESTED)->whereKey($attestationId)
+                    ->lockForUpdate()->first();
+                $q = $audit?->after;
+                if ($audit === null || ! is_array($q) || count($q) !== 16
+                    || $audit->entity_type !== 'completed_cash_refund_request' || $audit->source !== 'internal'
+                    || (int) $audit->actor_user_id <= 0 || ($q['operation_uuid'] ?? null) !== $request->entity_id
+                    || ($q['proposal_id'] ?? null) !== (int) $proposal->id || ! is_int($q['document_id'] ?? null)
+                    || $q['document_id'] <= 0 || ! is_string($q['issuer'] ?? null)
+                    || ! preg_match('/\A[a-z0-9][a-z0-9_-]{2,63}\z/', $q['issuer'])
+                    || ! is_string($q['source_reference'] ?? null)
+                    || ! preg_match('/\A[A-Z0-9][A-Z0-9._\/-]{2,149}\z/', $q['source_reference'])
+                    || ! is_string($q['signature'] ?? null) || ! is_string($q['substantive_review'] ?? null)
+                    || mb_strlen(trim($q['substantive_review'])) < 20 || mb_strlen($q['substantive_review']) > 2000
+                    || ! is_string($q['attested_on'] ?? null) || ! preg_match('/\A\d{4}-\d{2}-\d{2}\z/', $q['attested_on'])
+                    || $q['attested_on'] > $date) {
+                    throw new DomainException($fail);
+                }
+                // Reconstruct the original signed statement and compare every
+                // recorded field. Consult the current configured public key;
+                // never trust a caller-provided key or stored success flag.
+                [$expected, $document, $review] = $this->sourceProofLocked($request, $closed, $proposal, $excluded,
+                    (int) $audit->actor_user_id, $q['document_id'], $q['issuer'], $q['source_reference'],
+                    $q['signature'], $q['substantive_review'], $q['attested_on']);
+                if ($audit->entity_id !== $document->after['sha256'] || (int) $audit->id <= (int) $review->id
+                    || $this->proposalHash($q) !== $this->proposalHash($expected)) {
+                    throw new DomainException($fail);
+                }
+                if (in_array((int) $actor->id, [...$excluded, (int) $document->actor_user_id,
+                    (int) $review->actor_user_id, (int) $audit->actor_user_id], true)) {
+                    throw new DomainException('completed_refund_document_independence');
+                }
+                foreach (AuditEvent::query()->where('event', self::SOURCE_ATTESTED)->orderBy('id')->lockForUpdate()->get() as $other) {
+                    if ((int) $other->id === (int) $audit->id) continue;
+                    $p = $other->after;
+                    if (! is_array($p) || ! is_int($p['document_id'] ?? null)
+                        || ! is_string($p['issuer'] ?? null) || ! is_string($p['source_reference'] ?? null)
+                        || $p['document_id'] === $q['document_id']
+                        || ($p['issuer'] === $q['issuer'] && $p['source_reference'] === $q['source_reference'])) {
+                        throw new DomainException('completed_refund_source_conflict');
+                    }
+                }
+                return ['attestation_id' => (int) $audit->id, 'attestation_hash' => $this->proposalHash($q),
+                    'proposal_id' => (int) $proposal->id, 'operation_uuid' => $request->entity_id,
+                    'public_key_sha256' => $q['public_key_sha256'], 'trusted_signature_revalidated' => true,
+                    'physical_fact_automatically_verified' => false, 'financial_posting_created' => false,
+                    'spending_authorized' => false, 'closure_authorized' => false, 'incident_unresolved' => true];
             });
     }
 
