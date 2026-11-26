@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify resolution proposal 111dd97fcc87f96b3d5e69b44f217833cb1ac187 exact CI; then independently reviewed resolution approval and source-linked settlement, affected writers, concurrency, Flutter and production checks.",
+  "next": "Verify resolution proposal replay fix c94b0c6428d3ef475116512420bafeedcc73a56a exact CI; then independently reviewed resolution approval and source-linked settlement, affected writers, concurrency, Flutter and production checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2510,12 +2510,38 @@
     "limits": "Exact job logs verified. Prior lifecycle cases remain accepted at edbbe9a. No production activation."
   },
   "release_refund_incident_resolution_proposal": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_SQLITE_PASS_MYSQL_REPLAY_FAILURE",
     "base": "df418a1d9dd96cff9cc818779529f7cf531c2c8f",
     "branch": "release/prospective-refund-incident-resolution-proposal",
     "source": "111dd97fcc87f96b3d5e69b44f217833cb1ac187",
     "scope": "Non-operative authenticated independent proposal on rejected/withdrawn request with accepted independently reviewed account cash count observed after closure, linked audit evidence and exact amounts; immutable proposal evidence, new preflight and staging/test endpoint. Classifications no_disbursement, cash_returned, posting_required are proposals only. Targeted new test for authorization, count evidence, replay/conflict, immutability, unchanged financial rows and persistent cash fence.",
-    "limits": "CI unverified. No approval or lifting of cash fence, no certified physical balance, no posting or production activation. Future approval needs source-backed fresh count, conflict/multiple claim coverage and explicit resolution proof; posting-required case remains unresolved until matching registered source legs.",
-    "next": "Verify exact CI, then implement independent resolution approval and source-linked settlement."
+    "limits": "SQLite accepted; MySQL identical replay returned 409 at test line 1297 after successful creation. Source inspection indicates JSON key order strict array comparison. No approval, no lifting of cash fence, no production activation.",
+    "next": "Verify exact CI, then implement independent resolution approval and source-linked settlement.",
+    "run": 45744230101,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139656284334,
+        "tests": 1,
+        "assertions": 20,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139656284167,
+        "tests": 1,
+        "assertions": 12,
+        "failures": 1,
+        "exit": 1
+      }
+    ]
+  },
+  "release_refund_incident_resolution_proposal_retry": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "111dd97fcc87f96b3d5e69b44f217833cb1ac187",
+    "branch": "release/prospective-refund-incident-resolution-proposal",
+    "source": "c94b0c6428d3ef475116512420bafeedcc73a56a",
+    "scope": "Strict field-by-field typed equality with exact key cardinality, independent of JSON object key order; test conflicting evidence and exactly one proposal in addition to existing replay/conflict. Both engines justified because shared product comparison and changed test assertions.",
+    "next": "Verify exact changed-path CI; then independent resolution approval and source-linked settlement."
   }
 }
