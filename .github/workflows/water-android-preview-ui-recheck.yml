@@ -1,0 +1,19 @@
+name: Water Android preview UI recheck
+on:
+  pull_request:
+    branches: ['release/water-preview-20261127']
+    types: [opened, synchronize, reopened]
+permissions:
+  actions: read
+  contents: read
+jobs:
+  current-preview:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/android-preview-ui-recheck-20261127'
+    uses: ./.github/workflows/water-verify-android-install.yml
+    with:
+      run-id: '45907559328'
+  delivered-preview:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'qa/android-preview-ui-recheck-20261127'
+    uses: ./.github/workflows/water-verify-android-install.yml
+    with:
+      run-id: '45904749353'
