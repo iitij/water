@@ -7946,32 +7946,66 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 $this->assertStringContainsString('Financial source mutation is fenced', $error->getMessage());
             }
         };
-        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
-        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
-        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
-        foreach ($tables as $table => $date) {
-            $id = $rows[$table]->id;
-            $reject(fn () => DB::table($table)->where('id', $id)->update([$date => '2026-12-02']));
-            $reject(fn () => DB::table($table)->where('id', $id)->delete());
+        // Test only, on the freshly migrated disposable database: other
+        // BEFORE triggers may reject first on MySQL (creation order), whereas
+        // SQLite does not promise the same order. Isolate this fence without
+        // weakening the integrated later-collection control.
+        $competing = [];
+        if (DB::getDriverName() === 'sqlite') {
+            foreach (DB::table('sqlite_master')->where('type', 'trigger')->whereIn('tbl_name', array_keys($tables))->get() as $trigger) {
+                if (str_starts_with($trigger->name, 'fin_source_') ||
+                    ! preg_match('/\bBEFORE\s+(UPDATE|DELETE)\b/i', $trigger->sql)) continue;
+                $competing[$trigger->name] = $trigger->sql;
+            }
+        } else {
+            foreach (\App\Services\FinancialTriggerMetadata::query() as $trigger) {
+                if (str_starts_with($trigger->TRIGGER_NAME, 'fin_source_') ||
+                    ! isset($tables[$trigger->EVENT_OBJECT_TABLE]) || $trigger->ACTION_TIMING !== 'BEFORE' ||
+                    ! in_array($trigger->EVENT_MANIPULATION, ['UPDATE', 'DELETE'], true)) continue;
+                $competing[$trigger->TRIGGER_NAME] = "CREATE TRIGGER {$trigger->TRIGGER_NAME} BEFORE {$trigger->EVENT_MANIPULATION} ON {$trigger->EVENT_OBJECT_TABLE} FOR EACH ROW {$trigger->ACTION_STATEMENT}";
+            }
         }
-        $this->assertEquals($before, $snapshot());
-        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
-        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
-        DB::table('financial_periods')->insert([
-            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
-            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
-        ]);
-        foreach ($tables as $table => $date) {
-            $id = $rows[$table]->id;
-            $reject(fn () => DB::table($table)->where('id', $id)->update([$date => '2026-12-02']));
-            $reject(fn () => DB::table($table)->where('id', $id)->delete());
-        }
-        $reject(fn () => DB::table('invoices')->where('id', $rows['invoices']->id)->update(['total_amount' => '999.00']));
-        $reject(fn () => DB::table('payments')->where('id', $rows['payments']->id)->update(['amount' => '999.00']));
-        foreach (['invoices', 'payments'] as $table) {
-            $reject(fn () => DB::table($table)->where('id', $rows[$table]->id)->update(['deleted_at' => '2026-12-02 08:30:00']));
-        }
-        $this->assertEquals($before, $snapshot());
+        $this->assertNotEmpty($competing);
+        $isolated = function (callable $check) use ($competing, $protection): void {
+            foreach ($competing as $name => $sql) {
+                $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]+$/', $name);
+                DB::unprepared('DROP TRIGGER '.$name);
+            }
+            try {
+                $this->assertTrue($protection->active());
+                $check();
+            } finally {
+                foreach ($competing as $sql) DB::unprepared($sql);
+            }
+        };
+        $isolated(function () use ($tables, $rows, $reject, $before, $snapshot): void {
+            $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+            DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
+            DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+            foreach ($tables as $table => $date) {
+                $id = $rows[$table]->id;
+                $reject(fn () => DB::table($table)->where('id', $id)->update([$date => '2026-12-02']));
+                $reject(fn () => DB::table($table)->where('id', $id)->delete());
+            }
+            $this->assertEquals($before, $snapshot());
+            DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+            DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+            DB::table('financial_periods')->insert([
+                'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+                'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+            ]);
+            foreach ($tables as $table => $date) {
+                $id = $rows[$table]->id;
+                $reject(fn () => DB::table($table)->where('id', $id)->update([$date => '2026-12-02']));
+                $reject(fn () => DB::table($table)->where('id', $id)->delete());
+            }
+            $reject(fn () => DB::table('invoices')->where('id', $rows['invoices']->id)->update(['total_amount' => '999.00']));
+            $reject(fn () => DB::table('payments')->where('id', $rows['payments']->id)->update(['amount' => '999.00']));
+            foreach (['invoices', 'payments'] as $table) {
+                $reject(fn () => DB::table($table)->where('id', $rows[$table]->id)->update(['deleted_at' => '2026-12-02 08:30:00']));
+            }
+            $this->assertEquals($before, $snapshot());
+        });
         $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
         $this->travelTo(\Carbon\Carbon::instance($later));
         $subscriber = Subscriber::query()->findOrFail($rows['payments']->subscriber_id);
@@ -7979,7 +8013,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', $later)['payment'];
         $this->assertSame('2026-12-02', $receipt->payment_date->toDateString());
         $after = $snapshot();
-        $reject(fn () => DB::table('payments')->where('id', $receipt->id)->update(['payment_date' => '2026-11-25']));
+        $isolated(fn () => $reject(fn () => DB::table('payments')->where('id', $receipt->id)->update(['payment_date' => '2026-11-25'])));
         $this->assertEquals($after, $snapshot());
         DB::unprepared('DROP TRIGGER fin_source_payments_update');
         $this->assertFalse($protection->active());
