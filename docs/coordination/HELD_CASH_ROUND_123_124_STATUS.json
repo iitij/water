@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify runtime guard visibility 22897d146205c90e6604eca427adc96b9cad7889 exact CI; fix confirmed metadata visibility issues. Continue prospective reserve discharge, liquidity, Flutter and integrated release checks; document raw DML trust boundary.",
+  "next": "Verify runtime metadata procedure e45fed2ac356bfadbb22dd5a5369aa3af4fe3856 targeted MySQL CI; retain accepted SQLite evidence, then proceed with reserve discharge, liquidity, Flutter and integrated checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2161,12 +2161,34 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_runtime_guard_visibility": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "SQLITE_PASS_MYSQL_RUNTIME_FAILED_SUPERSEDED",
     "base": "37c10ee29ae9a167fd8af927131b290f95be1cfd",
     "branch": "release/prospective-runtime-guard-visibility",
     "source": "22897d146205c90e6604eca427adc96b9cad7889",
     "scope": "Live non-updatable SQL SECURITY DEFINER view over current-schema trigger metadata; 9 protection classes share metadata query adapter. Optional runtime view config, direct deployment verification, no fallback. Test actual restricted MySQL account and fail-closed on missing trigger/view. SQLite retains native inspection.",
-    "limits": "CI pending; MySQL support and required permissions must be confirmed. Restricted account may need SELECT on financial tables for FK metadata checks. Definer must remain valid. No claim of preventing forged DML using compromised shared credentials. No production changes.",
-    "next": "Verify CI; correct any confirmed view or metadata privilege issues; then prioritize reserve discharge, integrated release and Flutter. Separate raw insert trust boundary from application authorization."
+    "limits": "SQLite and MySQL deployment preflight passed. MySQL restricted account passed grant allowlist but all 11 guard checks failed through view; failure correctly blocked runtime acceptance. View approach superseded; no production changes.",
+    "next": "Verify scoped definer metadata procedure with exact EXECUTE privilege instead of failed view.",
+    "run": 45737315181,
+    "jobs": [
+      {
+        "id": 139633563787,
+        "engine": "sqlite",
+        "exit": 0
+      },
+      {
+        "id": 139633563373,
+        "engine": "mysql",
+        "exit": 1
+      }
+    ]
+  },
+  "release_runtime_guard_routine": {
+    "status": "CANDIDATE_MYSQL_CI_NOT_VERIFIED",
+    "base": "22897d146205c90e6604eca427adc96b9cad7889",
+    "branch": "release/prospective-runtime-guard-visibility",
+    "source": "e45fed2ac356bfadbb22dd5a5369aa3af4fe3856",
+    "scope": "Replace unaccepted view with fixed no-input SQL SECURITY DEFINER READS SQL DATA procedure; use same write PDO, close CALL cursor, no cached fallback. Allow exact named procedure EXECUTE only; grant SELECT for FK metadata. Verify missing trigger/routine denial, restricted account cannot drop procedure. Target MySQL failure path and changed grant unit tests only; prior SQLite preflight evidence retained.",
+    "limits": "Procedure access behavior and actual cPanel routine permissions not yet verified. SQLite direct metadata path retained; no repeat of accepted full suites. Shared write principal remains trusted for DML. No main merge, historical correction, production changes.",
+    "next": "Verify exact MySQL CI. If procedure fails, keep fail-closed and record hosting compatibility blocker rather than weaken guard. Prioritize prospective reserve discharge and production readiness."
   }
 }
