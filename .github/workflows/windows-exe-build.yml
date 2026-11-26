@@ -1,0 +1,104 @@
+name: Water Windows EXE Build
+
+on:
+  push:
+    branches: [windows/exe-build]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  WATER_API_URL: https://alweshah.online/api/
+
+jobs:
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: mobile app
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.50.0'
+          cache: true
+
+      - name: Resolve Flutter dependencies and verify code
+        run: |
+          flutter pub get
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dart analyze --no-fatal-warnings lib
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run Windows hardening, network and auth tests
+        run: |
+          flutter test `
+            test/core/config/app_config_test.dart `
+            test/core/network/auth_interceptor_test.dart `
+            test/core/network/session_rotation_safety_test.dart `
+            test/core/network/windows_login_hardening_test.dart `
+            test/core/setup/server_connection_service_test.dart `
+            test/core/security/app_lock_service_test.dart `
+            test/core/database/database_encryption_test.dart `
+            test/core/diagnostics/error_reporter_test.dart `
+            test/core/diagnostics/api_log_manager_test.dart `
+            test/features/auth/login_screen_test.dart
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Windows x64 release executable
+        run: |
+          flutter build windows --release --dart-define="API_BASE_URL=$env:WATER_API_URL"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Package Windows installer (setup.exe) and portable bundle
+        run: |
+          $tool = Join-Path $env:RUNNER_TEMP 'inno-6.7.4.exe'
+          $dir = Join-Path $env:RUNNER_TEMP 'water-inno'
+          Invoke-WebRequest -Uri 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_4/innosetup-6.7.4.exe' -OutFile $tool
+          $signature = Get-AuthenticodeSignature -FilePath $tool
+          if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Pyrsys B\.V\.') {
+            throw 'Invalid Inno Setup publisher signature'
+          }
+          $install = Start-Process -FilePath $tool -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', '/TYPE=full', ("/DIR=`"$dir`"") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Inno installation exited $($install.ExitCode)" }
+
+          ./windows/installer/build-installer.ps1 -SkipBuild -IsccPath (Join-Path $dir 'ISCC.exe')
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path build/installer/setup.exe)) { throw 'Missing setup.exe installer' }
+
+          $portableZip = 'build/installer/Water-Windows-x64-portable.zip'
+          Compress-Archive -Path 'build/installer/payload/*' -DestinationPath $portableZip -Force
+          if (!(Test-Path $portableZip)) { throw 'Missing portable zip bundle' }
+          $zipHash = (Get-FileHash -LiteralPath $portableZip -Algorithm SHA256).Hash.ToLowerInvariant()
+          Add-Content -LiteralPath 'build/installer/SHA256SUMS' -Value "$zipHash  Water-Windows-x64-portable.zip" -Encoding ascii
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Water-Windows-x64-exe
+          path: |
+            mobile app/build/installer/setup.exe
+            mobile app/build/installer/Water-Windows-x64-portable.zip
+            mobile app/build/installer/SHA256SUMS
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+      - name: Verify unattended installation and app startup
+        run: |
+          ./test/windows_installer/smoke-installer.ps1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $output = Join-Path $env:RUNNER_TEMP 'water-install-check'
+          $setup = Start-Process -FilePath 'build/installer/setup.exe' -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', ("/DIR=`"$output`"") -Wait -PassThru
+          if ($setup.ExitCode -ne 0) { throw "Installer exited $($setup.ExitCode)" }
+          $app = Start-Process -FilePath (Join-Path $output 'water_project.exe') -WorkingDirectory $output -PassThru
+          if ($app.WaitForExit(10000)) { throw "App exited early: $($app.ExitCode)" }
+          Stop-Process -Id $app.Id

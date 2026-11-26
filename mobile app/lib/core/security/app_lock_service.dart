@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../network/windows_secure_storage_lock.dart';
 import 'pin_hasher.dart';
 
 /// تخزين بيانات القفل. مجرّد حتى يمكن استبداله في الاختبارات بلا قنوات منصة.
@@ -20,16 +21,17 @@ class SecureLockStorage implements LockStorage {
   final FlutterSecureStorage _storage;
 
   @override
-  Future<String?> read(String key) => _storage.read(key: key);
+  Future<String?> read(String key) =>
+      WindowsSecureStorageLock.run(() => _storage.read(key: key));
 
   @override
-  Future<void> write(String key, String? value) async {
+  Future<void> write(String key, String? value) => WindowsSecureStorageLock.run(() async {
     if (value == null) {
       await _storage.delete(key: key);
       return;
     }
     await _storage.write(key: key, value: value);
-  }
+  });
 }
 
 class InMemoryLockStorage implements LockStorage {

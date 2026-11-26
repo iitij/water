@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:dio/dio.dart';
 
@@ -72,8 +73,26 @@ class ErrorInterceptor extends Interceptor {
       case DioExceptionType.badResponse:
         return serverMessage ?? 'تعذر معالجة الطلب.';
       case DioExceptionType.unknown:
-        return serverMessage ?? 'حدث خطأ غير متوقع. حاول مرة أخرى.';
+        return serverMessage ?? messageForUnknownError(error.error);
     }
+  }
+
+  /// Classifies underlying transport, TLS, or payload errors when Dio emits
+  /// [DioExceptionType.unknown] (for example Windows `SocketException` after
+  /// `openUrl`, `HttpException` stream drops, `TlsException`, or non-JSON 2xx).
+  static String messageForUnknownError(Object? cause) {
+    if (cause is TlsException ||
+        cause is HandshakeException ||
+        cause is CertificateException) {
+      return 'تعذر إنشاء اتصال آمن (TLS) مع الخادم. تحقق من شهادة الأمان أو إعدادات الشبكة والـ VPN ثم أعد المحاولة.';
+    }
+    if (cause is SocketException || cause is HttpException) {
+      return 'تعذر الاتصال بالخادم أو انقطع الاتصال أثناء الطلب. تحقق من الشبكة أو الـ VPN ثم أعد المحاولة.';
+    }
+    if (cause is FormatException) {
+      return 'استجاب الخادم بصيغة غير متوقعة. تحقق من عنوان الخادم أو حالة الاتصال ثم أعد المحاولة.';
+    }
+    return 'حدث خطأ غير متوقع. حاول مرة أخرى.';
   }
 
   String? _firstServerMessage(dynamic data) {

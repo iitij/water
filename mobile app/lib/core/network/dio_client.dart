@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
+import 'package:flutter/foundation.dart';
 
 import '../config/app_config.dart';
 import '../diagnostics/api_log_manager.dart';
@@ -34,6 +38,12 @@ class DioClient {
           ),
         ) {
     tokenRefresh = TokenRefreshService(dio: dio, secureStorage: secureStorage);
+    if (!kIsWeb && Platform.isWindows) {
+      dio.httpClientAdapter = IOHttpClientAdapter(
+        createHttpClient: () => HttpClient()
+          ..idleTimeout = const Duration(seconds: 2),
+      );
+    }
     dio.interceptors.addAll(<Interceptor>[
       apiLogInterceptor,
       ClientHeadersInterceptor(appVersion: appVersion),

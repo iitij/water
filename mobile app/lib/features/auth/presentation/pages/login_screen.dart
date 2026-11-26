@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:get_it/get_it.dart';
 import 'package:go_router/go_router.dart';
@@ -103,6 +105,11 @@ class _LoginScreenState extends State<LoginScreen> {
                               state.operation == AuthOperation.login
                           ? state.message
                           : null,
+                      diagnosticDetail: defaultTargetPlatform == TargetPlatform.windows &&
+                              state.status == AuthStatus.failure &&
+                              state.operation == AuthOperation.login
+                          ? state.diagnosticDetail
+                          : null,
                       onToggleObscure: () => setState(() => _obscurePassword = !_obscurePassword),
                       onToggleRemember: () => setState(() => _rememberSession = !_rememberSession),
                       onSubmit: loading ? null : _submit,
@@ -177,6 +184,7 @@ class _LoginFormCard extends StatelessWidget {
     required this.rememberSession,
     required this.loading,
     required this.errorMessage,
+    this.diagnosticDetail,
     required this.onToggleObscure,
     required this.onToggleRemember,
     required this.onSubmit,
@@ -190,6 +198,7 @@ class _LoginFormCard extends StatelessWidget {
   final bool rememberSession;
   final bool loading;
   final String? errorMessage;
+  final String? diagnosticDetail;
   final VoidCallback onToggleObscure;
   final VoidCallback onToggleRemember;
   final VoidCallback? onSubmit;
@@ -296,6 +305,39 @@ class _LoginFormCard extends StatelessWidget {
                 message: errorMessage!,
                 icon: Icons.error_outline_rounded,
                 color: AppColors.danger,
+                action: diagnosticDetail == null
+                    ? null
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          SelectableText(
+                            diagnosticDetail!,
+                            style: theme.textTheme.labelSmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                            textDirection: TextDirection.ltr,
+                          ),
+                          Align(
+                            alignment: AlignmentDirectional.centerStart,
+                            child: TextButton.icon(
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: () {
+                                Clipboard.setData(
+                                  ClipboardData(text: '$errorMessage\n$diagnosticDetail'),
+                                );
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('تم نسخ تفاصيل الخطأ.')),
+                                );
+                              },
+                              icon: const Icon(Icons.copy_rounded, size: 14),
+                              label: const Text('نسخ التفاصيل'),
+                            ),
+                          ),
+                        ],
+                      ),
               ),
             ],
             const Gap(AppSpacing.lg),

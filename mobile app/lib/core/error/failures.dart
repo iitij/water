@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:equatable/equatable.dart';
 
 import '../l10n/app_strings.dart';
+import '../network/interceptors/error_interceptor.dart';
 
 /// فشل طبقة البيانات موحّد لكافة الوحدات — يعالج رسائل التحقق العربية للـ Laravel (422).
 /// المرجع: `FLUTTER_MOBILE_MASTER_PLAN.md` §3.1 (`core/error/failures.dart`).
@@ -95,8 +98,26 @@ class FailureMapper {
       case DioExceptionType.cancel:
         return const NetworkFailure();
       case DioExceptionType.badCertificate:
+        return const NetworkFailure(
+          'تعذر التحقق من شهادة أمان الخادم.',
+        );
       case DioExceptionType.badResponse:
+        return _fromResponse(error.response);
       case DioExceptionType.unknown:
+        final inner = error.error;
+        if (inner is TlsException ||
+            inner is HandshakeException ||
+            inner is CertificateException ||
+            inner is SocketException ||
+            inner is HttpException) {
+          return NetworkFailure(ErrorInterceptor.messageForUnknownError(inner));
+        }
+        if (inner is FormatException) {
+          return ServerFailure(
+            AppStringsDefaults.invalidResponse,
+            statusCode: error.response?.statusCode,
+          );
+        }
         return _fromResponse(error.response);
     }
   }

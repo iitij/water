@@ -4,6 +4,8 @@ import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../network/windows_secure_storage_lock.dart';
+
 /// تشفير قاعدة بيانات الميدان (S5-02).
 ///
 /// التصميم:
@@ -76,13 +78,17 @@ class SecureStorageDatabaseKeyProvider implements DatabaseKeyProvider {
     final cached = _cached;
     if (cached != null) return cached;
     try {
-      final existing = await _storage.read(key: storageKey);
+      final existing = await WindowsSecureStorageLock.run(
+        () => _storage.read(key: storageKey),
+      );
       if (existing != null && existing.trim().isNotEmpty) {
         _cached = existing;
         return existing;
       }
       final generated = generateDatabaseKey(_random);
-      await _storage.write(key: storageKey, value: generated);
+      await WindowsSecureStorageLock.run(
+        () => _storage.write(key: storageKey, value: generated),
+      );
       _cached = generated;
       return generated;
     } catch (error) {

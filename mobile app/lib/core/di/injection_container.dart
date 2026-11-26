@@ -114,7 +114,13 @@ Future<void> configureDependencies({String? appVersion}) async {
   dioClient.errorInterceptor.onUnauthorized = session.expireSession;
   getIt.registerSingleton<PermissionService>(PermissionService(session));
   getIt.registerSingleton<AppThemeController>(AppThemeController());
-  getIt.registerFactory<AuthCubit>(() => AuthCubit(session));
+  getIt.registerFactory<AuthCubit>(
+    () => AuthCubit(
+      session,
+      errorReporter: errorReporter,
+      apiLogManager: apiLogManager,
+    ),
+  );
 
   FieldSessionScope captureFieldScope() {
     final userId = session.user?['id']?.toString();

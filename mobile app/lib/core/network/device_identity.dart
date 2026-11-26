@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'windows_secure_storage_lock.dart';
+
 /// مخزن بسيط لمعرّف الجهاز، حتى يمكن استبداله في الاختبارات دون لمس قناة
 /// التخزين الآمن الأصلية.
 abstract interface class DeviceIdStore {
@@ -19,10 +21,12 @@ class SecureDeviceIdStore implements DeviceIdStore {
   final FlutterSecureStorage _storage;
 
   @override
-  Future<String?> read() => _storage.read(key: key);
+  Future<String?> read() =>
+      WindowsSecureStorageLock.run(() => _storage.read(key: key));
 
   @override
-  Future<void> write(String value) => _storage.write(key: key, value: value);
+  Future<void> write(String value) =>
+      WindowsSecureStorageLock.run(() => _storage.write(key: key, value: value));
 }
 
 /// هوية ثابتة للجهاز تُرسل مع كل طلب.

@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'windows_secure_storage_lock.dart';
+
 class SecureStorageService {
   SecureStorageService({FlutterSecureStorage? storage})
       : _storage = storage ?? const FlutterSecureStorage();
@@ -24,8 +26,17 @@ class SecureStorageService {
     return next;
   }
 
+  Future<String?> _readKey(String key) =>
+      WindowsSecureStorageLock.run(() => _storage.read(key: key));
+
+  Future<void> _writeKey(String key, String value) =>
+      WindowsSecureStorageLock.run(() => _storage.write(key: key, value: value));
+
+  Future<void> _deleteKey(String key) =>
+      WindowsSecureStorageLock.run(() => _storage.delete(key: key));
+
   Future<String?> _readToken() async =>
-      await _storage.read(key: _accessTokenKey) ?? _volatileAccessToken;
+      await _readKey(_accessTokenKey) ?? _volatileAccessToken;
 
   Future<String?> readAccessToken() => _serialize(_readToken);
 
@@ -38,9 +49,9 @@ class SecureStorageService {
     _persistAccessToken = persist;
     _volatileAccessToken = token;
     if (persist) {
-      await _storage.write(key: _accessTokenKey, value: token);
+      await _writeKey(_accessTokenKey, token);
     } else {
-      await _storage.delete(key: _accessTokenKey);
+      await _deleteKey(_accessTokenKey);
     }
   }
 
@@ -58,36 +69,37 @@ class SecureStorageService {
     return generation == _sessionGeneration;
   });
 
-  Future<void> writeUserId(String id) => _storage.write(key: _userIdKey, value: id);
+  Future<void> writeUserId(String id) =>
+      _serialize(() => _writeKey(_userIdKey, id));
 
-  Future<void> clearSessionDataOnly() async {
-    await _storage.delete(key: _userIdKey);
-    await _storage.delete(key: _cachedUserKey);
-  }
+  Future<void> clearSessionDataOnly() => _serialize(() async {
+    await _deleteKey(_userIdKey);
+    await _deleteKey(_cachedUserKey);
+  });
 
   Future<void> writeCachedUser(Map<String, dynamic> user) =>
-      _storage.write(key: _cachedUserKey, value: jsonEncode(user));
+      _serialize(() => _writeKey(_cachedUserKey, jsonEncode(user)));
 
-  Future<Map<String, dynamic>?> readCachedUser() async {
-    final value = await _storage.read(key: _cachedUserKey);
+  Future<Map<String, dynamic>?> readCachedUser() => _serialize(() async {
+    final value = await _readKey(_cachedUserKey);
     if (value == null) return null;
     try {
       final decoded = jsonDecode(value);
       return decoded is Map ? Map<String, dynamic>.from(decoded) : null;
     } on FormatException {
-      await _storage.delete(key: _cachedUserKey);
+      await _deleteKey(_cachedUserKey);
       return null;
     }
-  }
+  });
 
   Future<void> clearSession() {
     ++_sessionGeneration;
     return _serialize(() async {
       _volatileAccessToken = null;
       _persistAccessToken = true;
-      await _storage.delete(key: _accessTokenKey);
-      await _storage.delete(key: _userIdKey);
-      await _storage.delete(key: _cachedUserKey);
+      await _deleteKey(_accessTokenKey);
+      await _deleteKey(_userIdKey);
+      await _deleteKey(_cachedUserKey);
     });
   }
 }
