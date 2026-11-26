@@ -139,6 +139,11 @@ final class FinancialApprovedCustodyPeriodDiagnostic
         $audit = $audits->first();
         if ($audits->count() !== 1 || (int) $audit->actor_user_id !== (int) $session->approved_by
             || ($audit->after['id'] ?? null) !== (int) $session->id || ($audit->after['state'] ?? null) !== 'approved'
+            || ($audit->before['id'] ?? null) !== (int) $session->id || ($audit->before['state'] ?? null) !== 'closed'
+            || ($audit->before['settlement_basis'] ?? null) !== 'physical_cash'
+            || ($audit->after['settlement_basis'] ?? null) !== 'physical_cash'
+            || ($audit->before['session_date'] ?? null) !== $session->session_date?->toDateString()
+            || ($audit->after['session_date'] ?? null) !== $session->session_date?->toDateString()
             || ! $this->sameInstant($audit->after['approved_at'] ?? null, $approvedInstant)
             || ! $this->sameInstant($audit->after['closed_at'] ?? null, $closedInstant)
             || ($audit->after['counted_amount'] ?? null) !== SignedMinor::decimal($counted)
