@@ -72,7 +72,7 @@ class CashSessionService
         $session = CashSession::create([
             'user_id' => $user->id,
             'square_id' => $squareId,
-            'session_date' => now()->toDateString(),
+            'session_date' => now('Asia/Aden')->toDateString(),
             'opening_amount' => Cash::sessionDecimal($openingMinor),
             'settlement_basis' => 'physical_cash',
             'state' => CashSession::STATE_OPEN,
@@ -146,7 +146,7 @@ class CashSessionService
                     && $this->sessionMinor($session, 'opening_amount') === $minor, 409, 'سجل التمويل غير متطابق؛ يلزم التدقيق.');
                 return $session;
             }
-            $today = now()->toDateString();
+            $today = now('Asia/Aden')->toDateString();
             if ($account->channel !== 'cash' || $account->opening_on > $today) {
                 throw ValidationException::withMessages(['treasury_account_id' => 'يلزم حساب خزينة نقدية مفتوح.']);
             }
