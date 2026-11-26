@@ -1,0 +1,48 @@
+name: Water local APK signing tools
+on:
+  pull_request:
+    branches: [main]
+    paths: [.github/workflows/water-local-signing-tools.yml]
+permissions:
+  contents: read
+jobs:
+  tools:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/local-signing-tools-20261127'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Create portable signer and test a disposable sample
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          bundle=water-signing-linux-x64
+          mkdir "$bundle" delivery
+          tools="$(dirname "$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)")"
+          platform="$(find "$ANDROID_HOME/platforms" -maxdepth 2 -name android.jar | sort -V | tail -1)"
+          test -f "$tools/lib/apksigner.jar"
+          cp "$tools/lib/apksigner.jar" "$bundle/"
+          cp "$tools/source.properties" "$bundle/build-tools-source.properties"
+          if test -f "$tools/NOTICE.txt"; then cp "$tools/NOTICE.txt" "$bundle/build-tools-NOTICE.txt"; fi
+          "$JAVA_HOME/bin/jlink" --add-modules java.base,java.logging,java.xml,jdk.crypto.ec,jdk.crypto.cryptoki,jdk.zipfs,jdk.unsupported --strip-debug --no-header-files --no-man-pages --compress=2 --output "$bundle/java"
+          echo '<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="org.water.syntheticsigner"><uses-sdk android:minSdkVersion="24" android:targetSdkVersion="34"/><application android:hasCode="false"/></manifest>' > AndroidManifest.xml
+          "$tools/aapt2" link -I "$platform" --manifest AndroidManifest.xml -o sample.apk
+          "$tools/zipalign" -f 4 sample.apk sample-aligned.apk
+          export TEST_SIGNER_PASSWORD="$(openssl rand -hex 24)"
+          "$bundle/java/bin/keytool" -genkeypair -storetype PKCS12 -keystore temporary.p12 -alias sample -keyalg RSA -keysize 2048 -validity 3 -storepass:env TEST_SIGNER_PASSWORD -keypass:env TEST_SIGNER_PASSWORD -dname 'CN=Disposable CI fixture'
+          "$bundle/java/bin/java" -jar "$bundle/apksigner.jar" sign --ks temporary.p12 --ks-key-alias sample --ks-pass env:TEST_SIGNER_PASSWORD --key-pass env:TEST_SIGNER_PASSWORD --out signed-sample.apk sample-aligned.apk
+          "$bundle/java/bin/java" -jar "$bundle/apksigner.jar" verify --verbose --print-certs signed-sample.apk
+          (cd "$bundle" && sha256sum apksigner.jar java/bin/java java/bin/keytool > SHA256SUMS)
+          tar -czf "delivery/$bundle.tar.gz" "$bundle"
+          (cd delivery && sha256sum "$bundle.tar.gz" > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: water-local-signing-tools-linux-x64
+          path: ${{ runner.temp }}/delivery/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
