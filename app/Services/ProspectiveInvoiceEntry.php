@@ -22,7 +22,7 @@ final class ProspectiveInvoiceEntry
         return true;
     }
 
-    public function issue(User $actor, Subscriber $subscriber, ?Meter $meter, ?string $notes, ?string $uuid): Invoice
+    public function issue(User $actor, Subscriber $subscriber, ?Meter $meter, ?string $notes, ?string $uuid, ?array $selectedReadingIds = null): Invoice
     {
         if (! $actor->hasRole('super_admin')) Gate::forUser($actor)->authorize('create', Invoice::class);
         try {
@@ -30,7 +30,7 @@ final class ProspectiveInvoiceEntry
             if ($this->enabled()) {
                 Validator::make(['operation_uuid' => $uuid], ['operation_uuid' => ['required', 'uuid']])->validate();
                 return app(GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id,
-                    (int) $meter->id, strtolower($uuid), now()->toDateTimeImmutable(), $notes)['invoice'];
+                    (int) $meter->id, strtolower($uuid), now()->toDateTimeImmutable(), $notes, $selectedReadingIds)['invoice'];
             }
             if ($uuid !== null) throw new DomainException('gated_invoice_entry_disabled');
             return app(InvoiceService::class)->generateInvoice($subscriber, $meter, $notes);
