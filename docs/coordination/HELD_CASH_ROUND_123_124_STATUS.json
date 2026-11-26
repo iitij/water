@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify completed refund lifecycle fc0488d37a6bc824b9ef6dafb20f00312fa208fb exact CI. Then unresolved factual refund incident spending fence and reconciliation, affected writers, concurrency, Flutter and production checks.",
+  "next": "Verify refund incident outflow fence a568f587c75e8963d5fe717a5cbafad021a3fb11 exact CI, then incident resolution and liquidity preview reconciliation, affected writers, concurrency, Flutter and production checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2412,12 +2412,34 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_completed_refund_lifecycle": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_JOB_PASS",
     "base": "8a8b8d74b87684e5f22677c0a163e81dac917b72",
     "branch": "release/prospective-completed-refund-lifecycle",
     "source": "fc0488d37a6bc824b9ef6dafb20f00312fa208fb",
     "scope": "Append-only separately protected rejected/withdrawn decisions, current decision date, authenticated requester-only withdrawal and independent reviewer-only rejection; exact decision replay; deny approval after closure and closure after posting. Preserve original assertion and reserved reference/UUID even when closed, no accounting posting on decision. Report explicit pending/rejected/withdrawn/posting_recorded_unverified states; unresolved incident remains visible. New lifecycle test and authenticated approval changed-path regression per engine.",
-    "limits": "CI pending. Closed assertions do not prove no cash moved. No incident resolution/correction workflow or list yet. Pending/rejected/withdrawn cash assertions are not yet included in outflow reserve; must explicitly block or conservatively account for unresolved claims before activation. Existing posting UUID presence is not certification; global UUID reservation across other writers remains. No production changes, no historical corrections.",
-    "next": "Verify exact CI. Prioritize unresolved factual refund incident spending fence and reconciled resolution (without double-counting posted refunds), then cross-writer coverage/concurrency and production readiness."
+    "limits": "Exact CI job and test step conclusions verified, assertion counts/raw logs not inspected. Retired feature gate run 45742454114 succeeded. No production changes.",
+    "next": "Verify exact CI. Prioritize unresolved factual refund incident spending fence and reconciled resolution (without double-counting posted refunds), then cross-writer coverage/concurrency and production readiness.",
+    "run": 45742454243,
+    "jobs": [
+      {
+        "id": 139650509117,
+        "engine": "sqlite",
+        "conclusion": "success"
+      },
+      {
+        "id": 139650508847,
+        "engine": "mysql",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "release_refund_incident_outflow_fence": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "fc0488d37a6bc824b9ef6dafb20f00312fa208fb",
+    "branch": "release/prospective-refund-incident-outflow-fence",
+    "source": "a568f587c75e8963d5fe717a5cbafad021a3fb11",
+    "scope": "Conservative account-specific ordinary cash outflow block for pending/rejected/withdrawn factual refund assertions. Check protected request and decision under issuance lock before ordinary reservation bypass; verify exact refund, source legs, registered operation identity and independent approval evidence before lifting this incident fence. No new scope lock in business-lock path; full period registry verification remains unchanged in existing gated writer paths. Extend changed-path tests for pending/rejected/withdrawn and approved cases.",
+    "limits": "Not yet accepted. CI run not visible at initial query. Does not yet implement independent correction for rejected/withdrawn assertions, liquidity preview integration, full registry reconciliation, all writer coverage, unrelated account regression or concurrency; no production activation. No historical data changes.",
+    "next": "Verify exact CI, then targeted integration and independent incident resolution/preview reconciliation."
   }
 }
