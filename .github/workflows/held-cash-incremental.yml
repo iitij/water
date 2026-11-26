@@ -1,4 +1,4 @@
-name: Financial source insert fence
+name: Financial source mutation fence
 on:
   pull_request:
     branches: ['main']
@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-source-insert-fence'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-source-mutation-fence'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -39,12 +39,12 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify source insert fences and affected close coordinator
+      - name: Verify source mutation fences and affected close coordinator
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_insert_fence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_(insert|mutation)_fence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseCoordinatorTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-source-insert-fence'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/permanent-close-source-mutation-fence'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -103,7 +103,7 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify source insert fences and affected close coordinator
+      - name: Verify source mutation fences and affected close coordinator
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_insert_fence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_(insert|mutation)_fence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseCoordinatorTest.php
