@@ -23,7 +23,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: '21'
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.50.0'
@@ -55,6 +55,7 @@ jobs:
       - name: Build installable Android preview
         run: |
           set -euo pipefail
+          flutter config --jdk-dir "$JAVA_HOME"
           cp ../android/gradlew android/gradlew
           cp ../android/gradle/wrapper/gradle-wrapper.jar android/gradle/wrapper/
           chmod +x android/gradlew
