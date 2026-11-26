@@ -111,12 +111,23 @@ class TransactionService
         mixed $amount,
         ?string $description = null,
         ?Model $reference = null,
-        ?\App\Models\Meter $meter = null
+        ?\App\Models\Meter $meter = null,
+        ?GatedInvoiceTransferWriter $invoiceWriter = null
     ): Transaction {
         $amount = FinancialAmount::validated($amount, 'transaction')->decimal();
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter, $invoiceWriter) {
+            if ($reference instanceof Invoice || in_array($type, ['invoice', 'invoice_reversal'], true)) {
+                if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new \LogicException('Financial issuance lock is missing.');
+                }
+            }
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             $reference = $this->validateDocument($subscriber, $type, $amount, $reference, $meter);
+            if ($reference instanceof Invoice) {
+                Transaction::assertInvoicePostingWriter($reference, $type, $invoiceWriter);
+            } elseif ($invoiceWriter !== null) {
+                throw new \DomainException('gated_invoice_ledger_writer_required');
+            }
 
             if ($reference instanceof \App\Models\Invoice || $reference instanceof \App\Models\Payment
                 || $reference instanceof \App\Models\PaymentAccountTransfer
@@ -153,7 +164,7 @@ class TransactionService
             if ($reference instanceof Invoice || $reference instanceof Payment) {
                 $transaction->forceFill(['retired_meter_id' => $reference->retired_meter_id, 'retired_meter_code' => $reference->retired_meter_code]);
             }
-            if (! $transaction->save() || ! $transaction->exists || $transaction->getKey() === null) {
+            if (! $transaction->save(['financial_invoice_writer' => $invoiceWriter]) || ! $transaction->exists || $transaction->getKey() === null) {
                 throw new \RuntimeException('Ledger posting was not persisted.');
             }
 
@@ -172,12 +183,17 @@ class TransactionService
      * The caller holds the subscriber lock and changes document state in the
      * same transaction. Historical missing/deleted originals are not guessed.
      */
-    public function reverseDocument(Subscriber $subscriber, Model $reference, string $originalType): Transaction
+    public function reverseDocument(Subscriber $subscriber, Model $reference, string $originalType, ?GatedInvoiceTransferWriter $invoiceWriter = null): Transaction
     {
         if (! (($originalType === 'invoice' && $reference instanceof Invoice) || ($originalType === 'payment' && $reference instanceof Payment))) {
             throw new \InvalidArgumentException('Unsupported reversal type.');
         }
-        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $reference, $originalType) {
+        return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $reference, $originalType, $invoiceWriter) {
+            if ($reference instanceof Invoice) {
+                if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                    throw new \LogicException('Financial issuance lock is missing.');
+                }
+            }
             Subscriber::query()->lockForUpdate()->findOrFail($subscriber->id);
             $reference = $reference->newQuery()->lockForUpdate()->findOrFail($reference->getKey());
             $originals = Transaction::withTrashed()->where('reference_type', get_class($reference))
@@ -202,6 +218,7 @@ class TransactionService
                 description: 'عكس الحركة المالية رقم '.$original->id,
                 reference: $reference,
                 meter: $original->meter,
+                invoiceWriter: $invoiceWriter,
             );
             return $reversal;
         }, 3);
