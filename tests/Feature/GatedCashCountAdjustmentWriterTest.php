@@ -1236,6 +1236,112 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_credits', 1);
         $this->assertDatabaseCount('treasury_postings', 1);
     }
+    private function resolutionControl(string $classification = 'no_disbursement', int $variance = 0): array
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $requester = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic lifecycle tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-REFUND-LIFECYCLE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\GatedInvoiceTransferWriter::class)->issue($issuer, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt());
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $id = (int) $account['id'];
+        $credit = DB::table('treasury_held_cash_credits')->sole();
+        $release = app(\App\Services\HeldCashReleaseProposalService::class);
+        $proposal = '77777777-7777-4777-8777-777777777777';
+        $release->propose($issuer, $id, (int) $credit->id, 10, $proposal, 'QA-LIFECYCLE-RELEASE', self::EVIDENCE, $this->nowAt());
+        config(['financial_candidate.active_held_release' => true, 'financial_candidate.completed_cash_refund' => true]);
+        $release->recordActiveRelease($reviewer, $id, $proposal, '88888888-8888-4888-8888-888888888888', self::EVIDENCE, $this->nowAt());
+        $other = Subscriber::create(['name' => 'Synthetic lifecycle refund recipient', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $other->id, '1.00',
+            '99999999-9999-4999-8999-999999999999', $this->nowAt())['payment'];
+        $submit = '/api/payments/'.$receipt->id.'/completed-cash-refund-requests';
+        $root = '/api/completed-cash-refund-requests/';
+        $data = ['account_id' => $id, 'amount' => '0.06', 'reference' => 'QA-LIFECYCLE-1', 'date' => '2026-11-25',
+            'reason' => 'Independent evidence of completed cash disbursement', 'evidence' => self::EVIDENCE,
+            'operation_uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'disbursement_confirmed' => true];
+        $uuid = $data['operation_uuid'];
+        $endpoint = $root.$uuid.'/resolution-proposal';
+        $counter = $this->actor();
+        $countReviewer = $this->actor();
+        $proposer = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($requester);
+        $this->postJson($submit, $data)->assertOk();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($root.$uuid.'/close', ['decision' => 'rejected', 'reason' => self::EVIDENCE])->assertOk();
+        $balance = $this->gate(fn () => app(\App\Services\HeldCashRecordedLiquidityEvidence::class)->balance($id, '2026-11-25'));
+        $counted = $balance + $variance;
+        $amount = sprintf('%d.%02d', intdiv($counted, 100), $counted % 100);
+        $counts = app(TreasuryCashCountService::class);
+        $count = $counts->record($counter, $id, $amount, 'QA-RESOLUTION-CONTROL', self::EVIDENCE)['count'];
+        $counts->review($countReviewer, (int) $count['id'], true, self::EVIDENCE);
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $this->postJson($endpoint, ['count_id' => (int) $count['id'], 'classification' => $classification,
+            'evidence' => self::EVIDENCE])->assertOk()->assertJsonPath('created', true);
+        $approver = $this->actor();
+        return compact('id', 'uuid', 'root', 'submit', 'data', 'requester', 'approver',
+            'counter', 'countReviewer', 'amount', 'count');
+    }
+
+    private function assertResolutionControlBlocked(array $fixture, string $reason, int $unresolved = 1): void
+    {
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events', 'treasury_cash_counts', 'treasury_cash_count_reviews'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy(
+            $table === 'financial_posting_operations' ? 'operation_uuid' : 'id'
+        )->get()->toArray(), $tables);
+        $before = $snapshot();
+        \Laravel\Sanctum\Sanctum::actingAs($fixture['approver']);
+        $this->rejects($reason, fn () => app(\App\Services\CompletedCashRefundRequest::class)->approveResolution(
+            $fixture['approver'], $fixture['uuid'], 'Independent confirmation of investigated cash claim', $this->nowAt()));
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame(0, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_approved')->count());
+        $this->getJson($fixture['root'].$fixture['uuid'])->assertOk()->assertJsonPath('incident_unresolved', true);
+        $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($fixture['id'], 1, '2026-11-25')));
+        $proof = $this->gate(fn () => app(\App\Services\ActiveHeldCashRelease::class)->currentLiquidity($fixture['id']));
+        $this->assertSame($unresolved, $proof['unresolved_refund_incident_count']);
+        $this->assertTrue($proof['incident_outflow_blocked']);
+        $this->assertSame(0, $proof['available_for_ordinary_outflow_minor']);
+    }
+
+    public function test_release_refund_resolution_control_refuses_newer_cash_count(): void
+    {
+        $f = $this->resolutionControl();
+        $counts = app(TreasuryCashCountService::class);
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'], 'QA-NEWER-COUNT', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        $this->assertResolutionControlBlocked($f, 'completed_refund_resolution_stale_count');
+    }
+
+    public function test_release_refund_resolution_control_refuses_competing_cash_assertion(): void
+    {
+        $f = $this->resolutionControl();
+        \Laravel\Sanctum\Sanctum::actingAs($f['requester']);
+        $this->postJson($f['submit'], array_replace($f['data'], [
+            'operation_uuid' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'reference' => 'QA-RESOLUTION-COMPETING',
+        ]))->assertOk();
+        $this->assertResolutionControlBlocked($f, 'completed_refund_resolution_competing_incidents', 2);
+    }
+
+    public function test_release_refund_resolution_control_refuses_posting_required(): void
+    {
+        $this->assertResolutionControlBlocked($this->resolutionControl('posting_required'),
+            'completed_refund_resolution_evidence');
+    }
+
+    public function test_release_refund_resolution_control_refuses_unadjusted_shortage(): void
+    {
+        $this->assertResolutionControlBlocked($this->resolutionControl('cash_returned', -1),
+            'completed_refund_resolution_evidence');
+    }
+
     public function test_release_refund_resolution_proposal_preserves_cash_fence(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
