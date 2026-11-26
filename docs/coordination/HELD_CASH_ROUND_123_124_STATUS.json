@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify refund incident outflow fence a568f587c75e8963d5fe717a5cbafad021a3fb11 exact CI, then incident resolution and liquidity preview reconciliation, affected writers, concurrency, Flutter and production checks.",
+  "next": "Verify exact liquidity disclosure CI edbbe9a487c6a3f9e450603c5aada651ec04320d; then independent incident resolution, affected writers, concurrency, Flutter and production checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2434,12 +2434,34 @@
     ]
   },
   "release_refund_incident_outflow_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_JOB_PASS",
     "base": "fc0488d37a6bc824b9ef6dafb20f00312fa208fb",
     "branch": "release/prospective-refund-incident-outflow-fence",
     "source": "a568f587c75e8963d5fe717a5cbafad021a3fb11",
     "scope": "Conservative account-specific ordinary cash outflow block for pending/rejected/withdrawn factual refund assertions. Check protected request and decision under issuance lock before ordinary reservation bypass; verify exact refund, source legs, registered operation identity and independent approval evidence before lifting this incident fence. No new scope lock in business-lock path; full period registry verification remains unchanged in existing gated writer paths. Extend changed-path tests for pending/rejected/withdrawn and approved cases.",
-    "limits": "Not yet accepted. CI run not visible at initial query. Does not yet implement independent correction for rejected/withdrawn assertions, liquidity preview integration, full registry reconciliation, all writer coverage, unrelated account regression or concurrency; no production activation. No historical data changes.",
-    "next": "Verify exact CI, then targeted integration and independent incident resolution/preview reconciliation."
+    "limits": "Exact CI job and test step conclusions verified; assertion counts and raw logs not inspected. Retired feature gate 45743390376 succeeded. No production changes; reconciliation, all writer coverage and concurrency pending.",
+    "next": "Verify exact CI, then targeted integration and independent incident resolution/preview reconciliation.",
+    "run": 45743390361,
+    "jobs": [
+      {
+        "id": 139653550847,
+        "engine": "sqlite",
+        "conclusion": "success"
+      },
+      {
+        "id": 139653550435,
+        "engine": "mysql",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "release_refund_incident_liquidity": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "a568f587c75e8963d5fe717a5cbafad021a3fb11",
+    "branch": "release/prospective-refund-incident-liquidity",
+    "source": "edbbe9a487c6a3f9e450603c5aada651ec04320d",
+    "scope": "Account-specific count and exact claimed minor total of unresolved factual refund requests, distinct from recorded cash and liability balances. Preserve existing source-leg proof before excluding posted requests. Zero candidate additional release and available ordinary outflow while unresolved; disclose in active liquidity and shadow journal. Extend affected lifecycle and completed refund tests, including no double counting and existing factual shortfall.",
+    "limits": "CI unverified. No independently reviewed correction workflow, global writer coverage, user-facing UI, closure proof or production activation. Claimed amount is not a certified physical cash shortage.",
+    "next": "Verify exact CI, then independently reviewed incident resolution and account isolation/affected writers/concurrency."
   }
 }
