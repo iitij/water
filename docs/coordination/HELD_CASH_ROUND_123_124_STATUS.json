@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify exact targeted SQLite/MySQL CI; correct confirmed failures only. Wire Filament ListReadings auto issuance with atomic durable intent and after-commit execution; test original actor/settings and reading save failure. Review direct model writers, reserve discharge, liquidity, Flutter inventory and integrated release checks.",
+  "next": "Verify exact SQLite/MySQL CI; fix confirmed failures only. Continue direct model invoice/transaction writer fences (inventory model and service hooks before changes), then prospective reserve discharge, liquidity, Flutter inventory and integrated release checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -749,12 +749,12 @@
     ],
     "completion": "Production deployment and successful post-deploy smoke checks recorded. A green isolated suite alone does not complete delivery.",
     "last_verified": {
-      "branch": "release/prospective-reading-batch-invoices",
-      "commit": "3c08705aa45f22c8cc15092fb23bc8aba4dd5fdb",
-      "run": 45726860947,
-      "sqlite": "2 tests, 67 assertions",
-      "mysql": "2 tests, 67 assertions",
-      "scope": "Shared ProspectiveReadingBatchInvoices groups selections by meter; derives UUIDv5 per meter from batch namespace and validates exact selected unbilled reading identities inside the financial gate, binding selected IDs to issue audit for replay. Both API aliases and actual Filament issue_invoices bulk action wired; successful meter requests replay without new posting even when some meters fail. Two targeted tests cover API partial success, replay and conflict, and Filament bulk action/replay via API."
+      "branch": "release/prospective-reading-auto-invoice-api",
+      "commit": "c36c826c21b46f36c9f99f5172b595cb5bb72d9a",
+      "run": 45728788983,
+      "sqlite": "2 tests, 56 assertions",
+      "mysql": "2 tests, 56 assertions",
+      "scope": "API reading create and batch sync persist audit intent atomically with new reading under meter/subscriber locks. Original actor permission, automatic setting, notes, meter, stable reading-bound UUID and frozen exact pending observation set are bound; financial writer rechecks under gate before new posting. Retry resumes only existing durable intent after observation transaction ends, refuses changed input/settings/permission or pending set, no fallback when candidate disabled. Two targeted tests cover closed period recovery, no duplicate reading or invoice, cancellation replay, initial unauthorized actor and changed pending set."
     }
   },
   "round146": {
@@ -1751,12 +1751,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_reading_auto_invoice_api": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "3c08705aa45f22c8cc15092fb23bc8aba4dd5fdb",
     "branch": "release/prospective-reading-auto-invoice-api",
     "source": "c36c826c21b46f36c9f99f5172b595cb5bb72d9a",
     "scope": "API reading create and batch sync persist audit intent atomically with new reading under meter/subscriber locks. Original actor permission, automatic setting, notes, meter, stable reading-bound UUID and frozen exact pending observation set are bound; financial writer rechecks under gate before new posting. Retry resumes only existing durable intent after observation transaction ends, refuses changed input/settings/permission or pending set, no fallback when candidate disabled. Two targeted tests cover closed period recovery, no duplicate reading or invoice, cancellation replay, initial unauthorized actor and changed pending set.",
-    "limits": "CI pending. Filament ListReadings CreateAction auto issuance still not wired; standalone CreateReading does not currently auto-issue. Existing legacy settings behavior flag off unchanged. Audit/source tamper resistance, broader auto UUID collision handling, mobile status recovery, cross-day replay and full writer coverage remain to review. No historic data changes, main merge or production activation.",
-    "next": "Verify exact targeted SQLite/MySQL CI; correct confirmed failures only. Wire Filament ListReadings auto issuance with atomic durable intent and after-commit execution; test original actor/settings and reading save failure. Review direct model writers, reserve discharge, liquidity, Flutter inventory and integrated release checks."
+    "limits": "Exact source, raw logs and lockfile verified for prospective automatic reading API; no production activation or cross-day recovery certification.",
+    "next": "Wire actual ListReadings modal and explicit original-intent recovery.",
+    "run": 45728788983,
+    "jobs": [
+      {
+        "id": 139605294865,
+        "engine": "sqlite",
+        "tests": 2,
+        "assertions": 56,
+        "exit": 0
+      },
+      {
+        "id": 139605294693,
+        "engine": "mysql",
+        "tests": 2,
+        "assertions": 56,
+        "exit": 0
+      }
+    ],
+    "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
+  },
+  "release_reading_auto_invoice_filament": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "c36c826c21b46f36c9f99f5172b595cb5bb72d9a",
+    "branch": "release/prospective-reading-auto-invoice-filament",
+    "source": "d90392337dd2963a034234b74ba137a0b74fd108",
+    "scope": "ListReadings header create action now records reading and durable automatic invoice intent in same subscriber/meter-locked transaction, issues after commit with refreshed original actor. New explicit row recovery action only original authorized actor with unposted null-notes intent, reuses protected frozen reading proof and UUID, hides completed or cancelled operation. Two targeted tests exercise actual modal creation, closed-period preservation, disabled setting, other actor denial, original retry, invalid reading, automatic issue after success and unchanged cash.",
+    "limits": "CI pending. Standalone CreateReading page historically does not auto-issue; unchanged. Recovery row only null-notes intent; other API notes require original API retry. Broader direct model/ledger fences, reserve discharge, general liquidity, client UUID rollout, audit immutability and full release checks still open. No production activation, main merge or historical repair.",
+    "next": "Verify exact SQLite/MySQL CI; fix confirmed failures only. Continue direct model invoice/transaction writer fences (inventory model and service hooks before changes), then prospective reserve discharge, liquidity, Flutter inventory and integrated release checks."
   }
 }
