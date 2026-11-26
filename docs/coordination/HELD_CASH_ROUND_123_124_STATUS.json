@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify atomic refund incident posting 120b9a1ed33bc77d1a363aafcb5c130c6c71a6fe exact CI; then failure injection and concurrent replay/approval, complete entrypoint protection, accounting closure, Flutter and production.",
+  "next": "Verify rollback candidate caa04bf4f997ced128871a7a144834effa2f9d50 exact CI; then concurrent settlement and replay, remaining entrypoints, accounting closure, Flutter and production.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2640,12 +2640,38 @@
     ]
   },
   "release_refund_incident_atomic_posting": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "TARGETED_BOTH_ENGINES_PASS",
     "base": "4629d072710d37be14d269e6f9403fbd644343f4",
     "branch": "release/prospective-refund-incident-atomic-posting",
     "source": "120b9a1ed33bc77d1a363aafcb5c130c6c71a6fe",
     "scope": "Same-day exact shortage resolution through existing GatedRefundWriter, scope-first single transaction. Recheck fresh evidence and independent reviewer before mutation; preserve closed decision, request identity, original UUID and reference; verify exact subscriber and treasury legs, registry and completed cash audit; require recorded cash after posting equals reviewed count; record immutable resolution approval before liquidity inspection; historical proof verified on replay/read/outflow. New staging/test API; no permission to disburse. Two new cases plus two affected regression cases per engine.",
-    "limits": "CI unverified. Dedicated failure injection and concurrency tests still required. Multi-incident resolution, stale proposal replacement, direct-write coverage, all writer paths, closure, Flutter, deployment remain open. No production activation.",
-    "next": "Verify exact CI, repair any observed issue, then prove rollback after posting before resolution audit and concurrent replay/approval without duplication."
+    "limits": "Exact targeted CI logs verified on both engines. Dedicated failure injection and concurrency tests still required. Multi-incident resolution, stale proposal replacement, direct-write coverage, all writer paths, closure, Flutter, deployment remain open. No production activation.",
+    "next": "Verify exact CI, repair any observed issue, then prove rollback after posting before resolution audit and concurrent replay/approval without duplication.",
+    "run": 45746766100,
+    "jobs": [
+      {
+        "engine": "sqlite",
+        "id": 139664603198,
+        "tests": 4,
+        "assertions": 170,
+        "exit": 0
+      },
+      {
+        "engine": "mysql",
+        "id": 139664603459,
+        "tests": 4,
+        "assertions": 169,
+        "exit": 0
+      }
+    ]
+  },
+  "release_refund_incident_atomic_rollback": {
+    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "base": "120b9a1ed33bc77d1a363aafcb5c130c6c71a6fe",
+    "branch": "release/prospective-refund-incident-atomic-rollback",
+    "source": "caa04bf4f997ced128871a7a144834effa2f9d50",
+    "scope": "Test-only forced late required approval-audit insert failure conditional on exact two registered -6 minor legs and completed refund audit; assert precise injected diagnostic, rollback snapshots of 15 tables, zero transaction depth, unchanged subscriber and treasury balances, preserved cash incident fence, exact retry and replay. One new test per engine, no product changes or repeat of accepted positive suite.",
+    "limits": "CI not yet verified; concurrency, direct-write coverage, multi-incident resolution, stale proposal replacement, closure, Flutter and production remain open.",
+    "next": "Verify exact rollback CI then concurrent submission/approval/replay under independent database connections."
   }
 }
