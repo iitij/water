@@ -1560,6 +1560,56 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    // Characterization only: these failures document a safe but incomplete
+    // renewal lifecycle. Replace with successful aggregate renewal coverage
+    // when a scope-first, atomic revision mechanism is implemented.
+    public function test_release_refund_mixed_renewal_gap_blocks_replacement_and_partial_count_revision(): void
+    {
+        ['f' => $f, 'ids' => $ids, 'keys' => $keys, 'service' => $service] = $this->mixedAtomicControl();
+        $uuid = $f['second'];
+        $proposal = $f['proposalIds'][$uuid];
+        $tables = ['payment_refunds', 'transactions', 'treasury_postings',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(), $tables);
+        $before = $snapshot();
+        // Revoking the pending source must not permit replacing its immutable
+        // document in place, even with a new unique reference and bytes.
+        config(['financial_candidate.refund_source_public_keys' => ['qa-source-0' => $keys['qa-source-0']]]);
+        $recorder = $this->actor();
+        \Laravel\Sanctum\Sanctum::actingAs($recorder);
+        $this->rejects('completed_refund_document_conflict', fn () =>
+            $service->recordResolutionDocument($recorder, $uuid, $proposal, 'QA-RENEWAL-DOC',
+                'Synthetic replacement document for the same unresolved claim', $this->nowAt()));
+        $this->assertEquals($before, $snapshot());
+        \Laravel\Sanctum\Sanctum::actingAs($f['approver']);
+        $this->rejects('completed_refund_source_untrusted', fn () =>
+            $service->mixedSourceReadiness($f['approver'], $f['id'], $f['proposalIds'], $ids, $this->nowAt()));
+        $this->assertEquals($before, $snapshot());
+
+        // A new accepted account observation has a shortage of six minor
+        // units, although the second claim is classified as nonposting.
+        // The current individual revision path cannot revise that member
+        // using the common aggregate observation (it expects zero).
+        $counts = app(TreasuryCashCountService::class);
+        $new = $counts->record($f['counter'], $f['id'], $f['amount'],
+            'QA-MIXED-RENEWAL-COUNT', self::EVIDENCE)['count'];
+        $counts->review($f['countReviewer'], (int) $new['id'], true, self::EVIDENCE);
+        $this->assertGreaterThan((int) $f['count']['id'], (int) $new['id']);
+        $beforeRevision = $snapshot();
+        \Laravel\Sanctum\Sanctum::actingAs($this->actor());
+        $this->postJson($f['root'].$uuid.'/resolution-proposal', [
+            'count_id' => (int) $new['id'], 'classification' => 'cash_returned',
+            'evidence' => self::EVIDENCE, 'supersedes_id' => $proposal,
+        ])->assertConflict();
+        $this->assertEquals($beforeRevision, $snapshot());
+        $this->assertSame(0, DB::table('payment_refunds')->count());
+        $this->assertSame(0, AuditEvent::query()->where('event', 'financial.completed_cash_refund_resolution_revised')->count());
+        $this->assertSame(['count' => 2, 'claimed_minor' => 10], $this->gate(fn () =>
+            $service->unresolvedForAccount($f['id'])));
+        $this->rejects('completed_cash_refund_incident_unresolved', fn () => $this->gate(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($f['id'], 1, '2026-11-25')));
+    }
+
     public function test_release_refund_mixed_source_plan_requires_complete_independent_current_sources(): void
     {
         $f = $this->batchResolutionControl(-6, '1.00', ['posting_required', 'cash_returned']);
