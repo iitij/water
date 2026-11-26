@@ -58,7 +58,7 @@ final class FinancialSourceInsertProtection
             $name = 'fin_source_'.$table.'_insert';
             $defs[$name] = [$table, "BEFORE INSERT ON {$table} FOR EACH ROW {$body}", $body, 'INSERT'];
 
-            $oldInvalid = str_replace("NEW.{\$column}", "OLD.{\$column}", $invalid);
+            $oldInvalid = str_replace("NEW.{$column}", "OLD.{$column}", $invalid);
             $mutationMessage = 'Financial source mutation is fenced';
             $changes = [];
             foreach (array_merge(['id', $column], self::PROTECTED_FIELDS[$table] ?? []) as $field) {
