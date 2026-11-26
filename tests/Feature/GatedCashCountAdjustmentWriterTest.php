@@ -3128,6 +3128,60 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_release_correction_db_protection_blocks_raw_and_quiet_mutations(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $other = Subscriber::create(['name' => 'Synthetic transfer destination', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $collect = fn (string $uuid) => app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '10.00', $uuid, $this->nowAt())['payment'];
+        $first = $collect('66666666-6666-4666-8666-666666666666');
+        $second = $collect('77777777-7777-4777-8777-777777777777');
+        $reason = 'Independent documented correction';
+        $refund = app(\App\Services\GatedRefundWriter::class)->record($reviewer, (int) $first->id, (int) $account['id'], '4.00',
+            'QA-CORRECTION-DB', 'treasury_cash', '2026-11-25', $reason, self::EVIDENCE,
+            '88888888-8888-4888-8888-888888888888', $this->nowAt())['refund'];
+        $transfer = app(\App\Services\GatedInvoiceTransferWriter::class)->transfer($reviewer, (int) $second->id, (int) $other->id,
+            $reason, self::EVIDENCE, '99999999-9999-4999-8999-999999999999', $this->nowAt())['transfer'];
+        $this->assertTrue(app(\App\Services\FinancialCorrectionDocumentProtection::class)->active());
+        $tables = ['payments', 'payment_refunds', 'payment_account_transfers', 'transactions', 'treasury_postings',
+            'payment_allocations', 'payment_allocation_revisions', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        foreach ([[$refund, 'payment_refunds'], [$transfer, 'payment_account_transfers']] as [$doc, $table]) {
+            $row = (array) DB::table($table)->where('id', $doc->id)->first();
+            $attempts = [
+                fn () => DB::table($table)->where('id', $doc->id)->update(['amount' => '1.00']),
+                fn () => DB::table($table)->where('id', $doc->id)->update(['reason' => 'Forged correction']),
+                fn () => DB::table($table)->where('id', $doc->id)->delete(),
+                fn () => $doc->fresh()->deleteQuietly(),
+            ];
+            foreach ([true, false] as $sameId) {
+                $copy = $row;
+                if (! $sameId) unset($copy['id']);
+                $copy['amount'] = '1.00';
+                $columns = implode(', ', array_keys($copy));
+                $params = implode(', ', array_fill(0, count($copy), '?'));
+                $verb = DB::getDriverName() === 'sqlite' ? 'INSERT OR REPLACE' : 'REPLACE';
+                $attempts[] = fn () => DB::statement("{$verb} INTO {$table} ({$columns}) VALUES ({$params})", array_values($copy));
+            }
+            foreach ($attempts as $attempt) {
+                try {
+                    DB::transaction($attempt);
+                    $this->fail('Unsafe correction document mutation succeeded.');
+                } catch (\Illuminate\Database\QueryException $error) {
+                    $this->assertStringContainsString('Financial correction document is immutable', $error->getMessage());
+                }
+                foreach ($before as $name => $rows) $this->assertSame($rows, $snapshot($name), $name);
+            }
+        }
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(600, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(1000, $ledger->accountBalanceMinor($other));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_correction_model_fence_rejects_direct_refunds_transfers_and_ledger(): void
     {
         [, , $account, , , $subscriber] = $this->held();
