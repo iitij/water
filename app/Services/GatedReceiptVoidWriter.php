@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\DB;
 final class GatedReceiptVoidWriter
 {
     private ?int $mutatingPaymentId = null;
+    private bool $reversalAuthorized = false;
 
     public function __construct(
         private FinancialWriteGate $gate,
@@ -89,7 +90,7 @@ final class GatedReceiptVoidWriter
                 }
                 $this->unused($uuid);
                 $before = app(TransactionService::class)->accountBalanceMinor($subscriber);
-                $result = $this->mutate($payment, fn () => $this->payments->requestVoid($payment, $reason, (int) $actor->id, 'gated', $this));
+                $result = $this->mutate($payment, fn () => $this->payments->requestVoid($payment, $reason, (int) $actor->id, 'gated', $this), true);
                 $this->need(! $result['pending'], 'gated_void_expected_immediate');
                 $this->checkBalance($result['payment'], $subscriber, $before);
                 return $this->register($result['payment'], $uuid, $context, $now, false);
@@ -149,7 +150,7 @@ final class GatedReceiptVoidWriter
             if ($approve) $this->unused($uuid);
             else $this->need($uuid === null, 'gated_void_pending_no_posting_uuid');
             $before = app(TransactionService::class)->accountBalanceMinor($subscriber);
-            $result = $this->mutate($payment, fn () => $this->payments->decideVoidRequest($payment, $approve, $actor, $notes, 'gated', $this));
+            $result = $this->mutate($payment, fn () => $this->payments->decideVoidRequest($payment, $approve, $actor, $notes, 'gated', $this), $approve);
             if (! $approve) {
                 $this->need(! $result->isVoided() && ! $result->hasPendingVoidRequest()
                     && app(TransactionService::class)->accountBalanceMinor($subscriber) === $before, 'gated_void_rejection_effect');
@@ -170,14 +171,21 @@ final class GatedReceiptVoidWriter
             && DB::transactionLevel() > 0;
     }
 
-    private function mutate(Payment $payment, callable $action): mixed
+    public function allowsReversal(Payment $payment): bool
+    {
+        return $this->reversalAuthorized && ! $payment->isVoided() && $this->allowsMutation($payment);
+    }
+
+    private function mutate(Payment $payment, callable $action, bool $authorizeReversal = false): mixed
     {
         $this->need($this->mutatingPaymentId === null && DB::transactionLevel() > 0,
             'gated_void_mutation_scope');
         $this->mutatingPaymentId = (int) $payment->id;
+        $this->reversalAuthorized = $authorizeReversal;
         try {
             return $action();
         } finally {
+            $this->reversalAuthorized = false;
             $this->mutatingPaymentId = null;
         }
     }

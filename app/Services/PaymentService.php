@@ -274,6 +274,12 @@ class PaymentService
                 'cash_session_id' => $payment->cash_session_id,
             ];
 
+            $transactionService = new TransactionService();
+            // Registered voids require the reversal before the document state changes.
+            // Both writes remain inside the same locked financial transaction.
+            if ($gatedWriter !== null) {
+                $transactionService->reverseDocument($payment->subscriber, $payment, 'payment', reversalWriter: $gatedWriter);
+            }
             $payment->forceFill([
                 'voided_at' => now(),
                 'void_reason' => $reason,
@@ -281,9 +287,11 @@ class PaymentService
                 'voided_via' => $source,
             ])->saveQuietly(['financial_receipt_void_writer' => $gatedWriter]);
 
-            // Keep the original posting and append its opposite.
-            $transactionService = new TransactionService();
-            $transactionService->reverseDocument($payment->subscriber, $payment, 'payment', reversalWriter: $gatedWriter);
+            // Preserve the existing unregistered legacy path; the registered
+            // path already appended the reversal above.
+            if ($gatedWriter === null) {
+                $transactionService->reverseDocument($payment->subscriber, $payment, 'payment');
+            }
             if ($payment->meter_id) {
                 if ($meter = \App\Models\Meter::find($payment->meter_id)) {
                     $transactionService->updateMeterBalance($meter);

@@ -56,7 +56,7 @@ class Transaction extends Model
     {
         if ($writer === null && ! self::receiptReversalFenceEnabled() && ! $payment->hasRegisteredReceipt()) return;
         $allowed = ($writer instanceof \App\Services\GatedReceiptVoidWriter
-                && $payment->isVoided() && $writer->allowsMutation($payment))
+                && $writer->allowsReversal($payment))
             || ($writer instanceof \App\Services\GatedInvoiceTransferWriter
                 && ! $payment->isVoided() && $writer->allowsReceiptReversal((int) $payment->id));
         if (! $allowed) throw new \DomainException('gated_receipt_reversal_writer_required');

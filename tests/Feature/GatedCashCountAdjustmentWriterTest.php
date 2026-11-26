@@ -3381,6 +3381,60 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_release_receipt_void_db_fence_requires_reversal_and_preserves_transfer(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $other = Subscriber::create(['name' => 'Synthetic transfer destination', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $collect = fn (string $uuid) => app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id,
+            '10.00', $uuid, $this->nowAt())['payment'];
+        $first = $collect('66666666-6666-4666-8666-666666666666');
+        $second = $collect('77777777-7777-4777-8777-777777777777');
+        $writer = app(\App\Services\GatedReceiptVoidWriter::class);
+        $reason = 'Independent documented receipt cancellation';
+        $this->assertTrue(app(\App\Services\ReceiptVoidProtection::class)->active());
+        $tables = ['payments', 'transactions', 'payment_account_transfers', 'payment_allocation_revisions',
+            'payment_allocations', 'financial_posting_operations', 'financial_posting_events', 'audit_events', 'treasury_postings'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $unchanged = function (callable $action) use ($tables, $snapshot): void {
+            $before = [];
+            foreach ($tables as $table) $before[$table] = $snapshot($table);
+            try {
+                DB::transaction($action);
+                $this->fail('Unproved receipt void mutation accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Registered receipt void requires reversal evidence', $error->getMessage());
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        };
+        $update = fn (Payment $doc, array $fields) => DB::table('payments')->where('id', $doc->id)->update($fields);
+        $fields = ['voided_at' => now(), 'void_reason' => $reason, 'voided_by' => $reviewer->id, 'voided_via' => 'gated'];
+        $unchanged(fn () => $update($first, $fields));
+        $unchanged(fn () => $update($first, ['void_reason' => $reason]));
+        \App\Models\Setting::set('void_approval_threshold', '1.00');
+        $request = $writer->request($issuer, (int) $first->id, $reason, $this->nowAt());
+        $this->assertTrue($request['pending']);
+        $unchanged(fn () => $update($first, array_replace($fields, ['voided_via' => 'approval'])));
+        $approve = fn () => $writer->decide($reviewer, (int) $first->id, true, null, $this->nowAt(),
+            '88888888-8888-4888-8888-888888888888', $request['request_id']);
+        $this->assertTrue($approve()['registry_created']);
+        $this->assertFalse($approve()['registry_created']);
+        $unchanged(fn () => $update($first, ['voided_at' => null]));
+        $unchanged(fn () => $update($first, ['void_reason' => 'Forged cancellation reason']));
+        $unchanged(fn () => $update($first, ['voided_by' => $issuer->id]));
+        $unchanged(fn () => $update($first, ['voided_via' => 'gated']));
+        app(\App\Services\GatedInvoiceTransferWriter::class)->transfer($reviewer, (int) $second->id, (int) $other->id,
+            'Independent documented account transfer', self::EVIDENCE, '99999999-9999-4999-8999-999999999999', $this->nowAt());
+        $unchanged(fn () => $update($second, $fields));
+        $this->assertFalse($second->fresh()->isVoided());
+        $this->assertTrue($first->fresh()->isVoided());
+        $ledger = app(\App\Services\TransactionService::class);
+        $this->assertSame(0, $ledger->accountBalanceMinor($subscriber));
+        $this->assertSame(1000, $ledger->accountBalanceMinor($other));
+        $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
     public function test_release_receipt_mutation_fence_blocks_quiet_financial_and_void_field_changes(): void
     {
         [, , $account, , , $subscriber] = $this->held();
