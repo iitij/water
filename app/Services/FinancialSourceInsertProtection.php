@@ -116,6 +116,7 @@ final class FinancialSourceInsertProtection
             $changed = isset(self::PROTECTED_FIELDS[$table]) ? '('.implode(' OR ', $changes).')' : '1 = 1';
             foreach (['UPDATE' => "({$changed}) AND (({$oldInvalid}) OR ({$invalid}))",
                 'DELETE' => $oldInvalid] as $event => $condition) {
+                $condition = preg_replace('/\s+/', ' ', trim($condition));
                 $mutationBody = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$mutationMessage}'); END"
                     : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$mutationMessage}'; END IF; END";
                 $mutationName = 'fin_source_'.$table.'_'.strtolower($event);
