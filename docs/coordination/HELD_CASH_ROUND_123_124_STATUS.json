@@ -71,7 +71,7 @@
     ],
     "evidence_limit": "Job conclusions checked; assertion counts and raw logs not inspected in this review. Preserve previous evidence; no repeat runs."
   },
-  "next": "Verify financial approval audit fence d0260d6666c924c47834da8f25b740f771832184 exact CI; authenticated separate review, affected writers and production checks.",
+  "next": "Verify MySQL approval audit retry c8bd29f199c690e80c0214fb33f2386198ea1cba (only failed case). Continue separate authenticated review, all outflows and production checks.",
   "owner_scope_decision": {
     "date": "2026-11-25",
     "status": "HISTORICAL_DATA_CORRECTION_OUT_OF_SCOPE",
@@ -2338,12 +2338,39 @@
     "composer_lock_sha256": "62931ebaf0deb4de748ffefd94264b3de48d15a9e2d1d4a0702f4a1c6cf39335"
   },
   "release_financial_approval_audit_fence": {
-    "status": "CANDIDATE_CI_NOT_VERIFIED",
+    "status": "SQLITE_PASS_MYSQL_TEST_ASSERTION_FAILED",
     "base": "b2c7b9bc2dffc178534448e91cb2de205c3e49cf",
     "branch": "release/prospective-financial-approval-audit-fence",
     "source": "d0260d6666c924c47834da8f25b740f771832184",
     "scope": "Guard 5 prospective approval audit event types against update/delete/duplicate insert, enforce event/entity identity and internal source, protect actor deletion and PK mutation against FK nulling, SQLite replacement guard. Exact trigger verification integrated into completed refund and active release reads, deployment preflight. Changed-path tests include direct tampering, reviewer deletion, missing guard denial, unaffected unrelated event and replay; 3 tests per engine.",
-    "limits": "CI pending. Does not prove authorization against compromised runtime DML principal or independently authenticate second user; valid first INSERT still trusted application boundary. No historical corrections or production changes. Need authenticated separate approval workflow, same-subscriber completed refund and all outgoing/allocator coverage, concurrency, Flutter and release checks. No full-suite repetition.",
-    "next": "Verify exact CI, implement independently authenticated persisted review bound to refund intent, then address other refund/allocator and outgoing paths, concurrency and production readiness."
+    "limits": "MySQL actual deletion denied by existing unconditional protect_user_identity_delete first, not evidence of missing protection. Remaining assertions of failed case not completed. Other two MySQL tests passed. No product changes.",
+    "next": "Retry only the failed MySQL test with earlier global identity triggers temporarily isolated in disposable database and restored using existing migrations in finally.",
+    "run": 45740560459,
+    "jobs": [
+      {
+        "id": 139644229226,
+        "engine": "sqlite",
+        "tests": 3,
+        "assertions": 114,
+        "exit": 0
+      },
+      {
+        "id": 139644229548,
+        "engine": "mysql",
+        "tests": 3,
+        "assertions": 104,
+        "failures": 1,
+        "exit": 1
+      }
+    ]
+  },
+  "release_financial_approval_audit_retry": {
+    "status": "CANDIDATE_MYSQL_RETRY_NOT_VERIFIED",
+    "base": "d0260d6666c924c47834da8f25b740f771832184",
+    "branch": "release/prospective-financial-approval-audit-fence",
+    "source": "c8bd29f199c690e80c0214fb33f2386198ea1cba",
+    "scope": "Test-only correction: isolate original global user delete and update triggers independently on disposable MySQL; verify new exact rejection messages, restore original migrations in finally and assert both are installed. CI only failed case, retain SQLite and two unaffected MySQL tests from prior SHA; product source unchanged.",
+    "limits": "Await exact CI. Do not accept entire approval guard until retry passes. No production DDL, no historical corrections. Independently authenticated review still incomplete.",
+    "next": "Verify targeted retry then implement separate authenticated persisted completed-refund request and reviewer approval; review all outflows and allocators, Flutter and release readiness."
   }
 }
