@@ -118,6 +118,38 @@ final class FinancialCloseCoordinatorTest extends TestCase
         }
     }
 
+    public function test_close_refuses_missing_or_counterfeit_ledger_guard(): void
+    {
+        $guard = app(\App\Services\LedgerProtection::class);
+        $this->assertTrue($guard->active());
+        $before = DB::table('financial_scopes')->sole();
+        DB::unprepared('DROP TRIGGER ledger_reject_delete');
+        $this->rejects('close_ledger_protection_missing', fn () => $this->freeze());
+        $this->assertDatabaseCount('financial_close_commands', 0);
+        $this->assertEquals($before, DB::table('financial_scopes')->sole());
+        $fake = DB::getDriverName() === 'sqlite'
+            ? 'CREATE TRIGGER ledger_reject_delete BEFORE DELETE ON transactions FOR EACH ROW BEGIN SELECT 1; END'
+            : 'CREATE TRIGGER ledger_reject_delete BEFORE DELETE ON transactions FOR EACH ROW SET @qa_noop = 1';
+        DB::unprepared($fake);
+        try {
+            foreach ([fn () => $guard->active(), fn () => $guard->install(), fn () => $this->freeze()] as $call) {
+                try {
+                    $call();
+                    $this->fail('Counterfeit ledger guard accepted.');
+                } catch (\LogicException $error) {
+                    $this->assertSame('Unexpected ledger protection trigger: ledger_reject_delete', $error->getMessage());
+                }
+            }
+            $this->assertDatabaseCount('financial_close_commands', 0);
+            $this->assertEquals($before, DB::table('financial_scopes')->sole());
+        } finally {
+            DB::unprepared('DROP TRIGGER ledger_reject_delete');
+            $guard->install();
+        }
+        $this->assertTrue($guard->active());
+        $this->assertSame('FROZEN', $this->freeze()['current_state']);
+    }
+
     public function test_freeze_prepare_approve_persists_exact_snapshot_and_replays_without_new_effects(): void
     {
         $freeze = $this->freeze();
