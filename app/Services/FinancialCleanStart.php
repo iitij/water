@@ -162,4 +162,82 @@ final class FinancialCleanStart
             return $result;
         }, 1);
     }
+
+    /** A commissioned database must not silently fall back to legacy writers. */
+    public static function requiresGatedWriters(): bool
+    {
+        return \Illuminate\Support\Facades\Schema::hasTable('audit_events')
+            && DB::table('audit_events')->useWritePdo()->where('event', 'financial.clean_start_initialized')->exists();
+    }
+
+    /**
+     * Revalidate the two persisted commissioning records under the scope lock.
+     * This proves the recorded independent empty-start review, not all-writer
+     * coverage or a period-end balance.
+     */
+    public function reviewedEvidence(): array
+    {
+        if (DB::transactionLevel() < 1) throw new DomainException('clean_start_evidence_requires_gate');
+        $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
+        if (! $scope || $scope->currency !== 'YER' || $scope->timezone !== 'Asia/Aden'
+            || (string) $scope->calendar_version !== '1') {
+            throw new DomainException('clean_start_evidence_scope_invalid');
+        }
+        if (! app(FinancialCleanStartAuditProtection::class)->active()
+            || ! (new FinancialCleanStartAuditProtection(true))->active()) {
+            throw new DomainException('clean_start_audit_protection_missing');
+        }
+        $audits = \App\Models\AuditEvent::query()->whereIn('event',
+            ['financial.clean_start_initialized', 'financial.clean_start_reviewed'])->orderBy('id')->lockForUpdate()->get();
+        if ($audits->count() !== 2) throw new DomainException('clean_start_review_required');
+        [$initial, $review] = $audits->all();
+        $period = DB::table('financial_periods')->where('scope_key', 'water')->orderBy('start_on')->orderBy('id')->lockForUpdate()->first();
+        if (! $period || $initial->event !== 'financial.clean_start_initialized'
+            || $review->event !== 'financial.clean_start_reviewed'
+            || (int) $initial->actor_user_id <= 0 || (int) $review->actor_user_id <= 0
+            || (int) $initial->actor_user_id === (int) $review->actor_user_id) {
+            throw new DomainException('clean_start_evidence_invalid');
+        }
+        foreach ([$initial, $review] as $audit) {
+            if ($audit->entity_type !== 'financial_scope' || $audit->entity_id !== 'water'
+                || $audit->source !== 'internal' || $audit->before !== null || ! is_array($audit->after)) {
+                throw new DomainException('clean_start_evidence_invalid');
+            }
+        }
+        $calendar = app(FinancialClosePolicy::class)->open('water', $period->month, 'Asia/Aden');
+        if ($period->start_on !== $calendar['start'] || $period->next_on !== $calendar['next']) {
+            throw new DomainException('clean_start_evidence_invalid');
+        }
+        $expected = ['format' => 1, 'scope' => 'water', 'period_id' => (int) $period->id,
+            'month' => $period->month, 'start_on' => $period->start_on, 'next_on' => $period->next_on,
+            'initialization_mode' => 'LEGACY_DISABLED', 'checked_empty_tables' => self::EMPTY_TABLES,
+            'root_opening_verified' => false, 'closure_authorized' => false];
+        $actual = $initial->after;
+        ksort($expected, SORT_STRING);
+        ksort($actual, SORT_STRING);
+        if ($actual !== $expected) throw new DomainException('clean_start_evidence_invalid');
+        $hash = hash('sha256', json_encode($expected, JSON_THROW_ON_ERROR));
+        $expectedReview = ['format' => 1, 'scope' => 'water', 'period_id' => (int) $period->id,
+            'month' => $period->month, 'initialized_by' => (int) $initial->actor_user_id,
+            'initial_audit_id' => (int) $initial->id, 'initial_evidence_hash' => $hash,
+            'reviewed_by' => (int) $review->actor_user_id, 'empty_start_reviewed' => true,
+            'root_opening_verified' => false, 'closure_authorized' => false];
+        $actualReview = $review->after;
+        ksort($expectedReview, SORT_STRING);
+        ksort($actualReview, SORT_STRING);
+        if ($actualReview !== $expectedReview) throw new DomainException('clean_start_evidence_invalid');
+        $utc = new \DateTimeZone('UTC');
+        $zone = new \DateTimeZone('Asia/Aden');
+        $first = new \DateTimeImmutable($initial->getRawOriginal('occurred_at'), $utc);
+        $second = new \DateTimeImmutable($review->getRawOriginal('occurred_at'), $utc);
+        $effectiveOn = $second->setTimezone($zone)->format('Y-m-d');
+        if ($second < $first || $effectiveOn < $period->start_on || $effectiveOn >= $period->next_on
+            || DB::table('financial_posting_operations')->where('effective_on', '<', $effectiveOn)->lockForUpdate()->first()) {
+            throw new DomainException('clean_start_evidence_cutoff_invalid');
+        }
+        return ['period_id' => (int) $period->id, 'effective_on' => $effectiveOn,
+            'initial_evidence_hash' => $hash,
+            'review_evidence_hash' => hash('sha256', json_encode($expectedReview, JSON_THROW_ON_ERROR)),
+            'commissioning_review_verified' => true, 'closure_authorized' => false];
+    }
 }
