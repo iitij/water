@@ -7865,6 +7865,51 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
     }
 
+    public function test_ledger_scope_fence_blocks_direct_dml_and_allows_later_registered_receipt(): void
+    {
+        $actor = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic ledger fence subscriber',
+            'square_id' => Square::create(['name' => 'QA ledger fence square'])->id, 'status' => 'active']);
+        $writer = app(GatedCashReceiptWriter::class);
+        $receipt = $writer->collect($actor, (int) $subscriber->id, '10.25', self::UUID, $this->nowAt());
+        $this->assertTrue($receipt['registry_created']);
+        $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
+        $original = (array) DB::table('transactions')->sole();
+        $candidate = $original;
+        unset($candidate['id']);
+        $candidate['reference_id'] = 999999;
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(),
+            ['payments', 'transactions', 'financial_posting_operations', 'financial_posting_events']);
+        $before = $snapshot();
+        $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+        $reject = function (callable $action): void {
+            try {
+                $action();
+                $this->fail('Direct ledger mutation accepted under scope freeze.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial ledger scope is fenced', $error->getMessage());
+            }
+        };
+        $reject(fn () => DB::table('transactions')->insert($candidate));
+        $reject(fn () => DB::table('transactions')->where('id', $original['id'])->update(['amount' => $original['amount']]));
+        $this->assertEquals($before, $snapshot());
+        $this->assertSame(1025, $subscriber->fresh()->getAccountBalanceMinor());
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $new = $writer->collect($actor, (int) $subscriber->id, '2.75', self::NEXT, $later);
+        $this->assertTrue($new['registry_created']);
+        $this->assertSame(1300, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertEquals($original, (array) DB::table('transactions')->where('id', $original['id'])->sole());
+        $this->assertDatabaseCount('transactions', 2);
+        $this->assertDatabaseHas('financial_posting_operations', ['operation_uuid' => self::NEXT, 'effective_on' => '2026-12-02']);
+    }
+
     public function test_source_insert_fence_blocks_direct_documents_and_allows_later_open_period(): void
     {
         ['f' => $f, 'ids' => $ids, 'service' => $service] = $this->mixedAtomicControl();
