@@ -9358,6 +9358,86 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['closure_authorized']);
     }
 
+    public function test_outstanding_period_evidence_conserves_three_sectors_across_cutoff(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $sender = $this->actor();
+        $receiver = $this->actor();
+        $collector = $this->actor();
+        $destination = app(GatedTreasuryOpeningFundingWriter::class)->open($receiver, [
+            'code' => 'QA-OUTSTANDING-DEST', 'name' => 'Synthetic destination', 'channel' => 'cash',
+            'opening_on' => '2026-11-25', 'opening_amount' => '1.00',
+            'opening_reference' => 'QA-OUTSTANDING-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '55555555-5555-4555-8555-555555555555', $this->nowAt())['account'];
+        $transferWriter = app(\App\Services\GatedTreasuryTransferWriter::class);
+        $transfer = $transferWriter->dispatch($sender, ['from_account_id' => (int) $account['id'],
+            'to_account_id' => (int) $destination['id'], 'amount' => '4.00',
+            'reference' => 'QA-OUTSTANDING-SENT', 'dispatched_on' => '2026-11-25', 'evidence' => self::EVIDENCE],
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['transfer'];
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
+            '77777777-7777-4777-8777-777777777777', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '1.00'), true, $receiver);
+        $handover = app(\App\Services\GatedCashHandoverWriter::class);
+        $handover->receive($receiver, (int) $session->id, (int) $account['id'], '0.40',
+            'QA-OUTSTANDING-PART', '2026-11-25', self::EVIDENCE,
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $inspect = fn (int $id) => DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($id));
+        $this->assertFalse($inspect($nov)['period_ended']);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $first = $inspect($nov);
+        $this->assertTrue($first['transit']['recorded_rollforward_verified'], json_encode($first));
+        $this->assertTrue($first['custody']['recorded_rollforward_verified'], json_encode($first));
+        $this->assertSame(400, $first['transit']['recorded_closing_minor']);
+        $this->assertSame(60, $first['custody']['recorded_closing_minor']);
+        $this->assertSame(5, $first['liability']['closing_minor']);
+        $this->assertFalse($first['carry_evidence_verified']);
+        $this->assertFalse($first['closure_authorized']);
+        $dec = (int) DB::table('financial_periods')->insertGetId(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $transferWriter->receive($receiver, (int) $transfer['id'], ['amount' => '4.00',
+            'reference' => 'QA-OUTSTANDING-ARRIVED', 'received_on' => '2026-12-02', 'evidence' => self::EVIDENCE],
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $later);
+        $handover->receive($receiver, (int) $session->id, (int) $account['id'], '0.60',
+            'QA-OUTSTANDING-FINAL', '2026-12-02', self::EVIDENCE,
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', $later);
+        app(\App\Services\TreasuryHeldCashLiabilityService::class)->credit($this->actor(), self::NEXT, 5,
+            'QA-OUTSTANDING-CREDIT', self::EVIDENCE, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', '2026-12-02', $later);
+        $this->assertSame($first, $inspect($nov));
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $second = $inspect($dec);
+        $this->assertTrue($second['transit']['recorded_rollforward_verified'], json_encode($second));
+        $this->assertTrue($second['custody']['recorded_rollforward_verified'], json_encode($second));
+        $this->assertSame(400, $second['transit']['rows'][0]['opening_minor']);
+        $this->assertSame(400, $second['transit']['rows'][0]['received_minor']);
+        $this->assertSame(60, $second['custody']['rows'][0]['opening_minor']);
+        $this->assertSame(60, $second['custody']['rows'][0]['received_minor']);
+        $this->assertSame(0, $second['transit']['recorded_closing_minor']);
+        $this->assertSame(0, $second['custody']['recorded_closing_minor']);
+        $this->assertSame(0, $second['liability']['closing_minor']);
+        $this->assertFalse($second['closure_authorized']);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+    }
+
+    public function test_outstanding_period_evidence_refuses_unapproved_session(): void
+    {
+        $collector = $this->actor();
+        $session = app(CashSessionService::class)->open($collector);
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $result = DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($period));
+        $this->assertFalse($result['custody']['recorded_rollforward_verified']);
+        $this->assertContains(['code' => 'custody_period_independent_count_missing', 'session_id' => (int) $session->id], $result['custody']['issues']);
+        $this->assertFalse($result['carry_evidence_verified']);
+        $this->assertFalse($result['closure_authorized']);
+    }
+
     public function test_cash_period_evidence_requires_final_independent_count_and_ignores_next_period_funding(): void
     {
         [$counter, $reviewer, $account] = $this->fixture('95.00', funded: true);
