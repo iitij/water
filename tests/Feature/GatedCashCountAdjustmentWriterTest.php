@@ -10233,7 +10233,25 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertNotContains('settlement_sources_unmatched', $report['blockers']);
         $this->assertNull($current['cutoff_evidence_manifest']);
         $manifest = $report['cutoff_evidence_manifest'];
-        $this->assertSame(4, $manifest['format_version']);
+        $this->assertSame(5, $manifest['format_version']);
+        $heldMovements = $report['cutoff_held_movements'];
+        $this->assertTrue($heldMovements['matched'], json_encode($heldMovements));
+        $this->assertCount(2, $heldMovements['rows']);
+        $this->assertSame(hash('sha256', json_encode($heldMovements, JSON_THROW_ON_ERROR)), $manifest['held_movements_hash']);
+        $this->assertNotContains('cutoff_held_movements_unmatched', $report['blockers']);
+        $held = $report['held_liabilities'];
+        $held['rows'][0]['owners'][0]['paid_minor']++;
+        $held['rows'][0]['owners'][0]['assigned_minor']++;
+        // Gross effects differ while net movement remains unchanged.
+        $heldMismatch = app(\App\Services\FinancialCutoffMovementReconciliation::class)->inspectHeld($held, $report['movements']);
+        $this->assertFalse($heldMismatch['matched']);
+        $this->assertContains('cutoff_held_movement_mismatch', array_column($heldMismatch['issues'], 'code'));
+        $orphanHeld = $report['movements'];
+        $orphanHeld['rows'][] = ['sector' => 'held_liability_effect', 'key' => 'lot-999999999',
+            'recorded_opening_document_minor' => 0, 'incoming_minor' => 0, 'outgoing_minor' => 1, 'net_movement_minor' => -1];
+        $heldOrphan = app(\App\Services\FinancialCutoffMovementReconciliation::class)->inspectHeld($report['held_liabilities'], $orphanHeld);
+        $this->assertFalse($heldOrphan['matched']);
+        $this->assertContains('cutoff_held_movement_source_missing', array_column($heldOrphan['issues'], 'code'));
         $accountMovements = $report['cutoff_account_movements'];
         $this->assertTrue($accountMovements['matched'], json_encode($accountMovements));
         $this->assertCount(3, $accountMovements['rows']);
