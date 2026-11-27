@@ -8893,15 +8893,16 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 }
             }
         };
-        foreach (['FROZEN', 'CLOSED'] as $state) {
-            DB::table('financial_periods')->where('month', '2026-11')->update(['state' => $state]);
-            $attempt('2026-11-25 08:30:00');
-        }
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'FROZEN']);
+        $attempt('2026-11-25 08:30:00');
         DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'OPEN']);
         $attempt('2026-11-30 21:00:00');
         DB::table('financial_scopes')->update(['active_freeze_uuid' => self::ADJUST]);
         $attempt('2026-11-25 08:30:00');
         DB::table('financial_scopes')->update(['active_freeze_uuid' => null]);
+        // A closed period is terminal. Do not reopen it for another fixture.
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
+        $attempt('2026-11-25 08:30:00');
         $this->assertSame($before, DB::table('audit_events')->count());
         // Unrelated operational audit is not made subject to the financial period.
         DB::table('audit_events')->insert(['event' => 'qa.unrelated', 'source' => 'internal',

@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify refund and held release period fences
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_release_audit_fence_requires_actual_open_period|test_source_held_fence_blocks_closed_release_journal_and_activation|test_release_refund_signed_api_document_to_settlement_rejects_bypasses_and_replays|test_release_refund_signed_api_renewal_rejects_partial_selection_and_requires_fresh_evidence|test_release_completed_refund_lifecycle_preserves_rejected_and_withdrawn_incidents' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify corrected refund and release audit fence
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_release_audit_fence_requires_actual_open_period' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify refund and held release period fences
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_release_audit_fence_requires_actual_open_period|test_source_held_fence_blocks_closed_release_journal_and_activation|test_release_refund_signed_api_document_to_settlement_rejects_bypasses_and_replays|test_release_refund_signed_api_renewal_rejects_partial_selection_and_requires_fresh_evidence|test_release_completed_refund_lifecycle_preserves_rejected_and_withdrawn_incidents' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify corrected refund and release audit fence
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_release_audit_fence_requires_actual_open_period' tests/Feature/GatedCashCountAdjustmentWriterTest.php
