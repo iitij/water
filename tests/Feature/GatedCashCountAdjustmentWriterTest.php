@@ -10233,6 +10233,12 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertNotContains('settlement_sources_unmatched', $report['blockers']);
         $this->assertNull($current['cutoff_evidence_manifest']);
         $manifest = $report['cutoff_evidence_manifest'];
+        $this->assertSame(3, $manifest['format_version']);
+        $this->assertTrue($manifest['registry']['recorded_movements_matched']);
+        $this->assertSame($report['source']['registry_events'], $manifest['registry']['registry_events']);
+        $this->assertSame($report['movements']['movement_hash'], $manifest['registry']['movement_hash']);
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $manifest['registry']['movement_hash']);
+
         $this->assertTrue($manifest['all_listed_sectors_matched']);
         $this->assertFalse($manifest['independent_opening_verified']);
         $this->assertFalse($manifest['closure_authorized']);
