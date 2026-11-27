@@ -457,6 +457,28 @@ final class FinancialSourceInsertProtection
                     "EXISTS (SELECT 1 FROM {$parent} v WHERE ({$collision}) AND v.id <> OLD.id AND ({$linked}))");
             }
         }
+        // Allocation revision timestamps describe when the snapshot was
+        // recorded, not the effective date of the underlying transaction.
+        // Prevent appending rows to a frozen/closed recorded snapshot and
+        // serialize revision creation with the financial scope freeze.
+        $revisionFenced = static function (string $alias) use ($localDate, $current): string {
+            $date = $localDate($alias.'.created_at');
+            return "EXISTS (SELECT 1 FROM financial_periods p WHERE p.scope_key = 'water'
+                AND {$date} >= p.start_on AND {$date} < p.next_on
+                AND (p.state <> 'OPEN'
+                    OR EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id{$current})
+                    OR EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve'{$current})){$current})";
+        };
+        $freeze = "EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water' AND s.active_freeze_uuid IS NOT NULL{$current})";
+        foreach (['payment_allocation_revisions' => "({$freeze}) OR (".$revisionFenced('NEW').")",
+            'payment_allocations' => "({$freeze}) OR EXISTS (SELECT 1 FROM payment_allocation_revisions r
+                WHERE r.id = NEW.revision_id AND (".$revisionFenced('r')."){$current})"] as $table => $condition) {
+            $condition = preg_replace('/\s+/', ' ', trim($condition));
+            $msg = 'Financial allocation snapshot is fenced';
+            $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+            $defs['fin_'.$table.'_insert'] = [$table, "BEFORE INSERT ON {$table} FOR EACH ROW {$body}", $body, 'INSERT'];
+        }
         return $defs;
     }
 

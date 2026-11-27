@@ -9102,6 +9102,70 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($report, $diagnostic->inspect($reviewer, $period, $now));
     }
 
+    public function test_final_accounting_allocation_fence_and_guard_integrity(): void
+    {
+        $actor = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic allocation fence',
+            'square_id' => Square::create(['name' => 'Allocation fence square'])->id, 'status' => 'active']);
+        $writer = app(GatedCashReceiptWriter::class);
+        $writer->collect($actor, (int) $subscriber->id, '2.00', self::UUID, $this->nowAt());
+        $guard = app(\App\Services\AllocationHistoryProtection::class);
+        $this->assertTrue($guard->active());
+        $revision = (array) DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderByDesc('revision')->first();
+        $row = (array) DB::table('payment_allocations')->where('revision_id', $revision['id'])->sole();
+        $candidate = array_diff_key(array_replace($revision, ['revision' => $revision['revision'] + 1]), ['id' => true]);
+        $extra = array_diff_key(array_replace($row, ['position' => $row['position'] + 1]), ['id' => true]);
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(),
+            ['payment_allocation_revisions', 'payment_allocations', 'payments', 'transactions']);
+        $before = $snapshot();
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $period)->update(['state' => 'FROZEN']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+        $reject = function (callable $action): void {
+            try {
+                $action();
+                $this->fail('Expected allocation cutoff fence.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial allocation snapshot is fenced', $error->getMessage());
+            }
+        };
+        $reject(fn () => DB::table('payment_allocation_revisions')->insert($candidate));
+        $reject(fn () => DB::table('payment_allocations')->insert($extra));
+        DB::table('financial_periods')->where('id', $period)->update(['state' => 'CLOSED']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        $reject(fn () => DB::table('payment_allocation_revisions')->insert($candidate));
+        $reject(fn () => DB::table('payment_allocations')->insert($extra));
+        $this->assertEquals($before, $snapshot());
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $writer->collect($actor, (int) $subscriber->id, '1.00', self::NEXT, $later);
+        $this->assertSame(300, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertSame($revision, (array) DB::table('payment_allocation_revisions')->where('id', $revision['id'])->sole());
+        $this->assertSame($row, (array) DB::table('payment_allocations')->where('id', $row['id'])->sole());
+        DB::unprepared('DROP TRIGGER allocation_row_reject_delete');
+        $this->assertFalse($guard->active());
+        $fake = DB::getDriverName() === 'sqlite'
+            ? 'CREATE TRIGGER allocation_row_reject_delete BEFORE DELETE ON payment_allocations BEGIN SELECT 1; END'
+            : 'CREATE TRIGGER allocation_row_reject_delete BEFORE DELETE ON payment_allocations FOR EACH ROW SET @qa_noop = 1';
+        DB::unprepared($fake);
+        try {
+            foreach ([fn () => $guard->active(), fn () => $guard->install()] as $attempt) {
+                try {
+                    $attempt();
+                    $this->fail('Counterfeit allocation guard accepted.');
+                } catch (\LogicException $error) {
+                    $this->assertSame('Unexpected allocation history protection: allocation_row_reject_delete', $error->getMessage());
+                }
+            }
+        } finally {
+            DB::unprepared('DROP TRIGGER allocation_row_reject_delete');
+            $guard->install();
+        }
+        $this->assertTrue($guard->active());
+    }
+
     public function test_final_accounting_cash_session_fence_preserves_closed_evidence(): void
     {
         $collector = $this->actor();
