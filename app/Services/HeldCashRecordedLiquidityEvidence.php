@@ -63,6 +63,7 @@ final class HeldCashRecordedLiquidityEvidence
                 'cash_count_adjustment' => app(TreasuryAdjustmentEvidence::class)->leg($id),
                 'late_cash_receipt' => app(TreasuryCollectionEvidence::class)->leg($id),
                 'held_cash_payout' => $this->payout($row),
+                'custody_shortage_recovery' => $this->recovery($row),
                 default => throw new DomainException('held_cash_liquidity_source'),
             };
             $this->need($proof['amount_minor'] === $minor, 'held_cash_liquidity_source');
@@ -93,10 +94,32 @@ final class HeldCashRecordedLiquidityEvidence
     private function exclusive(object $row): void
     {
         $expected = self::SOURCE_COLUMNS[$row->kind] ?? null;
-        $this->need($expected !== null, 'held_cash_liquidity_source');
+        // A recovery uses the separate immutable recovery document, not a
+        // legacy source column. Its dedicated proof is mandatory below.
+        $this->need($expected !== null || $row->kind === 'custody_shortage_recovery', 'held_cash_liquidity_source');
         foreach (self::SOURCE_COLUMNS as $column) {
             $this->need(($row->$column !== null) === ($column === $expected), 'held_cash_liquidity_source');
         }
+    }
+
+    private function recovery(object $row): array
+    {
+        $proof = app(CustodyShortageRecoveryWriter::class)->leg((int) $row->id);
+        $recovery = DB::table('custody_shortage_recoveries')
+            ->where('treasury_posting_id', $row->id)->lockForUpdate()->first();
+        $registered = DB::table('financial_posting_events as e')
+            ->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
+            ->where('e.scope_key', 'water')->where('e.source_type', 'treasury_posting')
+            ->where('e.source_id', $proof['source_id'])->where('e.leg', 'treasury')
+            ->select('e.*', 'o.effective_on')->lockForUpdate()->get();
+        $this->need($recovery !== null && $registered->count() === 1, 'held_cash_liquidity_source');
+        $event = $registered->first();
+        $this->need($event->operation_uuid === $recovery->operation_uuid
+            && $event->effective_on === $row->effective_on
+            && $event->currency === $proof['currency']
+            && SignedMinor::parse($event->amount_minor) === $proof['amount_minor']
+            && hash_equals($proof['source_hash'], $event->source_hash), 'held_cash_liquidity_source');
+        return $proof;
     }
 
     private function payout(object $row): array
