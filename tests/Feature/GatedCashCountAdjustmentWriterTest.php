@@ -13085,6 +13085,29 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             }
         }
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+
+        // Feature switches are not an authorization boundary for a configured scope.
+        config(['financial_candidate.invoices' => false, 'financial_candidate.cash_receipts' => false,
+            'financial_candidate.void_api' => false, 'financial_candidate.cash_handovers' => false,
+            'financial_candidate.refunds' => false]);
+        // Use valid input for the per-reading path: invalid input is not proof.
+        $actions[1] = fn () => $historical->correctReadings($invoice, $reviewer,
+            [['reading_id' => (int) $invoice->readings()->sole()->id, 'corrected_units' => '1.00']], self::REASON, self::EVIDENCE);
+        foreach (['OPEN', 'FROZEN', 'CLOSED'] as $state) {
+            DB::table('financial_periods')->where('month', '2026-11')->update(['state' => $state]);
+            foreach ($actions as $index => $action) {
+                try {
+                    $action();
+                    $this->fail('Legacy correction bypassed configured scope with switches disabled.');
+                } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                    $this->assertSame(409, $error->getStatusCode());
+                    $this->assertSame($index === 2
+                        ? 'تصحيح السند التاريخي خارج نطاق النظام المحاسبي الجديد.'
+                        : 'التصحيح التاريخي للفواتير خارج نطاق النظام المحاسبي الجديد.', $error->getMessage());
+                }
+            }
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        }
         $this->assertSame(190, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
 

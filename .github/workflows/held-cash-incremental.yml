@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify raw observation graph freeze and guard inventory
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_raw_observation_graph_freeze_blocks_all_mutations_and_detects_missing_guard|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime|test_source_graph_fence_protects_square_cascade_and_parent_replacement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify legacy correction exclusion and supported receipt cancellation
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_candidate_refuses_legacy_historical_correction_entrypoints_without_mutations|test_release_void_intent_replays_pending_and_immediate_but_never_reopens_rejected_request' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify raw observation graph freeze and guard inventory
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_raw_observation_graph_freeze_blocks_all_mutations_and_detects_missing_guard|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime|test_source_graph_fence_protects_square_cascade_and_parent_replacement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify legacy correction exclusion and supported receipt cancellation
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_candidate_refuses_legacy_historical_correction_entrypoints_without_mutations|test_release_void_intent_replays_pending_and_immediate_but_never_reopens_rejected_request' tests/Feature/GatedCashCountAdjustmentWriterTest.php
