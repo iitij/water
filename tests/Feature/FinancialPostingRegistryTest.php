@@ -102,6 +102,35 @@ final class FinancialPostingRegistryTest extends TestCase
         }
         $this->assertTrue($guard->active());
         $this->assertTrue(app(\App\Services\FinancialGuardInventory::class)->inspect()['held_documents']);
+
+        foreach ([
+            [\App\Services\HeldRegistryLinkProtection::class, 'fin_held_link_held_cash_assignment', 'fin_held_link_held_cash_payout', 'treasury_held_cash_payouts'],
+            [\App\Services\HeldCashDestinationProtection::class, 'fin_held_dest_treasury_held_cash_assignments_i', 'fin_held_dest_treasury_held_cash_payouts_i', 'treasury_held_cash_payouts'],
+        ] as [$service, $missing, $wrong, $table]) {
+            $protection = app($service);
+            $this->assertTrue($protection->active());
+            DB::unprepared('DROP TRIGGER '.$missing);
+            DB::unprepared('DROP TRIGGER '.$wrong);
+            $body = DB::getDriverName() === 'sqlite' ? 'BEGIN SELECT 1; END' : 'FOR EACH ROW SET NEW.amount_minor = NEW.amount_minor';
+            DB::unprepared("CREATE TRIGGER {$wrong} BEFORE INSERT ON {$table} {$body}");
+            try {
+                $this->assertFalse($protection->active());
+                try {
+                    $protection->install();
+                    $this->fail('Accepted conflicting trigger definition.');
+                } catch (\LogicException $error) {
+                    $this->assertStringContainsString($wrong, $error->getMessage());
+                }
+                $exists = DB::getDriverName() === 'sqlite'
+                    ? DB::table('sqlite_master')->where('type', 'trigger')->where('name', $missing)->exists()
+                    : \App\Services\FinancialTriggerMetadata::query()->where('TRIGGER_NAME', $missing)->isNotEmpty();
+                $this->assertFalse($exists, 'Installation must not perform partial DDL.');
+            } finally {
+                DB::unprepared('DROP TRIGGER '.$wrong);
+                $protection->install();
+            }
+            $this->assertTrue($protection->active());
+        }
     }
 
     public function test_registry_protection_rejects_direct_mutation_and_fenced_inserts(): void
