@@ -95,6 +95,42 @@ final class GatedCashReceiptWriterTest extends TestCase
         }
     }
 
+    public function test_subscriber_financial_writers_reject_missing_live_source_protection(): void
+    {
+        $actor = $this->actor();
+        $subscriber = $this->subscriber();
+        $writer = app(GatedCashReceiptWriter::class);
+        $documents = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $post = fn () => $writer->collect($actor, $subscriber->id, '10.25', self::UUID, $this->nowAt());
+        $tables = ['payments', 'invoices', 'transactions', 'payment_allocations',
+            'payment_allocation_revisions', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        foreach ([
+            ['fin_ledger_source_insert', \App\Services\LedgerSourceInsertProtection::class],
+            ['fin_registry_source_identity_insert', \App\Services\RegistrySourceIdentityProtection::class],
+            ['reg_invoice_projection_update', \App\Services\InvoiceProjectionProtection::class],
+        ] as [$trigger, $guard]) {
+            $before = $snapshot();
+            DB::unprepared('DROP TRIGGER '.$trigger);
+            try {
+                foreach ([
+                    $post,
+                    fn () => $documents->issue($actor, $subscriber->id, 999999, self::OTHER, $this->nowAt()),
+                    fn () => $documents->cancel($actor, 999999, 'Synthetic cancellation', self::OTHER, $this->nowAt()),
+                    fn () => $documents->transfer($actor, 999999, $subscriber->id, 'Synthetic transfer', 'Synthetic independent proof', self::OTHER, $this->nowAt()),
+                ] as $action) {
+                    $this->rejects('subscriber_financial_write_protection_missing', $action);
+                    $this->assertEquals($before, $snapshot());
+                }
+            } finally {
+                app($guard)->install();
+            }
+        }
+        $this->assertTrue($post()['registry_created']);
+        $this->assertFalse($post()['registry_created']);
+        $this->assertSame(1025, $subscriber->fresh()->getAccountBalanceMinor());
+    }
+
     public function test_release_cash_service_fence_blocks_bypass_and_preserves_exact_replay(): void
     {
         $actor = $this->actor();
