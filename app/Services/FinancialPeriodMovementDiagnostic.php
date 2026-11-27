@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Support\SignedMinor;
+use DateTimeImmutable;
+use DateTimeZone;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
@@ -41,9 +43,18 @@ final class FinancialPeriodMovementDiagnostic
             'start_on' => $base['start_on'], 'next_on' => $base['next_on']])."\n");
         $events = DB::table('financial_posting_events as e')
             ->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
-            ->where('o.period_id', $periodId)->select('e.*', 'o.effective_on')
+            ->where('o.period_id', $periodId)->select('e.*', 'o.effective_on', 'o.recorded_at_utc')
             ->orderBy('e.operation_uuid')->orderBy('e.source_type')->orderBy('e.source_id')->orderBy('e.leg')
             ->lockForUpdate()->get();
+        $end = new DateTimeImmutable($base['next_on'], new DateTimeZone('Asia/Aden'));
+        foreach ($events as $event) {
+            if (new DateTimeImmutable($event->recorded_at_utc, new DateTimeZone('UTC')) >= $end) {
+                $base['source_issues'][] = ['code' => 'period_movement_recorded_after_cutoff',
+                    'operation_uuid' => $event->operation_uuid];
+                return $base + ['recorded_movements_verified' => false, 'rows' => [], 'sector_totals' => [],
+                    'movement_hash' => null, 'registry_events' => $source['registry_events']];
+            }
+        }
         foreach ($events as $event) {
             [$sector, $owner, $opening] = $this->destination($event);
             $minor = SignedMinor::parse($event->amount_minor);

@@ -175,6 +175,7 @@ final class FinancialSettlementCoverageDiagnostic
     {
         $issues = [];
         $rows = [];
+        $end = new \DateTimeImmutable($period->next_on, new \DateTimeZone('Asia/Aden'));
         if (count($candidates) !== $accountCount) {
             $issues[] = ['code' => 'bank_statement_period_coverage_incomplete'];
         }
@@ -192,15 +193,16 @@ final class FinancialSettlementCoverageDiagnostic
             $openingDocument = 0;
             $proofs = [];
             $valid = true;
-            $registered = static function (string $type, string $source, string $leg, string $date, int $minor) use ($period): ?object {
+            $registered = static function (string $type, string $source, string $leg, string $date, int $minor) use ($period, $end): ?object {
                 $rows = DB::table('financial_posting_events as e')
                     ->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
                     ->where('e.scope_key', 'water')->where('e.source_type', $type)
                     ->where('e.source_id', $source)->where('e.leg', $leg)
-                    ->select('e.*', 'o.period_id', 'o.effective_on')->lockForUpdate()->get();
+                    ->select('e.*', 'o.period_id', 'o.effective_on', 'o.recorded_at_utc')->lockForUpdate()->get();
                 if ($rows->count() !== 1) return null;
                 $event = $rows->first();
                 return (int) $event->period_id === (int) $period->id && $event->effective_on === $date
+                    && new \DateTimeImmutable($event->recorded_at_utc, new \DateTimeZone('UTC')) < $end
                     && $event->currency === 'YER' && \App\Support\SignedMinor::parse($event->amount_minor) === $minor
                     ? $event : null;
             };

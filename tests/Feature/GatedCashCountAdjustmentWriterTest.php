@@ -10946,6 +10946,36 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             '2.50', 'QA-NEXT-FUND', self::EVIDENCE, self::NEXT, $later);
         $this->assertSame(9250, app(TreasuryRegisterService::class)->inspect($reviewer, $id)['provisional_recorded_balance_minor']);
         $this->assertSame($proof, $inspect());
+        $guard = app(\App\Services\FinancialPostingRegistryProtection::class);
+        $op = DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)->sole();
+        DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
+        try {
+            DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)
+                ->update(['recorded_at_utc' => '2026-11-30T21:00:00.000000Z']);
+        } finally {
+            $guard->install();
+        }
+        try {
+            $late = $inspect();
+            $this->assertFalse($late['all_accounts_matched']);
+            $this->assertSame([], $late['rows']);
+            $this->assertContains(['code' => 'cash_period_registered_movements_unverified'], $late['issues']);
+            $movement = DB::transaction(fn () => app(\App\Services\FinancialPeriodMovementDiagnostic::class)->inspect($periodId));
+            $this->assertFalse($movement['recorded_movements_verified']);
+            $this->assertSame([], $movement['rows']);
+            $this->assertSame([], $movement['sector_totals']);
+            $this->assertNull($movement['movement_hash']);
+            $this->assertContains(['code' => 'period_movement_recorded_after_cutoff', 'operation_uuid' => self::OTHER], $movement['source_issues']);
+        } finally {
+            DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
+            try {
+                DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)
+                    ->update(['recorded_at_utc' => $op->recorded_at_utc]);
+            } finally {
+                $guard->install();
+            }
+        }
+        $this->assertSame($proof, $inspect());
     }
 
     public function test_cash_period_evidence_rejects_movement_after_final_count(): void
@@ -11029,6 +11059,30 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $writer->record($reviewer, $sid, $line, '2026-12-02', 'QA-CLOSE-NEXT-FEE',
             'Independent documented bank service fee', self::EVIDENCE, self::NEXT, $later);
         $this->assertSame(9860, app(TreasuryRegisterService::class)->inspect($reviewer, $id)['provisional_recorded_balance_minor']);
+        $this->assertSame($proof, $inspect()['bank_period_evidence']);
+        $guard = app(\App\Services\FinancialPostingRegistryProtection::class);
+        $op = DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)->sole();
+        DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
+        try {
+            DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)
+                ->update(['recorded_at_utc' => '2026-11-30T21:00:00.000000Z']);
+        } finally {
+            $guard->install();
+        }
+        try {
+            $late = $inspect()['bank_period_evidence'];
+            $this->assertFalse($late['all_accounts_matched']);
+            $this->assertSame([], $late['rows']);
+            $this->assertContains(['code' => 'bank_period_registered_movements_unmatched', 'account_id' => $id], $late['issues']);
+        } finally {
+            DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
+            try {
+                DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)
+                    ->update(['recorded_at_utc' => $op->recorded_at_utc]);
+            } finally {
+                $guard->install();
+            }
+        }
         $this->assertSame($proof, $inspect()['bank_period_evidence']);
     }
 
