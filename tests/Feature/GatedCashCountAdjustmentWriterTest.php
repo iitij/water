@@ -6046,6 +6046,45 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_scheduled_invoice_status_refresh_respects_financial_scope_and_preserves_postings(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic status tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-STATUS-GATE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        \App\Models\Setting::set('grace_period', '0');
+        $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id,
+            (int) $meter->id, '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $this->assertSame('issued', $invoice->fresh()->status);
+        $tables = ['transactions', 'payments', 'payment_allocations', 'payment_allocation_revisions',
+            'financial_posting_operations', 'financial_posting_events', 'treasury_postings', 'audit_events'];
+        $snapshot = fn (string $table) => DB::table($table)->orderBy($table === 'financial_posting_operations' ? 'operation_uuid' : 'id')
+            ->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        // A registered invoice must not fall back to an unguarded scheduled path
+        // merely because its candidate switch is disabled.
+        config(['financial_candidate.invoices' => false]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-27T08:30:00Z'));
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'FROZEN']);
+        $this->artisan('accounting:refresh-invoice-statuses')->assertExitCode(1);
+        $this->assertSame('issued', $invoice->fresh()->status);
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
+        $this->artisan('accounting:refresh-invoice-statuses')->assertExitCode(1);
+        $this->assertSame('issued', $invoice->fresh()->status);
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $this->artisan('accounting:refresh-invoice-statuses')->assertExitCode(0);
+        $this->assertSame('overdue', $invoice->fresh()->status);
+        $this->assertSame('0.00', $invoice->fresh()->amount_paid);
+        $this->artisan('accounting:refresh-invoice-statuses')->expectsOutput('Updated 0 invoice statuses.')->assertExitCode(0);
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame('CLOSED', DB::table('financial_periods')->where('month', '2026-11')->value('state'));
+    }
+
     public function test_release_invoice_projection_db_fence_requires_allocation_and_reversal_evidence(): void
     {
         [, , $account, , , $subscriber] = $this->held();

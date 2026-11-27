@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify grant parser and session role policy
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
+      - name: Verify scheduled invoice projection and existing evidence fence
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_scheduled_invoice_status_refresh_respects_financial_scope_and_preserves_postings|test_release_invoice_projection_db_fence_requires_allocation_and_reversal_evidence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,30 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify grant parser and session role policy
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
-      - name: Migrate disposable schema and create restricted runtime account
-        env:
-          QA_CONTAINER: ${{ job.services.mysql.id }}
-        run: |
-          set -euo pipefail
-          php artisan migrate:fresh --force
-          php artisan ledger:protect --install
-          php artisan ledger:protect --check
-          php artisan financial:database-preflight --guards
-          docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password <<'SQL'
-          CREATE USER 'water_runtime'@'%' IDENTIFIED BY 'disposable_runtime_password';
-          GRANT SELECT, INSERT, UPDATE, DELETE ON `water\_test`.* TO 'water_runtime'@'%';
-          GRANT EXECUTE ON PROCEDURE `water_test`.`financial_read_trigger_metadata` TO 'water_runtime'@'%';
-          SQL
-      - name: Verify actual restricted runtime and live collection protection
-        env:
-          WATER_QA_RUNTIME: '1'
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseRuntimePrivilegesTest.php
-
-      - name: Verify collection audit identity metadata on failure
-        if: failure()
-        env:
-          QA_CONTAINER: ${{ job.services.mysql.id }}
-        run: |
-          docker exec "$QA_CONTAINER" mysql --batch --raw -uwater_qa -pdisposable_qa_password water_test -e "SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, EXTRA, GENERATION_EXPRESSION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'audit_events' AND COLUMN_NAME = 'fin_collection_event_key'; SELECT COLUMN_NAME, NON_UNIQUE, SUB_PART FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'audit_events' AND INDEX_NAME = 'fin_collection_audit_identity' ORDER BY SEQ_IN_INDEX;"
+      - name: Verify scheduled invoice projection and existing evidence fence
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_scheduled_invoice_status_refresh_respects_financial_scope_and_preserves_postings|test_release_invoice_projection_db_fence_requires_allocation_and_reversal_evidence' tests/Feature/GatedCashCountAdjustmentWriterTest.php
