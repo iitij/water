@@ -9102,6 +9102,33 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($report, $diagnostic->inspect($reviewer, $period, $now));
     }
 
+    public function test_final_accounting_subscriber_cutoff_preserves_prior_revision(): void
+    {
+        $actor = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic cutoff subscriber',
+            'square_id' => Square::create(['name' => 'Cutoff square'])->id, 'status' => 'active']);
+        $writer = app(GatedCashReceiptWriter::class);
+        $writer->collect($actor, (int) $subscriber->id, '2.00', self::UUID, $this->nowAt());
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($period));
+        $this->assertFalse($inspect()['period_ended']);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $first = $inspect();
+        $this->assertTrue($first['scanned_cutoff_accounts_match'], json_encode($first));
+        $this->assertCount(1, $first['rows']);
+        $this->assertSame(200, $first['rows'][0]['recorded_balance_minor']);
+        $this->assertSame(200, $first['rows'][0]['unallocated_minor']);
+        $this->assertFalse($first['allocation_policy_verified']);
+        $this->assertFalse($first['closure_authorized']);
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $writer->collect($actor, (int) $subscriber->id, '1.00', self::NEXT, $later);
+        $this->assertSame(300, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertSame($first, $inspect());
+    }
+
     public function test_final_accounting_allocation_fence_and_guard_integrity(): void
     {
         $actor = $this->actor();

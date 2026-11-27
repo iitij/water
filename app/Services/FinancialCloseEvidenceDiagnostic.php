@@ -83,6 +83,7 @@ final class FinancialCloseEvidenceDiagnostic
         $incident = $this->refundIncidents();
         $batchCoverage = $this->refunds->verifyBatchAuditCoverage();
         $subscriber = $ended ? null : $this->subscribers->inspect($periodId);
+        $subscriberCutoff = $ended ? app(FinancialSubscriberPeriodEvidence::class)->inspect($periodId) : null;
         $continuity = null;
         if ($period->state === 'CLOSED' || $period->state === 'FROZEN') {
             $state = app(FinancialCloseJournalReader::class)->inspect('water', $periodId)['state'];
@@ -110,11 +111,12 @@ final class FinancialCloseEvidenceDiagnostic
         if ($outstanding !== null && ! $outstanding['transit']['recorded_rollforward_verified']) $blockers[] = 'transit_period_unmatched';
         if ($outstanding !== null && ! $outstanding['custody']['recorded_rollforward_verified']) $blockers[] = 'custody_period_unmatched';
         if ($outstanding !== null && ! $outstanding['custody']['all_count_variances_resolved']) $blockers[] = 'custody_count_variances_unresolved';
+        if ($subscriberCutoff !== null && ! $subscriberCutoff['scanned_cutoff_accounts_match']) $blockers[] = 'subscriber_cutoff_sources_unmatched';
         sort($blockers, SORT_STRING);
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
-            'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
+            'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'subscriber_period_evidence' => $subscriberCutoff, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
             'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
     }
