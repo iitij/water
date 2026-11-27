@@ -72,8 +72,9 @@ final class FinancialOutstandingPeriodEvidence
             $recovery = $source['recovery_disposition'] ?? null;
             $priorLoss = $loss !== null && $loss['approved_on'] < $start;
             $priorRecovery = $recovery !== null && $recovery['effective_on'] < $start;
-            $shortageOpening = $row['approval_before_period'] && ! $priorLoss
-                ? SignedMinor::subtract($shortage, $priorRecovery ? $recovery['recovered_minor'] : 0) : 0;
+            $shortageOpening = $row['approval_before_period']
+                ? SignedMinor::subtract(SignedMinor::subtract($shortage, $priorRecovery ? $recovery['recovered_minor'] : 0),
+                    $priorLoss ? $loss['confirmed_loss_minor'] : 0) : 0;
             $shortageNew = $row['approval_before_period'] ? 0 : $shortage;
             $classified = $loss !== null && ! $priorLoss ? $loss['confirmed_loss_minor'] : 0;
             $recovered = $recovery !== null && ! $priorRecovery ? $recovery['recovered_minor'] : 0;
@@ -230,10 +231,7 @@ final class FinancialOutstandingPeriodEvidence
                 if ($source['variance_minor'] < 0) {
                     $recovery = $this->recoveryDisposition($session, $audits[0], $source, $next);
                     $source['loss_disposition'] = app(CustodyShortageLossDecision::class)
-                        ->verifiedThrough($session, $audits[0], $source['shortage_minor'], $next);
-                    if ($recovery !== null && $source['loss_disposition'] !== null) {
-                        throw new DomainException('shortage_recovery_loss_conflict');
-                    }
+                        ->verifiedThrough($session, $audits[0], $source['shortage_minor'], $next, $recovery);
                     $source['recovery_disposition'] = $recovery;
                     $source['variance_disposition_verified'] = $source['loss_disposition'] !== null
                         || ($recovery !== null && $recovery['recovered_minor'] === $source['shortage_minor']);
