@@ -244,6 +244,73 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 2);
     }
 
+    #[\PHPUnit\Framework\Attributes\DataProvider('treasuryEvidenceGuardCases')]
+    public function test_treasury_evidence_writers_require_live_protection(string $kind): void
+    {
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        if ($kind === 'count') {
+            [, $reviewer, , $count] = $this->fixture();
+            $action = fn () => $this->postAdjustment($reviewer, $count);
+            $uuid = self::ADJUST;
+            $minor = -25;
+        } elseif ($kind === 'handover') {
+            [, , $account, , , $subscriber] = $this->held();
+            $collector = $this->actor();
+            $reviewer = $this->actor();
+            $sessions = app(CashSessionService::class);
+            $session = $sessions->open($collector);
+            app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
+                '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+            $session = $sessions->decide($sessions->close($session, '1.00', null, $session->user), true, $reviewer);
+            $action = fn () => app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer,
+                (int) $session->id, (int) $account['id'], '0.40', 'QA-LIVE-HANDOVER',
+                '2026-11-25', self::EVIDENCE, $uuid, $this->nowAt());
+            $minor = 40;
+        } else {
+            $issuer = $this->actor();
+            $reviewer = $this->actor();
+            $account = app(GatedTreasuryOpeningFundingWriter::class)->open($issuer, [
+                'code' => 'QA-LIVE-BANK', 'name' => 'Synthetic bank fee account', 'channel' => 'bank',
+                'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+                'opening_reference' => 'QA-LIVE-OPEN', 'opening_evidence' => self::EVIDENCE,
+            ], self::UUID, $this->nowAt())['account'];
+            $statement = app(\App\Services\BankReconciliationService::class)->import($issuer, (int) $account['id'], [
+                'reference' => 'QA-LIVE-STMT', 'from_date' => '2026-11-25', 'to_date' => '2026-11-25',
+                'opening_amount' => '100.00', 'closing_amount' => '99.60', 'evidence' => self::EVIDENCE,
+                'lines' => [['bank_reference' => 'QA-LIVE-DEBIT', 'booked_on' => '2026-11-25', 'amount' => '-0.40']],
+            ]);
+            $statementId = (int) $statement['statement']['id'];
+            $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->value('id');
+            $action = fn () => app(\App\Services\GatedBankFeeWriter::class)->record($reviewer, $statementId,
+                $lineId, '2026-11-25', 'QA-LIVE-FEE', 'Independent documented bank fee',
+                self::EVIDENCE, $uuid, $this->nowAt());
+            $minor = -40;
+        }
+        $tables = ['payments', 'transactions', 'cash_sessions', 'cash_handovers',
+            'treasury_cash_adjustments', 'treasury_bank_fees', 'treasury_postings', 'bank_statement_matches',
+            'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_dated_treasury_postings_insert');
+        try {
+            $this->rejects('treasury_financial_write_protection_missing', $action);
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            app(\App\Services\DatedFinancialSourcePeriodProtection::class)->install();
+        }
+        $this->assertTrue($action()['registry_created']);
+        $this->assertFalse($action()['registry_created']);
+        $this->assertDatabaseHas('financial_posting_events', [
+            'operation_uuid' => $uuid, 'leg' => 'treasury', 'amount_minor' => $minor,
+        ]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+    }
+
+    public static function treasuryEvidenceGuardCases(): array
+    {
+        return [['count'], ['handover'], ['bank_fee']];
+    }
+
     public function test_confirmed_shortage_posts_exact_negative_variance_and_replays_once(): void
     {
         [, $reviewer, , $count] = $this->fixture();
