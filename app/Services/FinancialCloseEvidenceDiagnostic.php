@@ -124,7 +124,7 @@ final class FinancialCloseEvidenceDiagnostic
         if ($subscriberCutoff !== null && ! $subscriberCutoff['allocation_policy_verified']) $blockers[] = 'subscriber_allocation_policy_unverified';
         sort($blockers, SORT_STRING);
         $manifest = $ended ? $this->cutoffManifest($period, $cashEvidence,
-            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims) : null;
+            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement) : null;
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
@@ -140,7 +140,8 @@ final class FinancialCloseEvidenceDiagnostic
      * in nature; pending payout authority is a subset, not an additional balance.
      * A fingerprint is not a signed close journal or independent opening proof.
      */
-    private function cutoffManifest(object $period, array $cash, array $bank, array $subscriber, array $outstanding, array $claims): array
+    private function cutoffManifest(object $period, array $cash, array $bank, array $subscriber, array $outstanding, array $claims,
+        array $source, array $movement): array
     {
         $sections = [
             'cash' => [$cash['all_accounts_matched'], $cash],
@@ -161,11 +162,24 @@ final class FinancialCloseEvidenceDiagnostic
                 'row_count' => $verified ? count($evidence['rows']) : null,
                 'source_hash' => $verified ? hash('sha256', json_encode($evidence, JSON_THROW_ON_ERROR)) : null];
         }
-        $manifest = ['format_version' => 2, 'scope' => 'water', 'period_id' => (int) $period->id,
+        // Bind exact registered movement identity, not just matching sector totals.
+        $registryMatched = $source['scanned_sources_match'] === true
+            && $source['unverified_registry_legs'] === 0
+            && $source['expected_legs'] === $source['matched_legs']
+            && $source['matched_legs'] === $source['registry_events']
+            && $movement['recorded_movements_verified'] === true
+            && $movement['registry_events'] === $source['registry_events']
+            && is_string($movement['movement_hash'])
+            && preg_match('/\\A[0-9a-f]{64}\\z/', $movement['movement_hash']) === 1;
+        $registry = ['recorded_movements_matched' => $registryMatched,
+            'registry_events' => $source['registry_events'],
+            'movement_hash' => $registryMatched ? $movement['movement_hash'] : null];
+        $manifest = ['format_version' => 3, 'scope' => 'water', 'period_id' => (int) $period->id,
             'start_on' => $period->start_on, 'next_on' => $period->next_on,
             'sectors' => $sectors, 'all_listed_sectors_matched' => $matched,
+            'registry' => $registry,
             'independent_opening_verified' => false, 'closure_authorized' => false];
-        return $manifest + ['manifest_hash' => $matched ? hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)) : null];
+        return $manifest + ['manifest_hash' => $matched && $registryMatched ? hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)) : null];
     }
 
     /** Scope-wide, deliberately not netted or restricted to the target month:
