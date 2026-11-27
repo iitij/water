@@ -32,6 +32,60 @@ final class FinancialCollectionPeriodEvidence
             : is_scalar($a) && is_scalar($b) && (string) $a === (string) $b;
     }
 
+    /** Verify the exact persisted posting operation and its source legs. */
+    private function posting(object $doc, string $table, object $period, string $cutoff, int $minor): array
+    {
+        $op = DB::table('financial_posting_operations')->where('operation_uuid', $doc->sync_uuid)->lockForUpdate()->first();
+        if ($op === null) throw new DomainException('collection_approval_unregistered');
+        if ($op->scope_key !== 'water' || $op->effective_on >= $period->next_on
+            || $this->instant($op->recorded_at_utc) >= $cutoff || $minor <= 0) {
+            throw new DomainException('collection_approval_posting_cutoff_conflict');
+        }
+        $payment = \App\Models\Payment::query()->lockForUpdate()->find($doc->payment_id);
+        if ($payment === null || $payment->sync_uuid !== $doc->sync_uuid
+            || (int) $payment->subscriber_id !== (int) $doc->subscriber_id
+            || \App\Support\AccountMoney::stored($payment) !== $minor
+            || $payment->payment_date->toDateString() !== $op->effective_on) {
+            throw new DomainException('collection_approval_payment_conflict');
+        }
+        $entry = \App\Models\Transaction::query()->where('reference_type', \App\Models\Payment::class)
+            ->where('reference_id', $payment->id)->where('type', 'payment')->lockForUpdate()->sole();
+        $legs = [app(FinancialLedgerEvidence::class)->leg((int) $entry->id)];
+        $counted = $table === 'late_receipt_reviews' && $doc->settlement_method === 'already_counted';
+        if ($counted) {
+            $allocation = app(GatedCountedCashWriter::class)->verifySessionThrough((int) $doc->cash_session_id, $period->next_on);
+            if (count(array_filter($allocation['allocations'], fn ($row) => $row['review_id'] === (int) $doc->id
+                && $row['payment_id'] === (int) $payment->id && $row['amount_minor'] === $minor)) !== 1) {
+                throw new DomainException('collection_approval_counted_proof_conflict');
+            }
+        } else {
+            $bank = $table === 'noncash_collection_claims' || $doc->settlement_method === 'verified_non_cash';
+            if (! $bank && $doc->settlement_method !== 'separate_handover') throw new DomainException('collection_approval_method_conflict');
+            $source = $bank
+                ? DB::table('treasury_bank_collections')->where('payment_id', $payment->id)->lockForUpdate()->sole()
+                : DB::table('treasury_late_cash_receipts')->where('late_receipt_review_id', $doc->id)->lockForUpdate()->sole();
+            $posted = DB::table('treasury_postings')->where($bank ? 'treasury_bank_collection_id' : 'treasury_late_cash_receipt_id', $source->id)
+                ->lockForUpdate()->sole();
+            if ($posted->effective_on !== $op->effective_on) throw new DomainException('collection_approval_posting_cutoff_conflict');
+            $legs[] = app(TreasuryCollectionEvidence::class)->leg((int) $posted->id);
+        }
+        app(FinancialPostingRegistry::class)->verifyPeriod('water', (int) $op->period_id);
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $doc->sync_uuid)->orderBy('id')->lockForUpdate()->get();
+        if ($events->count() !== count($legs)) throw new DomainException('collection_approval_leg_count_conflict');
+        $proof = [];
+        foreach ($legs as $leg) {
+            $event = $events->first(fn ($row) => $row->source_type === $leg['source_type'] && $row->source_id === $leg['source_id']
+                && $row->leg === $leg['leg']);
+            if ($event === null || (string) $event->amount_minor !== (string) $minor || $leg['amount_minor'] !== $minor
+                || $event->currency !== 'YER' || ! hash_equals($leg['source_hash'], $event->source_hash)) {
+                throw new DomainException('collection_approval_leg_conflict');
+            }
+            $proof[] = ['source_type' => $leg['source_type'], 'source_id' => $leg['source_id'], 'leg' => $leg['leg'],
+                'source_hash' => $leg['source_hash']];
+        }
+        return ['operation_uuid' => $doc->sync_uuid, 'effective_on' => $op->effective_on, 'amount_minor' => $minor, 'legs' => $proof];
+    }
+
     public function inspect(int $periodId): array
     {
         if (DB::transactionLevel() !== 1) throw new DomainException('collection_cutoff_requires_locked_transaction');
@@ -114,6 +168,12 @@ final class FinancialCollectionPeriodEvidence
                             $decision[$field] = $doc->$field === null ? null : (string) $doc->$field;
                         }
                         $status = $doc->status;
+                        if ($status === $approved) {
+                            $decision['posting'] = $this->posting($doc, $table, $period, $cutoff,
+                                $table === 'noncash_collection_claims'
+                                    ? \App\Support\SignedMinor::parse($doc->amount_minor)
+                                    : Cash::positiveStored($doc->amount, DB::getDriverName(), DecimalDomain::D12));
+                        }
                     } else {
                         if ($decisions->isNotEmpty() || ($decided === null && ($doc->status !== 'pending'
                             || $doc->decided_by !== null || $doc->payment_id !== null))) {

@@ -9230,7 +9230,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     {
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
-        $this->assertCount(30, $before['guards']);
+        $this->assertCount(31, $before['guards']);
         $this->assertCount(17, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
         $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
@@ -12421,6 +12421,70 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_collection_cutoff_audit_is_immutable_and_rejects_forged_identity(): void
+    {
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic protected collection audit',
+            'square_id' => Square::create(['name' => 'Synthetic audit square'])->id, 'status' => 'active']);
+        $claims = app(\App\Services\NonCashClaimService::class);
+        $claim = $claims->submit($issuer, ['sync_uuid' => self::UUID, 'subscriber_id' => $subscriber->id,
+            'amount' => '0.25', 'payment_method' => 'check', 'instrument_reference' => 'QA-AUDIT-CLAIM', 'instrument_on' => '2026-11-25']);
+        $claims->reject($reviewer, $claim['id'], self::EVIDENCE);
+        $this->assertTrue(app(\App\Services\CollectionEvidenceAuditProtection::class)->active());
+        $rows = DB::table('audit_events')->whereIn('event', ['noncash_claim.submitted', 'noncash_claim.rejected'])
+            ->orderBy('id')->get()->map(fn ($row) => (array) $row)->all();
+        $this->assertCount(2, $rows);
+        $reject = function (callable $action): void {
+            try {
+                $action();
+                $this->fail('Collection audit mutation unexpectedly succeeded.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Collection evidence audit is immutable or invalid', $error->getMessage());
+                if (DB::getDriverName() === 'mysql') $this->assertSame('45000', $error->errorInfo[0]);
+            }
+        };
+        foreach ($rows as $row) {
+            $reject(fn () => DB::table('audit_events')->where('id', $row['id'])->update(['occurred_at' => '2026-12-01 00:00:00']));
+            $reject(fn () => DB::table('audit_events')->where('id', $row['id'])->delete());
+            $duplicate = $row;
+            unset($duplicate['id']);
+            $reject(fn () => DB::table('audit_events')->insert($duplicate));
+            $reject(fn () => DB::table('audit_events')->insert(array_replace($duplicate, ['entity_id' => '999999'])));
+            if (DB::getDriverName() === 'sqlite') {
+                $replace = array_replace($row, ['event' => 'unrelated.test']);
+                $reject(fn () => DB::statement('INSERT OR REPLACE INTO audit_events ('.implode(',', array_map(fn ($key) => '"'.$key.'"', array_keys($replace))).') VALUES ('
+                    .implode(',', array_fill(0, count($replace), '?')).')', array_values($replace)));
+            }
+        }
+        $reject(fn () => DB::table('users')->where('id', $issuer->id)->delete());
+        $this->assertSame($rows, DB::table('audit_events')->whereIn('event', ['noncash_claim.submitted', 'noncash_claim.rejected'])
+            ->orderBy('id')->get()->map(fn ($row) => (array) $row)->all());
+    }
+
+    public function test_collection_cutoff_registered_bank_claim_proof(): void
+    {
+        $this->round134Collection('claim');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $period = (int) DB::table('financial_periods')->value('id');
+        $proof = DB::transaction(fn () => app(\App\Services\FinancialCollectionPeriodEvidence::class)->inspect($period));
+        $this->assertTrue($proof['recorded_evidence_matched'], json_encode($proof));
+        $this->assertSame('cleared', $proof['rows'][0]['status_at_cutoff']);
+        $this->assertCount(2, $proof['rows'][0]['decision']['posting']['legs']);
+        $this->assertSame(30, $proof['rows'][0]['decision']['posting']['amount_minor']);
+    }
+
+    public function test_collection_cutoff_unregistered_approval_is_not_adopted(): void
+    {
+        $this->round134Collection('claim', true);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $period = (int) DB::table('financial_periods')->value('id');
+        $proof = DB::transaction(fn () => app(\App\Services\FinancialCollectionPeriodEvidence::class)->inspect($period));
+        $this->assertFalse($proof['recorded_evidence_matched']);
+        $this->assertContains('collection_approval_unregistered', array_column($proof['issues'], 'code'));
+        $this->assertSame([], $proof['rows']);
+    }
+
     public function test_collection_cutoff_evidence_uses_recorded_submission_and_decision_not_current_status(): void
     {
         $issuer = $this->actor();
@@ -12457,15 +12521,18 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, $later['pending_count']);
         $this->assertSame(['rejected', 'rejected'], array_column($later['rows'], 'status_at_cutoff'));
         $this->assertFalse($later['closure_authorized']);
-        // An unmatched audit is not evidence; no aggregate may be certified.
-        app(\App\Services\AuditLogger::class)->recordRequired('noncash_claim.submitted', [
-            'entity_type' => 'noncash_collection_claim', 'entity_id' => 999999, 'actor_user_id' => $issuer->id, 'after' => []]);
-        DB::table('audit_events')->where('entity_id', '999999')->update(['occurred_at' => '2026-12-03 08:00:00']);
+        // A raw open-period document without an audit is not evidence.
+        $raw = $claim;
+        unset($raw['id']);
+        $raw['sync_uuid'] = self::ADJUST;
+        $raw['instrument_reference'] = 'QA-RAW-CUTOFF-CLAIM';
+        $raw['created_at'] = $raw['updated_at'] = '2026-12-03 08:00:00';
+        DB::table('noncash_collection_claims')->insert($raw);
         $bad = $inspect($next);
         $this->assertFalse($bad['recorded_evidence_matched']);
         $this->assertNull($bad['pending_count']);
         $this->assertSame([], $bad['rows']);
-        $this->assertContains('collection_orphan_audit', array_column($bad['issues'], 'code'));
+        $this->assertContains('collection_submission_audit_missing_or_duplicate', array_column($bad['issues'], 'code'));
         $this->assertSame($before, $inspect($period));
         foreach (['payments', 'transactions', 'treasury_postings', 'financial_posting_events'] as $table) $this->assertDatabaseCount($table, 0);
     }
