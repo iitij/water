@@ -23,6 +23,78 @@ use Tests\TestCase;
 /** Requires a freshly migrated disposable CI database and separate DML-only user. */
 final class FinancialCloseRuntimePrivilegesTest extends TestCase
 {
+    public function test_close_control_isolated_runtime_serializes_against_privileged_freeze(): void
+    {
+        if (! app()->environment('testing') || DB::getDriverName() !== 'mysql'
+            || DB::getDatabaseName() !== 'water_test' || getenv('WATER_QA_CLOSE_CONTROL') !== '1') {
+            $this->markTestSkipped('Requires isolated MySQL close-control privilege fixture.');
+        }
+        $this->assertSame(0, DB::table('financial_scopes')->count());
+        $admin = DB::getDefaultConnection();
+        $adminConnection = DB::connection($admin);
+        $originalConfig = config('database.financial_trigger_metadata_routine');
+        config(['database.connections.qa_close_runtime' => array_replace(config('database.connections.'.$admin), [
+            'username' => 'water_close_runtime', 'password' => 'disposable_close_password', 'url' => null,
+        ])]);
+        $now = new DateTimeImmutable('2026-11-25T08:30:00Z');
+        $adminConnection->table('financial_scopes')->insert([
+            'scope_key' => 'water', 'currency' => 'YER', 'timezone' => 'Asia/Aden',
+            'mode' => 'ACTIVE', 'calendar_version' => 1, 'fence_epoch' => 5,
+        ]);
+        $adminConnection->table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-11', 'start_on' => '2026-11-01',
+            'next_on' => '2026-12-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $timeout = (int) $adminConnection->selectOne('SELECT @@SESSION.innodb_lock_wait_timeout AS timeout')->timeout;
+        try {
+            DB::setDefaultConnection('qa_close_runtime');
+            config(['database.financial_trigger_metadata_routine' => true]);
+            $this->assertNotSame($adminConnection->getPdo(), DB::connection()->getPdo());
+            $this->assertTrue(app(RuntimeDatabasePrivileges::class)->inspect()['close_control_write_isolated']);
+            $gate = app(\App\Services\FinancialWriteGate::class);
+            $adminConnection->statement('SET SESSION innodb_lock_wait_timeout = 1');
+            $freezeUuid = '66666666-6666-4666-8666-666666666666';
+            $freeze = fn () => $adminConnection->transaction(function () use ($adminConnection, $freezeUuid): void {
+                $adminConnection->table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->sole();
+                $adminConnection->table('financial_periods')->where('scope_key', 'water')->lockForUpdate()->sole();
+                $adminConnection->table('financial_scopes')->where('scope_key', 'water')->update([
+                    'active_freeze_uuid' => $freezeUuid, 'fence_epoch' => 6,
+                ]);
+                $adminConnection->table('financial_periods')->where('scope_key', 'water')->update([
+                    'state' => 'FROZEN', 'version' => 1,
+                ]);
+            }, 1);
+            $gate->withinOpenPeriod('water', '2026-11-25', $now, function (array $context) use ($freeze, $adminConnection): void {
+                $this->assertSame(5, $context['epoch']);
+                try {
+                    $freeze();
+                    $this->fail('Privileged freeze acquired the scope during a runtime transaction.');
+                } catch (QueryException $error) {
+                    $this->assertSame(1205, (int) ($error->errorInfo[1] ?? 0), $error->getMessage());
+                }
+                $this->assertSame(0, $adminConnection->transactionLevel());
+                $this->assertSame('OPEN', $adminConnection->table('financial_periods')->sole()->state);
+            });
+            $freeze();
+            $this->assertSame('FROZEN', $adminConnection->table('financial_periods')->sole()->state);
+            $this->assertSame($freezeUuid, $adminConnection->table('financial_scopes')->sole()->active_freeze_uuid);
+            try {
+                $gate->withinOpenPeriod('water', '2026-11-25', $now, fn () => $this->fail('Runtime entered a frozen scope.'));
+                $this->fail('Runtime did not refuse the freeze.');
+            } catch (\DomainException $error) {
+                $this->assertSame('financial_scope_not_active', $error->getMessage());
+            }
+            $this->assertSame(0, DB::transactionLevel());
+            $this->assertDatabaseCount('financial_posting_operations', 0);
+            $this->assertDatabaseCount('financial_posting_events', 0);
+        } finally {
+            $adminConnection->statement('SET SESSION innodb_lock_wait_timeout = '.$timeout);
+            DB::setDefaultConnection($admin);
+            config(['database.financial_trigger_metadata_routine' => $originalConfig]);
+            DB::purge('qa_close_runtime');
+        }
+    }
+
     public function test_close_control_read_only_runtime_can_post_but_cannot_write_close_control(): void
     {
         if (! app()->environment('testing') || DB::getDriverName() !== 'mysql'
