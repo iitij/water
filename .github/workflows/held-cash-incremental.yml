@@ -1,4 +1,4 @@
-name: Financial close ledger protection
+name: Financial ledger trigger attestation
 on:
   pull_request:
     branches: ['main']
@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/close-resume-176-writer-protection'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/close-resume-176-ledger-attestation'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -41,9 +41,9 @@ jobs:
           git diff --exit-code -- composer.lock
       - name: Verify coordinator protection and replay
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseCoordinatorTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_rejects_a_same_name_but_ineffective_ledger_trigger|test_close_refuses_commands_and_replays_without_ledger_protection' tests/Feature/FinancialCloseCoordinatorTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/close-resume-176-writer-protection'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/close-resume-176-ledger-attestation'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -104,4 +104,4 @@ jobs:
 
       - name: Verify coordinator protection and replay
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseCoordinatorTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_rejects_a_same_name_but_ineffective_ledger_trigger|test_close_refuses_commands_and_replays_without_ledger_protection' tests/Feature/FinancialCloseCoordinatorTest.php
