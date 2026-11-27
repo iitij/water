@@ -146,6 +146,46 @@ final class GatedCountedCashWriter
             'source_coverage_verified' => false, 'closure_authorized' => false];
     }
 
+    /** Revalidate the allocation sequence, then retain only decisions and
+     * registered effects belonging to the requested local cutoff.
+     * A late approval with a backdated posting is an explicit mismatch, not
+     * silently adopted into the earlier count disposition.
+     */
+    public function verifySessionThrough(int $sessionId, string $next): array
+    {
+        $end = new DateTimeImmutable($next, new \DateTimeZone('Asia/Aden'));
+        if ($end->format('Y-m-d') !== $next || now('Asia/Aden')->toDateString() < $next) {
+            throw new DomainException('gated_counted_cutoff_invalid');
+        }
+        $until = $end->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        $verified = $this->verifySession($sessionId);
+        $rows = [];
+        $allocated = 0;
+        foreach (DB::table('late_receipt_reviews')->where('cash_session_id', $sessionId)
+            ->where('status', 'approved')->where('settlement_method', 'already_counted')
+            ->orderBy('id')->lockForUpdate()->get() as $review) {
+            $proof = $this->event('financial.counted_cash_allocated', 'late_receipt_review', (int) $review->id);
+            $op = DB::table('financial_posting_operations')->where('operation_uuid', $review->sync_uuid)
+                ->lockForUpdate()->sole();
+            $beforeCutoff = $proof->getRawOriginal('occurred_at') < $until
+                && $review->decided_at !== null && $review->decided_at < $until;
+            if ($op->effective_on < $next && ! $beforeCutoff) {
+                throw new DomainException('gated_counted_post_cutoff_backdated_allocation');
+            }
+            if (! $beforeCutoff || $op->effective_on >= $next) continue;
+            $minor = Cash::positiveStored($review->amount, DB::getDriverName(), DecimalDomain::D12);
+            $allocated = SignedMinor::add($allocated, $minor);
+            $rows[] = ['review_id' => (int) $review->id, 'subscriber_id' => (int) $review->subscriber_id,
+                'payment_id' => (int) $review->payment_id, 'audit_id' => (int) $proof->id,
+                'operation_uuid' => $review->sync_uuid, 'amount_minor' => $minor,
+                'ledger_hash' => $proof->after['ledger_hash']];
+        }
+        $available = SignedMinor::subtract($verified['capacity_minor'], $allocated);
+        $this->need($available >= 0 && $allocated <= $verified['allocated_minor'], 'gated_counted_cutoff_invalid');
+        return ['capacity_minor' => $verified['capacity_minor'], 'allocated_minor' => $allocated,
+            'unallocated_minor' => $available, 'allocations' => $rows, 'closure_authorized' => false];
+    }
+
     /** Scoped bidirectional audit; legacy approvals without proof are reported by refusal. */
     public function verifyCoverage(): array
     {

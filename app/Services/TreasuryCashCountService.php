@@ -39,10 +39,11 @@ final class TreasuryCashCountService
         return $value;
     }
 
-    private function snapshot(object $account, ?int $beforePostingId = null): array
+    private function snapshot(object $account, ?int $beforePostingId = null, ?string $untilExclusive = null): array
     {
         $query = DB::table('treasury_postings')->where('treasury_account_id', $account->id);
         if ($beforePostingId !== null) $query->where('id', '<', $beforePostingId);
+        if ($untilExclusive !== null) $query->where('effective_on', '<', $untilExclusive)->lockForUpdate();
         $rows = $query->orderBy('id')->get();
         // Preserve existing hashes for rows preceding this migration.
         foreach ($rows as $row) {
@@ -61,6 +62,76 @@ final class TreasuryCashCountService
             'recorded_minor' => $balance,
             'ledger_hash' => hash('sha256', json_encode([(array) $account, $rows->toArray()], JSON_THROW_ON_ERROR)),
         ];
+    }
+
+    /** Recheck a last-day observation against the exact cutoff ledger.
+     * No current balance substitution or historical adjustment.
+     */
+    public function periodEndObservation(int $accountId, string $start, string $next): array
+    {
+        if (DB::transactionLevel() <= 0) throw new \DomainException('cash_period_requires_gate');
+        $zone = new \DateTimeZone('Asia/Aden');
+        $utc = new \DateTimeZone('UTC');
+        $end = new \DateTimeImmutable($next, $zone);
+        if ($end->format('Y-m-d') !== $next || now('Asia/Aden')->toDateString() < $next) {
+            throw new \DomainException('cash_period_not_ended');
+        }
+        $this->lock();
+        $account = $this->account($accountId);
+        $from = $end->modify('-1 day')->setTimezone($utc)->format('Y-m-d H:i:s');
+        $until = $end->setTimezone($utc)->format('Y-m-d H:i:s');
+        $count = DB::table('treasury_cash_counts')->where('treasury_account_id', $accountId)
+            ->where('observed_at', '>=', $from)->where('observed_at', '<', $until)
+            ->orderByDesc('observed_at')->orderByDesc('id')->lockForUpdate()->first();
+        if (! $count) throw new \DomainException('cash_period_final_count_missing');
+        $review = DB::table('treasury_cash_count_reviews')->where('treasury_cash_count_id', $count->id)
+            ->lockForUpdate()->first();
+        if (! $review || ! (bool) $review->accepted || (int) $review->reviewed_by <= 0
+            || (int) $count->counted_by <= 0 || (int) $review->reviewed_by === (int) $count->counted_by
+            || $review->created_at < $count->observed_at || $review->created_at >= $until) {
+            throw new \DomainException('cash_period_independent_review_missing');
+        }
+        $snapshot = $this->snapshot($account, untilExclusive: $next);
+        $counted = Money::document($count->counted_minor);
+        if (Money::signed($count->variance_minor) !== 0
+            || Money::signed($count->recorded_minor) !== $counted
+            || $snapshot['recorded_minor'] !== $counted
+            || ! hash_equals($count->ledger_hash, $snapshot['ledger_hash'])
+            || DB::table('treasury_cash_adjustments')->where('treasury_cash_count_id', $count->id)->lockForUpdate()->first()) {
+            throw new \DomainException('cash_period_count_not_equal_at_cutoff');
+        }
+        $audit = static function (string $event, string $type, int $id): \App\Models\AuditEvent {
+            $rows = \App\Models\AuditEvent::query()->where('event', $event)->where('entity_type', $type)
+                ->where('entity_id', (string) $id)->lockForUpdate()->get();
+            if ($rows->count() !== 1) throw new \DomainException('cash_period_count_audit_missing');
+            return $rows->first();
+        };
+        $observed = $audit('treasury.cash_count_recorded', 'treasury_cash_count', (int) $count->id);
+        $decision = $audit('treasury.cash_count_reviewed', 'treasury_cash_count_review', (int) $review->id);
+        if ((int) $observed->actor_user_id !== (int) $count->counted_by
+            || (int) ($observed->after['treasury_account_id'] ?? 0) !== $accountId
+            || ($observed->after['ledger_hash'] ?? null) !== $count->ledger_hash
+            || ($observed->after['counted_minor'] ?? null) !== $counted
+            || ($observed->after['recorded_minor'] ?? null) !== $counted
+            || ($observed->after['variance_minor'] ?? null) !== 0
+            || ($observed->after['reference'] ?? null) !== $count->reference
+            || ($observed->after['evidence'] ?? null) !== $count->evidence
+            || (int) $decision->actor_user_id !== (int) $review->reviewed_by
+            || (int) ($decision->after['treasury_cash_count_id'] ?? 0) !== (int) $count->id
+            || ($decision->after['accepted'] ?? null) !== true
+            || ($decision->after['evidence'] ?? null) !== $review->evidence
+            || ($decision->after['financial_adjustment_created'] ?? null) !== false
+            || $observed->getRawOriginal('occurred_at') < $from
+            || $observed->getRawOriginal('occurred_at') >= $until
+            || $decision->getRawOriginal('occurred_at') < $observed->getRawOriginal('occurred_at')
+            || $decision->getRawOriginal('occurred_at') >= $until) {
+            throw new \DomainException('cash_period_count_audit_mismatch');
+        }
+        return ['account_id' => $accountId, 'count_id' => (int) $count->id, 'review_id' => (int) $review->id,
+            'count_audit_id' => (int) $observed->id, 'review_audit_id' => (int) $decision->id,
+            'counted_by' => (int) $count->counted_by, 'reviewed_by' => (int) $review->reviewed_by,
+            'observed_at' => (string) $count->observed_at, 'ledger_hash' => $count->ledger_hash,
+            'closing_minor' => $counted];
     }
 
     /** Fresh reviewed equal observation, under the shared issuance fence. */

@@ -44,6 +44,9 @@ final class FinancialDatabasePreflight extends Command
                     || config('database.financial_trigger_metadata_routine') === true
                     || app(FinancialTriggerMetadata::class)->deploymentVerified(),
                 'ledger' => fn () => app(LedgerProtection::class)->active(),
+                'close_journal' => fn () => app(\App\Services\FinancialCloseJournalProtection::class)->active(),
+                'posting_registry' => fn () => app(\App\Services\FinancialPostingRegistryProtection::class)->active(),
+                'financial_source_fences' => fn () => app(\App\Services\FinancialSourceInsertProtection::class)->active(),
                 'allocations' => fn () => app(AllocationHistoryProtection::class)->active(),
                 'held_documents' => fn () => app(HeldCashDocumentProtection::class)->active(),
                 'held_release' => fn () => app(HeldCashReleaseDocumentProtection::class)->active(),
