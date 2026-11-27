@@ -94,6 +94,9 @@ final class FinancialCloseEvidenceDiagnostic
         $blockers = ['complete_writer_coverage_unverified', 'independent_opening_source_unverified',
             'period_end_balances_unverified', 'carry_source_evidence_unverified',
             'trusted_close_proof_not_bound'];
+        if (! $writerCoverage['all_candidate_switches_enabled']) $blockers[] = 'candidate_writer_switches_incomplete';
+        if (! $writerCoverage['listed_guards_active']) $blockers[] = 'financial_guard_inventory_unverified';
+        if (! $writerCoverage['runtime_grant_allowlist_accepted']) $blockers[] = 'runtime_grant_allowlist_unverified';
         if (! $ended) $blockers[] = 'period_not_ended';
         if (! $source['scanned_sources_match']) $blockers[] = 'document_registry_mismatch';
         if (! $movement['recorded_movements_verified']) $blockers[] = 'period_movements_unmatched';
