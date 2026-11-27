@@ -127,15 +127,17 @@ final class FinancialCloseEvidenceDiagnostic
         if ($accountMovements !== null && ! $accountMovements['matched']) $blockers[] = 'cutoff_account_movements_unmatched';
         $heldMovements = $ended ? app(FinancialCutoffMovementReconciliation::class)->inspectHeld($heldPeriod, $movement) : null;
         if ($heldMovements !== null && ! $heldMovements['matched']) $blockers[] = 'cutoff_held_movements_unmatched';
+        $physicalMovements = $ended ? app(FinancialCutoffMovementReconciliation::class)->inspectPhysical($outstanding, $movement) : null;
+        if ($physicalMovements !== null && ! $physicalMovements['matched']) $blockers[] = 'cutoff_physical_movements_unmatched';
         sort($blockers, SORT_STRING);
         $manifest = $ended ? $this->cutoffManifest($period, $cashEvidence,
-            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements) : null;
+            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements, $physicalMovements) : null;
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
             'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'subscriber_period_evidence' => $subscriberCutoff, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
             'collection_period_evidence' => $claims,
-            'cutoff_account_movements' => $accountMovements, 'cutoff_held_movements' => $heldMovements, 'cutoff_evidence_manifest' => $manifest, 'blockers' => $blockers, 'source_coverage_verified' => false,
+            'cutoff_account_movements' => $accountMovements, 'cutoff_held_movements' => $heldMovements, 'cutoff_physical_movements' => $physicalMovements, 'cutoff_evidence_manifest' => $manifest, 'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
     }
 
@@ -146,7 +148,7 @@ final class FinancialCloseEvidenceDiagnostic
      * A fingerprint is not a signed close journal or independent opening proof.
      */
     private function cutoffManifest(object $period, array $cash, array $bank, array $subscriber, array $outstanding, array $claims,
-        array $source, array $movement, array $accountMovements, array $heldMovements): array
+        array $source, array $movement, array $accountMovements, array $heldMovements, array $physicalMovements): array
     {
         $sections = [
             'cash' => [$cash['all_accounts_matched'], $cash],
@@ -179,14 +181,15 @@ final class FinancialCloseEvidenceDiagnostic
         $registry = ['recorded_movements_matched' => $registryMatched,
             'registry_events' => $source['registry_events'],
             'movement_hash' => $registryMatched ? $movement['movement_hash'] : null];
-        $manifest = ['format_version' => 5, 'scope' => 'water', 'period_id' => (int) $period->id,
+        $manifest = ['format_version' => 6, 'scope' => 'water', 'period_id' => (int) $period->id,
             'start_on' => $period->start_on, 'next_on' => $period->next_on,
             'sectors' => $sectors, 'all_listed_sectors_matched' => $matched,
             'registry' => $registry,
+            'physical_movements_hash' => $physicalMovements['matched'] ? hash('sha256', json_encode($physicalMovements, JSON_THROW_ON_ERROR)) : null,
             'held_movements_hash' => $heldMovements['matched'] ? hash('sha256', json_encode($heldMovements, JSON_THROW_ON_ERROR)) : null,
             'account_movements_hash' => $accountMovements['matched'] ? hash('sha256', json_encode($accountMovements, JSON_THROW_ON_ERROR)) : null,
             'independent_opening_verified' => false, 'closure_authorized' => false];
-        return $manifest + ['manifest_hash' => $matched && $registryMatched && $accountMovements['matched'] && $heldMovements['matched'] ? hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)) : null];
+        return $manifest + ['manifest_hash' => $matched && $registryMatched && $accountMovements['matched'] && $heldMovements['matched'] && $physicalMovements['matched'] ? hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)) : null];
     }
 
     /** Scope-wide, deliberately not netted or restricted to the target month:
