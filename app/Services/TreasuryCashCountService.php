@@ -33,6 +33,13 @@ final class TreasuryCashCountService
         return app(FinancialWriteGate::class)->withinOpenPeriod('water',
             $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d'), $now,
             function () use ($actor, $work): array {
+                try {
+                    $active = app(CashCountPeriodProtection::class)->active()
+                        && app(FinancialEvidenceDestinationProtection::class)->active();
+                } catch (\LogicException $error) {
+                    throw new \DomainException('cash_count_evidence_write_protection_missing', 0, $error);
+                }
+                if (! $active) throw new \DomainException('cash_count_evidence_write_protection_missing');
                 $this->lock();
                 $current = User::query()->lockForUpdate()->findOrFail($actor->id);
                 abort_if($current->isDisabled(), 403);
