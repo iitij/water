@@ -85,6 +85,7 @@ final class FinancialCloseEvidenceDiagnostic
         $batchCoverage = $this->refunds->verifyBatchAuditCoverage();
         $subscriber = $ended ? null : $this->subscribers->inspect($periodId);
         $subscriberCutoff = $ended ? app(FinancialSubscriberPeriodEvidence::class)->inspect($periodId) : null;
+        $predecessor = $ended ? $this->continuity->predecessor($periodId) : null;
         $continuity = null;
         if ($period->state === 'CLOSED' || $period->state === 'FROZEN') {
             $state = app(FinancialCloseJournalReader::class)->inspect('water', $periodId)['state'];
@@ -134,7 +135,12 @@ final class FinancialCloseEvidenceDiagnostic
             $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements, $physicalMovements, $settlement) : null;
         // Keep operational readiness separate from the financial cutoff fingerprint.
         // This inventory is diagnostic, including when its blockers are nonempty.
-        $readiness = ['format_version' => 2, 'scope' => 'water', 'period_id' => $periodId,
+        $readiness = ['format_version' => 3, 'scope' => 'water', 'period_id' => $periodId,
+            'predecessor_evidence_hash' => $predecessor === null ? null : hash('sha256', json_encode($predecessor, JSON_THROW_ON_ERROR)),
+            'predecessor_journal_verified' => $predecessor['predecessor_journal_verified'] ?? false,
+            'adjacent_carry_evidence_hash' => $outstanding === null ? null : hash('sha256', json_encode($outstanding['adjacent_carry'], JSON_THROW_ON_ERROR)),
+            'adjacent_carry_recorded_matched' => $outstanding['adjacent_carry']['recorded_adjacent_rollforward_verified'] ?? false,
+            'snapshot_continuity_hash' => $continuity === null ? null : hash('sha256', json_encode($continuity, JSON_THROW_ON_ERROR)),
             'fence_epoch' => (string) $scope->fence_epoch, 'active_freeze_uuid' => $scope->active_freeze_uuid,
             'calendar_version' => (string) $scope->calendar_version,
             'refund_incidents_hash' => hash('sha256', json_encode($incident, JSON_THROW_ON_ERROR)),
@@ -147,7 +153,7 @@ final class FinancialCloseEvidenceDiagnostic
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
-            'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'subscriber_period_evidence' => $subscriberCutoff, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
+            'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'subscriber_period_evidence' => $subscriberCutoff, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity, 'predecessor_evidence' => $predecessor,
             'collection_period_evidence' => $claims,
             'cutoff_account_movements' => $accountMovements, 'cutoff_held_movements' => $heldMovements, 'cutoff_physical_movements' => $physicalMovements, 'cutoff_evidence_manifest' => $manifest, 'readiness_inventory' => $readiness, 'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
