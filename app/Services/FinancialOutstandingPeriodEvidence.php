@@ -235,12 +235,24 @@ final class FinancialOutstandingPeriodEvidence
                         $source['surplus_disposition']['unallocated_minor'] === 0;
                 }
                 if ($source['variance_minor'] < 0) {
-                    $recovery = $this->recoveryDisposition($session, $audits[0], $source, $next);
-                    $source['loss_disposition'] = app(CustodyShortageLossDecision::class)
-                        ->verifiedThrough($session, $audits[0], $source['shortage_minor'], $next, $recovery);
-                    $source['recovery_disposition'] = $recovery;
-                    $source['variance_disposition_verified'] = $source['loss_disposition'] !== null
-                        || ($recovery !== null && $recovery['recovered_minor'] === $source['shortage_minor']);
+                    // A rejected settlement cannot erase an independently
+                    // reconstructed shortage. Retain its gross exposure and
+                    // mark the failed disposition explicitly.
+                    try {
+                        $recovery = $this->recoveryDisposition($session, $audits[0], $source, $next);
+                        $loss = app(CustodyShortageLossDecision::class)
+                            ->verifiedThrough($session, $audits[0], $source['shortage_minor'], $next, $recovery);
+                        $source['loss_disposition'] = $loss;
+                        $source['recovery_disposition'] = $recovery;
+                        $source['variance_disposition_verified'] = $loss !== null
+                            || ($recovery !== null && $recovery['recovered_minor'] === $source['shortage_minor']);
+                    } catch (DomainException $error) {
+                        $source['loss_disposition'] = null;
+                        $source['recovery_disposition'] = null;
+                        $source['variance_disposition_verified'] = false;
+                        $source['disposition_issue'] = $error->getMessage();
+                        $issues[] = ['code' => $error->getMessage(), 'session_id' => $id];
+                    }
                 }
                 $rows[] = ['session_id' => $id, 'collector_id' => (int) $session->user_id,
                     'approval_audit_id' => (int) $audits[0]->id, 'approval_before_period' => $approved < $from,
