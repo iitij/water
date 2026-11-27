@@ -25,6 +25,7 @@ final class CustodyShortageRecoveryWriter
         $local = $now->setTimezone(new DateTimeZone('Asia/Aden'));
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $local->format('Y-m-d'), $now,
             function (array $context) use ($actor, $sessionId, $now, $local, $operationUuid): array {
+                app(TreasuryFinancialWriteProtection::class)->requireActive();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null
                     && app(CustodyShortageRecoveryProposalProtection::class)->active()
                     && app(CustodyShortageRecoveryProtection::class)->active()
