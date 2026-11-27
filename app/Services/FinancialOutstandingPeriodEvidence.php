@@ -101,13 +101,21 @@ final class FinancialOutstandingPeriodEvidence
             ->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
             ->where('e.scope_key', 'water')->where('e.source_type', $leg['source_type'])
             ->where('e.source_id', $leg['source_id'])->where('e.leg', $leg['leg'])
-            ->select('e.*', 'o.period_id', 'o.effective_on')->lockForUpdate()->first();
+            ->select('e.*', 'o.period_id', 'o.effective_on', 'o.recorded_at_utc')->lockForUpdate()->first();
         if (! $event || $event->effective_on !== $date
             || SignedMinor::parse($event->amount_minor) !== $leg['amount_minor']
             || $event->currency !== $leg['currency'] || ! hash_equals($leg['source_hash'], $event->source_hash)) {
             throw new DomainException('outstanding_source_unregistered');
         }
         $id = (int) $event->period_id;
+        $sourcePeriod = DB::table('financial_periods')->where('scope_key', 'water')->where('id', $id)->lockForUpdate()->sole();
+        $end = (new DateTimeImmutable($sourcePeriod->next_on, new DateTimeZone('Asia/Aden')))
+            ->setTimezone(new DateTimeZone('UTC'));
+        if (new DateTimeImmutable($event->recorded_at_utc, new DateTimeZone('UTC')) >= $end) {
+            // A late recorded operation cannot retrospectively establish the
+            // original physical custody/transit cutoff. Explicit review needed.
+            throw new DomainException('outstanding_source_recorded_after_cutoff');
+        }
         if (! isset($this->checkedPeriods[$id])) {
             $this->registry->verifyPeriod('water', $id);
             $this->checkedPeriods[$id] = true;
