@@ -120,6 +120,9 @@ class TransactionService
     ): Transaction {
         $amount = FinancialAmount::validated($amount, 'transaction')->decimal();
         return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $type, $amount, $description, $reference, $meter, $invoiceWriter, $receiptService, $reversalWriter, $correctionWriter, $heldCreditWriter) {
+            if ($reference instanceof Invoice || in_array($type, ['invoice', 'invoice_reversal'], true)) {
+                \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
+            }
             if ($reference instanceof Invoice || in_array($type, ['invoice', 'invoice_reversal', 'payment', 'payment_reversal', 'payment_refund', 'payment_transfer_in', 'held_cash_credit'], true)) {
                 if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Financial issuance lock is missing.');
@@ -213,6 +216,9 @@ class TransactionService
             throw new \InvalidArgumentException('Unsupported reversal type.');
         }
         return \Illuminate\Support\Facades\DB::transaction(function () use ($subscriber, $reference, $originalType, $invoiceWriter, $reversalWriter) {
+            if ($reference instanceof Invoice) {
+                \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
+            }
             if ($reference instanceof Invoice || $reference instanceof Payment) {
                 if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Financial issuance lock is missing.');

@@ -1221,13 +1221,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->creditHeld($this->actor(), 25);
         $before = DB::table('payment_allocation_revisions')->where('subscriber_id', $subscriber->id)->orderBy('id')->get()->toArray();
         $allocations = DB::table('payment_allocations')->orderBy('id')->get()->toArray();
-        $candidate = new \App\Models\Invoice([
-            'subscriber_id' => $subscriber->id, 'invoice_type' => 'meter',
-            'bill_number' => 'QA-FAILED-DIRECT-CREATE', 'bill_date' => '2026-11-25',
-            'billing_period_start' => '2026-11-01', 'billing_period_end' => '2026-11-24',
-            'consumption_fee' => '0.10', 'previous_balance' => '0.00', 'credit_applied' => '0.10',
-            'total_amount' => '0.10', 'amount_paid' => '0.00', 'status' => 'issued',
-        ]);
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic rollback tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-FAILED-GATED-ISSUE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $issue = fn () => app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id,
+            (int) $meter->id, '66666666-6666-4666-8666-666666666666', $this->nowAt());
         $dispatcher = \App\Models\Invoice::getEventDispatcher();
         $this->assertNotNull($dispatcher);
         \App\Models\Invoice::setEventDispatcher(clone $dispatcher);
@@ -1235,7 +1235,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             \App\Models\Invoice::created(static function (): void {
                 throw new \DomainException('qa_invoice_created_failure');
             });
-            $this->rejects('qa_invoice_created_failure', fn () => $candidate->save());
+            $this->rejects('qa_invoice_created_failure', $issue);
         } finally {
             \App\Models\Invoice::setEventDispatcher($dispatcher);
         }
@@ -6817,10 +6817,14 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
-        config(['financial_candidate.invoices' => true]);
-        $this->rejects('gated_invoice_model_writer_required', fn () => \App\Models\Invoice::create($document));
-        $this->rejects('gated_invoice_model_writer_required', fn () =>
-            (new \App\Models\Invoice($document))->saveQuietly(['financial_invoice_writer' => $writer]));
+        foreach ([false, true] as $enabled) {
+            config(['financial_candidate.invoices' => $enabled]);
+            $this->rejects('gated_invoice_model_writer_required', fn () => \App\Models\Invoice::create($document));
+            $this->rejects('gated_invoice_model_writer_required', fn () => (new \App\Models\Invoice($document))->saveQuietly());
+            $this->rejects('gated_invoice_model_writer_required', fn () =>
+                (new \App\Models\Invoice($document))->saveQuietly(['financial_invoice_writer' => $writer]));
+        }
+        config(['financial_candidate.invoices' => false]);
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $invoice = $writer->issue($actor, (int) $subscriber->id, (int) $meter->id, $issueUuid, $this->nowAt())['invoice'];
         $original = \App\Models\Transaction::where('reference_type', \App\Models\Invoice::class)
