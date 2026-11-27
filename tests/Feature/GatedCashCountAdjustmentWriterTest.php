@@ -9231,7 +9231,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
         $this->assertCount(29, $before['guards']);
-        $this->assertCount(15, $before['writers']);
+        $this->assertCount(16, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
         $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
         $this->assertArrayHasKey('held_release_journal', $before['guards']);
@@ -12419,6 +12419,61 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
         $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_cash_session_lifecycle_gate_requires_open_period_and_authorized_independent_actor(): void
+    {
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $outsider = User::factory()->create(['role' => 'admin']);
+        config(['financial_candidate.cash_session_lifecycle' => true]);
+        \Laravel\Sanctum\Sanctum::actingAs($collector);
+        DB::table('financial_periods')->update(['state' => 'FROZEN']);
+        $this->postJson('/api/cash-sessions', ['opening_amount' => '0.00'])->assertConflict();
+        $this->assertDatabaseCount('cash_sessions', 0);
+        DB::table('financial_periods')->update(['state' => 'OPEN']);
+        $id = $this->postJson('/api/cash-sessions', ['opening_amount' => '0.00'])->assertCreated()->json('cash_session.id');
+        $session = \App\Models\CashSession::findOrFail($id);
+        $before = (array) DB::table('cash_sessions')->find($id);
+        $service = app(CashSessionService::class);
+        try {
+            $service->close($session, '0.00');
+            $this->fail('Close without actor was accepted.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+            $this->assertSame(403, $error->getStatusCode());
+        }
+        try {
+            $service->close($session, '0.00', null, $outsider);
+            $this->fail('Unauthorized close was accepted.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+            $this->assertSame(403, $error->getStatusCode());
+        }
+        DB::table('financial_periods')->update(['state' => 'FROZEN']);
+        $this->postJson('/api/cash-sessions/'.$id.'/close', ['counted_amount' => '0.00'])->assertConflict();
+        $this->assertSame($before, (array) DB::table('cash_sessions')->find($id));
+        DB::table('financial_periods')->update(['state' => 'OPEN']);
+        $this->postJson('/api/cash-sessions/'.$id.'/close', ['counted_amount' => '0.00'])->assertOk();
+        $this->postJson('/api/cash-sessions/'.$id.'/approve', ['approve' => true])->assertForbidden();
+        try {
+            $service->decide($session->fresh(), true, $outsider);
+            $this->fail('Unauthorized decision was accepted.');
+        } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+            $this->assertSame(403, $error->getStatusCode());
+        }
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $closed = (array) DB::table('cash_sessions')->find($id);
+        DB::table('financial_periods')->update(['state' => 'FROZEN']);
+        $this->postJson('/api/cash-sessions/'.$id.'/approve', ['approve' => true])->assertConflict();
+        $this->assertSame($closed, (array) DB::table('cash_sessions')->find($id));
+        DB::table('financial_periods')->update(['state' => 'OPEN']);
+        $this->postJson('/api/cash-sessions/'.$id.'/approve', ['approve' => true])->assertOk();
+        $this->assertDatabaseHas('cash_sessions', ['id' => $id, 'state' => 'approved', 'approved_by' => $reviewer->id]);
+        foreach (['cash_session.opened', 'cash_session.closed', 'cash_session.approved'] as $event) {
+            $this->assertSame(1, \App\Models\AuditEvent::where('event', $event)->count());
+        }
+        $this->assertDatabaseCount('transactions', 0);
+        $this->assertDatabaseCount('treasury_postings', 0);
+        $this->assertDatabaseCount('financial_posting_events', 0);
     }
 
     public function test_candidate_refuses_legacy_historical_correction_entrypoints_without_mutations(): void

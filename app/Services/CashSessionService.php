@@ -30,6 +30,62 @@ class CashSessionService
     {
     }
 
+    /** Evidence lifecycle: the scope fence precedes issuance, actor and till locks.
+     * Funded opening remains with its existing dedicated posting writer.
+     */
+    private function lifecycle(?User $actor, ?CashSession $session, string $action, callable $work): CashSession
+    {
+        if (config('financial_candidate.cash_session_lifecycle') !== true) {
+            return DB::transaction(fn () => $work($actor, $session), 3);
+        }
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        abort_unless($actor instanceof User, 403, 'يلزم تحديد منفذ عملية الصندوق.');
+        $now = now()->toDateTimeImmutable();
+        $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        try {
+            return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
+                function () use ($actor, $session, $action, $work, $date): CashSession {
+                    // Also cover the stored session calendar (legacy UTC dates).
+                    $origin = $session?->session_date->toDateString() ?? now()->toDateString();
+                    $periods = DB::table('financial_periods')->where('scope_key', 'water')
+                        ->where('start_on', '<=', $origin)->where('next_on', '>', $origin)
+                        ->lockForUpdate()->get();
+                    if ($origin > $date || $periods->count() !== 1) {
+                        throw new \DomainException('cash_session_source_period_not_open');
+                    }
+                    $period = $periods->sole();
+                    $expected = app(\App\Support\FinancialClosePolicy::class)->open('water', substr($origin, 0, 7), 'Asia/Aden');
+                    if ($period->state !== 'OPEN' || $period->start_on !== $expected['start'] || $period->next_on !== $expected['next']
+                        || DB::table('financial_period_closures')->where('period_id', $period->id)->lockForUpdate()->first()
+                        || DB::table('financial_close_commands')->where('period_id', $period->id)->where('action', 'approve')->lockForUpdate()->first()) {
+                        throw new \DomainException('cash_session_source_period_not_open');
+                    }
+                    if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                        throw new \LogicException('Financial issuance lock is missing.');
+                    }
+                    $current = User::query()->lockForUpdate()->findOrFail($actor->id);
+                    abort_if($current->isDisabled(), 403);
+                    $current->setRelation('roles', $current->roles()->lockForUpdate()->get());
+                    $current->setRelation('permissions', $current->permissions()->lockForUpdate()->get());
+                    $supervisor = $current->isAdmin() || $current->can('cash_sessions.approve') || $current->can('Approve:CashSession');
+                    if ($session !== null) {
+                        $fresh = CashSession::query()->lockForUpdate()->findOrFail($session->id);
+                        if ($fresh->session_date->toDateString() !== $origin || (int) $fresh->user_id !== (int) $session->user_id) {
+                            throw new \DomainException('cash_session_source_identity_changed');
+                        }
+                        abort_unless($action === 'decide' ? $supervisor : ($supervisor || (int) $fresh->user_id === (int) $current->id), 403);
+                        return $work($current, $fresh);
+                    }
+                    abort_unless($current->isAdmin() || $current->can('cash_sessions.manage')
+                        || $current->can('Create:Payment') || $current->can('create_payment')
+                        || $current->isCollector(), 403);
+                    return $work($current, null);
+                });
+        } catch (\DomainException $error) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException($error->getMessage(), $error);
+        }
+    }
+
     /** الصندوق المفتوح الحالي للمستخدم، إن وُجد. */
     public function openSessionFor(User $user): ?CashSession
     {
@@ -54,11 +110,11 @@ class CashSessionService
         if ($openingMinor !== 0) {
             throw ValidationException::withMessages(['opening_amount' => 'الافتتاح بمبلغ موجب يتطلب سند تمويل مثبتاً من الخزينة.']);
         }
-        return DB::transaction(function () use ($user, $squareId, $notes): CashSession {
+        return $this->lifecycle($user, null, 'open', function (User $user) use ($squareId, $notes): CashSession {
             $session = $this->createOpenSession($user, 0, $squareId, $notes);
             $this->auditOpening($session, $user);
             return $session->fresh();
-        }, 3);
+        });
     }
 
     private function createOpenSession(User $user, int $openingMinor, ?int $squareId, ?string $notes): CashSession
@@ -246,7 +302,7 @@ class CashSessionService
     }
 
     /** إغلاق الصندوق وتسجيل النقد المسلَّم والفرق. */
-    public function close(CashSession $session, mixed $countedAmount, ?string $notes = null): CashSession
+    public function close(CashSession $session, mixed $countedAmount, ?string $notes = null, ?User $actor = null): CashSession
     {
         $countedMinor = Cash::input($countedAmount, 'counted_amount');
         if (! $session->isOpen()) {
@@ -255,7 +311,7 @@ class CashSessionService
             ]);
         }
 
-        return DB::transaction(function () use ($session, $countedMinor, $notes) {
+        return $this->lifecycle($actor, $session, 'close', function (?User $actor, CashSession $session) use ($countedMinor, $notes) {
             User::query()->lockForUpdate()->findOrFail($session->user_id);
             $session = CashSession::query()->lockForUpdate()->findOrFail($session->id);
             if (! $session->isOpen()) {
@@ -308,7 +364,7 @@ class CashSessionService
             ]);
         }
 
-        return DB::transaction(function () use ($session, $approve, $approver, $notes) {
+        return $this->lifecycle($approver, $session, 'decide', function (User $approver, CashSession $session) use ($approve, $notes) {
             // Read and check the state under the same row lock as the decision.
             // A stale web form or a retried mobile request must not reverse a
             // decision already made by another supervisor.
