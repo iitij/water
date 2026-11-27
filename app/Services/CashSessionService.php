@@ -51,6 +51,10 @@ class CashSessionService
         try {
             return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
                 function () use ($actor, $session, $action, $work, $date): CashSession {
+                    if (! app(FinancialSourceInsertProtection::class)->active()
+                        || ! app(SessionTransferDestinationProtection::class)->active()) {
+                        throw new \DomainException('cash_session_write_protection_missing');
+                    }
                     // Also cover the stored session calendar (legacy UTC dates).
                     $origin = $session?->session_date->toDateString() ?? now()->toDateString();
                     $periods = DB::table('financial_periods')->where('scope_key', 'water')
