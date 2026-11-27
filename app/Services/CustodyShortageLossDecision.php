@@ -77,6 +77,53 @@ final class CustodyShortageLossDecision
         });
     }
 
+    /** Rebuild the decision from the protected documents at a local cutoff.
+     * Only use after independent verification of original collection/count sources.
+     */
+    public function verifiedThrough(CashSession $session, AuditEvent $count, int $shortage, string $next): ?array
+    {
+        if (DB::transactionLevel() <= 0 || ! app(CustodyShortageDecisionProtection::class)->active()) {
+            throw new DomainException('shortage_loss_protection_required');
+        }
+        $id = (int) $session->id;
+        $until = (new DateTimeImmutable($next, new DateTimeZone('Asia/Aden')))
+            ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        $decision = $this->find(self::APPROVED, $id);
+        if (! $decision || $decision->getRawOriginal('occurred_at') >= $until) return null;
+        $proposal = $this->find(self::PROPOSED, $id);
+        $source = ['session_id' => $id, 'collector_id' => (int) $session->user_id,
+            'count_approval_id' => (int) $count->id, 'shortage_minor' => $shortage];
+        $p = $proposal?->after;
+        $d = $decision->after;
+        if (! is_array($p) || ! is_array($d) || $proposal->getRawOriginal('occurred_at') < $count->getRawOriginal('occurred_at')
+            || $proposal->getRawOriginal('occurred_at') > $decision->getRawOriginal('occurred_at')
+            || $proposal->source !== 'internal' || $decision->source !== 'internal'
+            || ($p['proposed_by'] ?? null) !== (int) $proposal->actor_user_id
+            || ! is_string($p['reason'] ?? null) || mb_strlen($p['reason']) < 10 || mb_strlen($p['reason']) > 1000
+            || ! is_string($p['evidence'] ?? null) || mb_strlen($p['evidence']) < 10 || mb_strlen($p['evidence']) > 2000) {
+            throw new DomainException('shortage_loss_document_mismatch');
+        }
+        foreach ($source as $key => $value) {
+            if (($p[$key] ?? null) !== $value) throw new DomainException('shortage_loss_source_changed');
+        }
+        $local = static fn (AuditEvent $row) => (new DateTimeImmutable($row->getRawOriginal('occurred_at'), new DateTimeZone('UTC')))
+            ->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        if (($p['proposed_on'] ?? null) !== $local($proposal) || ($d['approved_on'] ?? null) !== $local($decision)
+            || (int) $proposal->actor_user_id === $source['collector_id']) {
+            throw new DomainException('shortage_loss_document_mismatch');
+        }
+        $hash = hash('sha256', json_encode([$source, $p['proposed_by'], $p['proposed_on'],
+            $p['reason'], $p['evidence']], JSON_THROW_ON_ERROR));
+        $event = ['source' => 'loss:'.$id, 'minor' => $shortage, 'kind' => 'confirmed_loss', 'treasury_minor' => 0,
+            'proposed_by' => $p['proposed_by'], 'approved_by' => (int) $decision->actor_user_id,
+            'collector_id' => $source['collector_id'], 'evidence_hash' => $hash];
+        if ($d != $event + ['proposal_id' => (int) $proposal->id, 'approved_on' => $local($decision)]) {
+            throw new DomainException('shortage_loss_document_mismatch');
+        }
+        $result = app(CustodyShortageSettlementPolicy::class)->reconcile($shortage, [$event]);
+        return ['decision_id' => (int) $decision->id, 'approved_on' => $local($decision), 'evidence_hash' => $hash] + $result;
+    }
+
     private function execute(User $actor, int $sessionId, DateTimeImmutable $now, callable $action): array
     {
         CompletedCashRefundRequest::authenticated($actor);
