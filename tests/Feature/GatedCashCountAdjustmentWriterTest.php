@@ -8357,8 +8357,6 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(), array_keys($tables));
         $before = $snapshot();
         $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
-        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
-        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
         $reject = function (string $table, array $row): void {
             try {
                 DB::table($table)->insert($row);
@@ -8368,6 +8366,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                     || str_contains($error->getMessage(), 'Financial source replacement is fenced'), $error->getMessage());
             }
         };
+        $this->assertTrue(app(\App\Services\DatedFinancialSourcePeriodProtection::class)->active());
+        foreach ($rows as $table => $row) {
+            foreach (['2026-10-31', '2026-12-01'] as $outside) {
+                $reject($table, array_replace($row, [$tables[$table] => $outside]));
+            }
+        }
+        $this->assertEquals($before, $snapshot());
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
         foreach ($rows as $table => $row) {
             $reject($table, $row);
             $reject($table, array_replace($row, [$tables[$table] => '2026-12-01']));
@@ -10347,7 +10354,6 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->assertSame($date, substr((string) $before[$table][$column], 0, 10));
         }
         $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
-        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
         $reject = function (callable $write, array $messages): void {
             try {
                 $write();
@@ -10356,6 +10362,19 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 $this->assertTrue(collect($messages)->contains(fn ($message) => str_contains($error->getMessage(), $message)), $error->getMessage());
             }
         };
+        foreach ($dates as $table => $column) {
+            $row = $before[$table];
+            $id = $row['id'];
+            unset($row['id']);
+            $row['reference'] .= '-OUTSIDE';
+            foreach (['2026-10-31', '2026-12-01'] as $outside) {
+                $reject(fn () => DB::table($table)->insert(array_replace($row, [$column => $outside])), ['Financial source period is fenced']);
+                $reject(fn () => DB::table($table)->where('id', $id)->update([$column => $outside]),
+                    ['Financial source mutation is fenced', 'Financial source period is fenced']);
+            }
+            $this->assertEquals($before[$table], (array) DB::table($table)->sole());
+        }
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'CLOSED']);
         foreach ($dates as $table => $column) {
             $row = $before[$table];
             $id = $row['id'];

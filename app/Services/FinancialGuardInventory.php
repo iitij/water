@@ -20,6 +20,7 @@ final class FinancialGuardInventory
                     : app(FinancialTriggerMetadata::class)->deploymentVerified()),
             'ledger' => fn () => app(LedgerProtection::class)->active(),
             'source_period' => fn () => app(FinancialSourceInsertProtection::class)->active(),
+            'dated_source_destinations' => fn () => app(DatedFinancialSourcePeriodProtection::class)->active(),
             'observation_graph_freeze' => fn () => app(ObservationGraphFreezeProtection::class)->active(),
             'collection_evidence_audit' => fn () => app(CollectionEvidenceAuditProtection::class)->active(),
             'collection_evidence_period' => fn () => app(CollectionEvidencePeriodProtection::class)->active(),
