@@ -27,7 +27,8 @@ final class CustodyShortageRecoveryWriter
             function (array $context) use ($actor, $sessionId, $now, $local, $operationUuid): array {
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null
                     && app(CustodyShortageRecoveryProposalProtection::class)->active()
-                    && app(CustodyShortageRecoveryProtection::class)->active(), 'shortage_recovery_protection_required');
+                    && app(CustodyShortageRecoveryProtection::class)->active()
+                    && app(CustodyShortagePeriodProtection::class)->active(), 'shortage_recovery_protection_required');
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
                 CompletedCashRefundRequest::authenticated($actor);
                 $actor->setRelation('roles', $actor->roles()->lockForUpdate()->get());
@@ -107,7 +108,8 @@ final class CustodyShortageRecoveryWriter
     public function leg(int $postingId): array
     {
         $this->need(DB::transactionLevel() > 0 && app(CustodyShortageRecoveryProposalProtection::class)->active()
-                    && app(CustodyShortageRecoveryProtection::class)->active(),
+                    && app(CustodyShortageRecoveryProtection::class)->active()
+                    && app(CustodyShortagePeriodProtection::class)->active(),
             'shortage_recovery_protection_required');
         $posting = DB::table('treasury_postings')->where('id', $postingId)->lockForUpdate()->first();
         $r = DB::table('custody_shortage_recoveries')->where('treasury_posting_id', $postingId)->lockForUpdate()->first();
