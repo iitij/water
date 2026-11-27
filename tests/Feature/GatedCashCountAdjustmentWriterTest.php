@@ -9199,6 +9199,22 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue($report['movements']['recorded_movements_verified']);
         $this->assertTrue($report['cash_period_evidence']['all_accounts_matched'], json_encode($report['cash_period_evidence']));
         $this->assertSame(9785, $report['cash_period_evidence']['rows'][0]['closing_minor']);
+        // The current subscriber projection is not cutoff proof. Reconcile
+        // the actual invoice, both receipts and held credit at period end.
+        $cutoff = $report['subscriber_period_evidence'];
+        $this->assertTrue($cutoff['all_cutoff_accounts_match'], json_encode($cutoff));
+        $this->assertTrue($cutoff['allocation_policy_verified'], json_encode($cutoff));
+        $this->assertCount(1, $cutoff['rows']);
+        $subscriberCutoff = $cutoff['rows'][0];
+        $this->assertSame((int) $subscriber->id, $subscriberCutoff['subscriber_id']);
+        $this->assertSame(10, $subscriberCutoff['billed_minor']);
+        $this->assertSame(320, $subscriberCutoff['available_minor']);
+        $this->assertSame(10, $subscriberCutoff['allocated_minor']);
+        $this->assertSame(310, $subscriberCutoff['unallocated_minor']);
+        $this->assertSame(310, $subscriberCutoff['recorded_balance_minor']);
+        $this->assertTrue($subscriberCutoff['allocation_policy_matched']);
+        $this->assertNotContains('subscriber_cutoff_sources_unmatched', $report['blockers']);
+        $this->assertNotContains('subscriber_allocation_policy_unverified', $report['blockers']);
         $this->assertTrue($report['settlement']['bank_period_evidence']['all_accounts_matched']);
         $this->assertSame(10000, $report['settlement']['bank_period_evidence']['rows'][0]['closing_minor']);
         $outstanding = $report['outstanding_period_evidence'];
