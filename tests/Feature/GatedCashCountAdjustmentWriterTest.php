@@ -7594,6 +7594,47 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame('CLOSED', DB::table('financial_periods')->where('scope_key', 'water')->where('month', '2026-11')->value('state'));
     }
 
+    public function test_refund_writer_fails_closed_when_correction_protection_is_missing(): void
+    {
+        [, , $account, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '200.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $writer = app(\App\Services\GatedRefundWriter::class);
+        $uuid = '88888888-8888-4888-8888-888888888888';
+        $record = fn () => $writer->record($reviewer, (int) $receipt->id, (int) $account['id'],
+            '40.00', 'QA-GUARD-REFUND', 'treasury_cash', '2026-11-25',
+            'Independent documented excess credit refund', self::EVIDENCE, $uuid, $this->nowAt());
+        $tables = ['payments', 'payment_refunds', 'transactions', 'treasury_postings', 'audit_events',
+            'payment_allocation_revisions', 'payment_allocations', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER refund_doc_reject_update');
+        try {
+            $this->rejects('refund_financial_write_protection_missing', $record);
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            app(\App\Services\FinancialCorrectionDocumentProtection::class)->install();
+        }
+        $this->assertTrue($record()['registry_created']);
+        $this->assertFalse($record()['registry_created']);
+        $this->assertSame(16000, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertDatabaseCount('payment_refunds', 1);
+        $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+        $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+        $this->assertSame([-4000, -4000], $events->map(fn ($row) => (int) $row->amount_minor)->all());
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER refund_doc_reject_update');
+        try {
+            $this->rejects('refund_financial_write_protection_missing', $record);
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            app(\App\Services\FinancialCorrectionDocumentProtection::class)->install();
+        }
+    }
+
     public function test_round136_cash_refund_records_both_legs_and_keeps_reserve(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
