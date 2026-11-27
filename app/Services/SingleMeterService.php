@@ -23,6 +23,7 @@ class SingleMeterService
     public function create(array $data): Meter
     {
         return DB::transaction(function () use ($data): Meter {
+            app(\App\Services\ReadingObservationFence::class)->lock('meter_id');
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail((int) $data['subscriber_id']);
             $this->ensureAvailable($subscriber->id);
             $this->ensurePathAvailable((int) $subscriber->square_id, $data['path_number'] ?? null);
@@ -43,6 +44,7 @@ class SingleMeterService
     public function update(Meter $meter, array $data): Meter
     {
         return DB::transaction(function () use ($meter, $data): Meter {
+            app(\App\Services\ReadingObservationFence::class)->lock('meter_id');
             $oldSubscriberId = (int) $meter->subscriber_id;
             $newSubscriberId = (int) ($data['subscriber_id'] ?? $meter->subscriber_id);
 

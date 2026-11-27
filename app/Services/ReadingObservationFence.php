@@ -12,17 +12,17 @@ use Illuminate\Validation\ValidationException;
  */
 final class ReadingObservationFence
 {
-    public function lock(): void
+    public function lock(string $field = 'reading_date'): void
     {
         if (DB::transactionLevel() === 0) {
             throw new \LogicException('Observation fence requires an outer transaction.');
         }
         $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
         if ($scope && ($scope->active_freeze_uuid !== null || $scope->mode !== 'ACTIVE')) {
-            throw ValidationException::withMessages(['reading_date' => 'لا يمكن تغيير القراءات أثناء تجميد النطاق المالي.']);
+            throw ValidationException::withMessages([$field => 'لا يمكن تغيير القراءات أثناء تجميد النطاق المالي.']);
         }
         if (! $scope && config('financial_candidate.invoices') === true) {
-            throw ValidationException::withMessages(['reading_date' => 'النطاق المالي غير مهيأ.']);
+            throw ValidationException::withMessages([$field => 'النطاق المالي غير مهيأ.']);
         }
     }
 }

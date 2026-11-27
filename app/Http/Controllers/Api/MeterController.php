@@ -168,6 +168,7 @@ class MeterController extends ApiController
 
         $candidate = Meter::findOrFail($id);
         return DB::transaction(function () use ($id, $purger, $candidate) {
+            app(\App\Services\ReadingObservationFence::class)->lock('meter_id');
             Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $meter = Meter::query()->lockForUpdate()->findOrFail($id);
             abort_unless((int) $meter->subscriber_id === (int) $candidate->subscriber_id, 409, 'تغير مالك العداد.');
@@ -191,6 +192,7 @@ class MeterController extends ApiController
         $candidates = Meter::whereIn('id', $data['ids'])->get()->keyBy('id');
         // Revalidate every selected live row before performing any bulk deletion.
         DB::transaction(function () use ($candidates, &$deleted, &$skipped, $purger) {
+            app(\App\Services\ReadingObservationFence::class)->lock('meter_id');
             $ownerIds = $candidates->pluck('subscriber_id')->unique()->values();
             $owners = Subscriber::query()->whereIn('id', $ownerIds)->orderBy('id')->lockForUpdate()->get();
             abort_unless($owners->count() === $ownerIds->count(), 409, 'تغير المشترك المرتبط بالعداد.');

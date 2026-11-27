@@ -5719,6 +5719,43 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payments', 0);
     }
 
+    public function test_meter_metadata_scope_fence_preserves_live_balance_and_rejects_frozen_mutations(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        $other = Subscriber::create(['name' => 'Synthetic second meter owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $service = app(\App\Services\SingleMeterService::class);
+        $meter = $service->create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-METER-FREEZE',
+            'initial_reading' => '0.00', 'installed_at' => '2026-11-01']);
+        $snapshot = fn () => DB::table('meters')->orderBy('id')->get()->toArray();
+        $before = $snapshot();
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+        $create = ['subscriber_id' => $other->id, 'unique_code' => 'QA-FROZEN-NEW-METER'];
+        foreach ([fn () => $service->create($create),
+            fn () => \App\Models\Meter::create($create),
+            fn () => $service->update($meter, ['status' => 'inactive']),
+            fn () => $meter->fresh()->updateQuietly(['initial_reading' => '1.00']),
+            fn () => $meter->fresh()->delete()] as $write) {
+            try {
+                $write();
+                $this->fail('Meter metadata mutation bypassed financial freeze.');
+            } catch (\Illuminate\Validation\ValidationException $error) {
+                $this->assertArrayHasKey('meter_id', $error->errors());
+            }
+            $this->assertEquals($before, $snapshot());
+        }
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $this->deleteJson('/api/meters/'.$meter->id)->assertUnprocessable()->assertJsonValidationErrors('meter_id');
+        $this->assertEquals($before, $snapshot());
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        $this->assertSame('inactive', $service->update($meter, ['status' => 'inactive'])->status);
+        $new = $service->create($create);
+        $this->assertDatabaseHas('meters', ['id' => $new->id, 'subscriber_id' => $other->id]);
+        $this->assertDatabaseCount('meters', 2);
+        $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseCount('payments', 0);
+    }
+
     public function test_observation_scope_fence_rejects_new_edit_and_delete_during_active_freeze(): void
     {
         [, , , , , $subscriber] = $this->held();

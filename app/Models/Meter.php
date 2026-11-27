@@ -38,17 +38,31 @@ class Meter extends Model
             && ! preg_match('/^\d{1,10}(?:\.\d{1,2})?$/D', (string) $this->getAttributes()['initial_reading'])) {
             throw \Illuminate\Validation\ValidationException::withMessages(['initial_reading' => 'القراءة الابتدائية يجب أن تكون غير سالبة وبمنزلتين عشريتين كحد أقصى.']);
         }
-        if (! $this->exists || ! $this->isDirty(['installed_at', 'initial_reading'])) {
+        $physicalFields = ['unique_code', 'path_number', 'subscriber_id', 'status', 'installed_at', 'removed_at', 'initial_reading', 'deleted_at'];
+        if ($this->exists && ! $this->isDirty($physicalFields)) {
+            // Balance is a live projection of ledger operations, not physical metadata.
             return parent::save($options);
         }
 
         return \Illuminate\Support\Facades\DB::transaction(function () use ($options) {
+            app(\App\Services\ReadingObservationFence::class)->lock('meter_id');
+            $owners = array_unique([(int) $this->subscriber_id, (int) ($this->getOriginal('subscriber_id') ?? $this->subscriber_id)]);
+            Subscriber::query()->whereIn('id', $owners)->orderBy('id')->lockForUpdate()->get();
+            if (! $this->exists) {
+                return parent::save($options);
+            }
             $fresh = self::query()->lockForUpdate()->findOrFail($this->id);
+            if ((int) $fresh->subscriber_id !== (int) $this->getOriginal('subscriber_id')) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['meter_id' => 'تغير مالك العداد؛ حدّث البيانات.']);
+            }
+            if ($this->isDirty('subscriber_id') && app(\App\Services\MeterDataPurger::class)->hasOrdinaryHistoryLocked((int) $fresh->id)) {
+                throw \Illuminate\Validation\ValidationException::withMessages(['subscriber_id' => 'لا يجوز نقل عداد له قراءات أو سجل مالي.']);
+            }
             if ($fresh->getOriginal('installed_at') != $this->getOriginal('installed_at')
                 || $fresh->getOriginal('initial_reading') != $this->getOriginal('initial_reading')) {
                 throw \Illuminate\Validation\ValidationException::withMessages(['installed_at' => 'تغيرت بيانات العداد؛ حدّث البيانات أولاً.']);
             }
-            if ($fresh->readings()->withTrashed()->exists()) {
+            if ($this->isDirty(['installed_at', 'initial_reading']) && $fresh->readings()->withTrashed()->exists()) {
                 throw \Illuminate\Validation\ValidationException::withMessages([
                     'installed_at' => 'لا يمكن تغيير تاريخ تركيب العداد أو قراءته الابتدائية بعد تسجيل القراءات.',
                 ]);
@@ -65,6 +79,7 @@ class Meter extends Model
             return parent::delete();
         }
         return \Illuminate\Support\Facades\DB::transaction(function () {
+            app(\App\Services\ReadingObservationFence::class)->lock('meter_id');
             Subscriber::query()->lockForUpdate()->findOrFail($this->subscriber_id);
             $locked = self::withTrashed()->lockForUpdate()->findOrFail($this->getKey());
             if ((int) $locked->subscriber_id !== (int) $this->subscriber_id) {
