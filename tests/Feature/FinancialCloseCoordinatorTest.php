@@ -123,6 +123,48 @@ final class FinancialCloseCoordinatorTest extends TestCase
         }
     }
 
+    public function test_close_evidence_guard_loss_blocks_progress_but_preserves_abort(): void
+    {
+        $guard = app(\App\Services\CashCountPeriodProtection::class);
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(),
+            ['financial_scopes', 'financial_periods', 'financial_close_commands', 'financial_period_closures']);
+        $this->assertTrue($guard->active());
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_count_treasury_cash_counts_insert');
+        try {
+            $this->rejects('close_evidence_protection_missing', fn () => $this->freeze());
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            $guard->install();
+        }
+        $this->assertSame('FROZEN', $this->freeze()['current_state']);
+        $frozen = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_count_treasury_cash_counts_insert');
+        try {
+            $this->rejects('close_evidence_protection_missing', fn () => $this->prepare());
+            $this->assertEquals($frozen, $snapshot());
+        } finally {
+            $guard->install();
+        }
+        $prepared = $this->prepare();
+        $hash = $prepared['result']['attempt']['prepared']['hash'];
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_count_treasury_cash_counts_insert');
+        try {
+            $this->rejects('close_evidence_protection_missing', fn () => $this->command('approve', 3, $this->approval($hash)));
+            $this->assertEquals($before, $snapshot());
+            $this->assertSame('OPEN', $this->command('abort', 3, [
+                'uuid' => self::ABORT, 'version' => 2, 'attempt_uuid' => self::FREEZE,
+                'reason' => 'Evidence guard requires recovery',
+            ])['current_state']);
+            $this->assertNull(DB::table('financial_scopes')->value('active_freeze_uuid'));
+            $this->assertDatabaseCount('financial_period_closures', 0);
+            $this->assertDatabaseCount('financial_close_commands', 3);
+        } finally {
+            $guard->install();
+        }
+    }
+
     public function test_close_rejects_disabled_connection_constraints_and_rolls_back(): void
     {
         $sqlite = DB::getDriverName() === 'sqlite';
