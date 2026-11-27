@@ -103,6 +103,24 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             $this->assertTrue($receipt['registry_created']);
             $this->assertDatabaseCount('financial_posting_operations', 2);
             $this->assertDatabaseCount('financial_posting_events', 2);
+            // A DML-only identity must not be able to append a fictitious ledger leg.
+            $registryBefore = DB::table('financial_posting_events')->orderBy('id')->get()->all();
+            $source = (array) DB::table('financial_posting_events')->where('source_type', 'ledger_transaction')->orderBy('id')->first();
+            $this->assertNotEmpty($source);
+            unset($source['id']);
+            foreach ([
+                array_replace($source, ['source_id' => '9223372036854775807']),
+                array_replace($source, ['leg' => 'bank']),
+            ] as $invalidLeg) {
+                try {
+                    DB::table('financial_posting_events')->insert($invalidLeg);
+                    $this->fail('Restricted runtime appended an invalid ledger source.');
+                } catch (QueryException $error) {
+                    $this->assertSame('45000', $error->errorInfo[0]);
+                    $this->assertStringContainsString('Financial registry source identity is invalid', $error->getMessage());
+                }
+                $this->assertEquals($registryBefore, DB::table('financial_posting_events')->orderBy('id')->get()->all());
+            }
             config(['financial_candidate.collection_evidence' => true]);
             $claims = app(\App\Services\NonCashClaimService::class);
             $claim = $claims->submit($actor, ['sync_uuid' => '88888888-8888-4888-8888-888888888888',
