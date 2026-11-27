@@ -44,6 +44,13 @@ final class FinancialSettlementCoverageDiagnostic
         $start = $period->start_on;
         $next = static fn (string $day): string => (new DateTimeImmutable($day, new DateTimeZone('Asia/Aden')))->modify('+1 day')->format('Y-m-d');
         $end = $next($through);
+        // Effective DATE fields are local business dates; decisions and
+        // audit timestamps are UTC instants. Use the same half-open cutoff
+        // as the posting-source diagnostic.
+        $zone = new DateTimeZone('Asia/Aden');
+        $utc = new DateTimeZone('UTC');
+        $fromUtc = (new DateTimeImmutable($start, $zone))->setTimezone($utc)->format('Y-m-d H:i:s');
+        $toUtc = (new DateTimeImmutable($end, $zone))->setTimezone($utc)->format('Y-m-d H:i:s');
         $issues = [];
         $issue = static function (string $code, string $source, string $id, array $details = []) use (&$issues): void {
             $issues[$code.'|'.$source.'|'.$id] = ['code' => $code, 'source' => $source, 'id' => $id] + $details;
@@ -101,9 +108,9 @@ final class FinancialSettlementCoverageDiagnostic
         // Verify the complete supporting session, including prior allocations,
         // without inventing or modifying any historical posting.
         $reviews = DB::table('late_receipt_reviews')->where('status', 'approved')->where('settlement_method', 'already_counted')
-            ->where(function ($q) use ($start, $end) {
+            ->where(function ($q) use ($start, $end, $fromUtc, $toUtc) {
                 $q->where(fn ($q) => $q->where('payment_date', '>=', $start)->where('payment_date', '<', $end))
-                    ->orWhere(fn ($q) => $q->where('decided_at', '>=', $start)->where('decided_at', '<', $end));
+                    ->orWhere(fn ($q) => $q->where('decided_at', '>=', $fromUtc)->where('decided_at', '<', $toUtc));
             })->orderBy('id')->lockForUpdate()->get();
         $sessions = $reviews->pluck('cash_session_id')->unique()->sort()->values();
         $verifiedSessions = 0;
@@ -116,7 +123,7 @@ final class FinancialSettlementCoverageDiagnostic
             }
         }
         foreach (AuditEvent::query()->where('event', 'financial.counted_cash_allocated')
-            ->where('occurred_at', '>=', $start)->where('occurred_at', '<', $end)->orderBy('id')->lockForUpdate()->get() as $audit) {
+            ->where('occurred_at', '>=', $fromUtc)->where('occurred_at', '<', $toUtc)->orderBy('id')->lockForUpdate()->get() as $audit) {
             $review = DB::table('late_receipt_reviews')->where('id', $audit->entity_id)->lockForUpdate()->first();
             if ($audit->entity_type !== 'late_receipt_review' || ! $review || $review->status !== 'approved'
                 || $review->settlement_method !== 'already_counted') {
