@@ -9782,6 +9782,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->assertSame(600, $row['source_evidence']['expected_minor']);
             $this->assertSame(20, $row['source_evidence']['shortage_minor']);
             $this->assertSame(20, $proof['variance_exposure']['unresolved_shortage_minor']);
+            $this->assertSame($period === $nov ? 0 : 20, $proof['variance_exposure']['opening_unresolved_shortage_minor']);
+            $this->assertSame($period === $nov ? 20 : 0, $proof['variance_exposure']['new_shortage_minor']);
+            $this->assertSame(0, $proof['variance_exposure']['unallocated_surplus_minor']);
+            $this->assertSame($period === $dec, $row['approval_before_period']);
             $this->assertFalse($proof['variance_exposure']['rows'][0]['recoverable_recognized']);
             $this->assertSame(0, $row['source_evidence']['surplus_minor']);
             $this->assertFalse($row['source_evidence']['variance_disposition_verified']);
