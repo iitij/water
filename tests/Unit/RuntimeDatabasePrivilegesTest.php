@@ -44,6 +44,25 @@ final class RuntimeDatabasePrivilegesTest extends TestCase
         }
     }
 
+    public function test_only_exact_schema_lock_tables_is_allowed_without_close_control_dml(): void
+    {
+        $service = new RuntimeDatabasePrivileges();
+        $safe = "GRANT SELECT, INSERT ON \x60water_test\x60.\x60payments\x60 TO 'runtime'@'localhost'";
+        $locking = "GRANT LOCK TABLES ON \x60water\\_test\x60.* TO 'runtime'@'localhost'";
+        self::assertTrue($service->evaluate('water_test', [self::USAGE, $safe, $locking])['accepted']);
+        self::assertTrue($service->evaluateCloseControlIsolation('water_test', [self::USAGE, $safe, $locking])['accepted']);
+        foreach ([
+            "GRANT LOCK TABLES ON *.* TO 'runtime'@'localhost'",
+            "GRANT LOCK TABLES ON \x60water_test\x60.* TO 'runtime'@'localhost'",
+            "GRANT LOCK TABLES ON \x60other\x60.* TO 'runtime'@'localhost'",
+            $locking.' WITH GRANT OPTION',
+            str_replace('LOCK TABLES', 'LOCK TABLES, UPDATE', $locking),
+        ] as $bad) {
+            self::assertFalse($service->evaluate('water_test', [self::USAGE, $safe, $bad])['accepted']);
+            self::assertFalse($service->evaluateCloseControlIsolation('water_test', [self::USAGE, $safe, $bad])['accepted']);
+        }
+    }
+
     public function test_close_control_isolation_rejects_broad_and_direct_writes(): void
     {
         $service = new RuntimeDatabasePrivileges();
