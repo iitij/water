@@ -9129,6 +9129,40 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($first, $inspect());
     }
 
+    public function test_final_accounting_subscriber_cutoff_reports_prior_movements_without_inventing_opening(): void
+    {
+        $actor = $this->actor();
+        $when = now()->copy();
+        $this->travelTo(\Carbon\Carbon::parse('2026-10-31T12:00:00+03:00'));
+        $subscriber = Subscriber::create(['name' => 'Synthetic existing subscriber',
+            'square_id' => Square::create(['name' => 'Prior subscriber square'])->id, 'status' => 'active']);
+        $this->travelTo($when);
+        $writer = app(GatedCashReceiptWriter::class);
+        $writer->collect($actor, (int) $subscriber->id, '2.00', self::UUID, $this->nowAt());
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($period));
+        $first = $inspect();
+        $this->assertTrue($first['scanned_cutoff_accounts_match'], json_encode($first));
+        $this->assertFalse($first['all_cutoff_accounts_match']);
+        $this->assertSame([(int) $subscriber->id], $first['prior_accounts']);
+        $this->assertSame([], $first['rows']);
+        $this->assertCount(1, $first['prior_account_movements']);
+        $row = $first['prior_account_movements'][0];
+        $this->assertSame(200, $row['net_movement_minor']);
+        $this->assertNull($row['opening_minor']);
+        $this->assertNull($row['closing_minor']);
+        $this->assertFalse($row['opening_verified']);
+        $this->assertFalse($first['closure_authorized']);
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $writer->collect($actor, (int) $subscriber->id, '1.00', self::NEXT, $later);
+        $this->assertSame(300, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertSame($first, $inspect());
+    }
+
     public function test_final_accounting_allocation_fence_and_guard_integrity(): void
     {
         $actor = $this->actor();
