@@ -72,7 +72,8 @@ final class BankReconciliationController extends ApiController
             'amount' => ['prohibited'], 'effective_on' => ['prohibited'], 'account_id' => ['prohibited'],
         ]);
         try {
-            if (config('financial_candidate.bank_fees') === true) {
+            if (config('financial_candidate.bank_fees') === true
+                || \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
                 abort_unless(app()->environment(['testing', 'staging']), 503);
                 $request->validate(['operation_uuid' => ['required', 'uuid']]);
                 $line = \Illuminate\Support\Facades\DB::table('bank_statement_lines')

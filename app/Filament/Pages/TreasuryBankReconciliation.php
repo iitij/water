@@ -39,8 +39,14 @@ final class TreasuryBankReconciliation extends Page
     {
         $actor = Auth::guard('web')->user();
         return app()->environment(['testing', 'staging'])
-            && config('financial_candidate.bank_evidence') === true
+            && self::enabled('bank_evidence')
             && $actor instanceof User && ! $actor->isCurrentlyDisabled() && $actor->hasRole('super_admin');
+    }
+
+    private static function enabled(string $flag): bool
+    {
+        return config('financial_candidate.'.$flag) === true
+            || DB::table('financial_scopes')->where('scope_key', 'water')->exists();
     }
 
     private function actor(): User
@@ -128,7 +134,7 @@ final class TreasuryBankReconciliation extends Page
                         (int) $line->id, (int) $data['posting_id'], $data['evidence']);
                 }, 'تمت مطابقة الحركة دون إنشاء قيد جديد')),
             Action::make('record_fee')->label('اعتماد رسوم بنكية')
-                ->visible(fn (): bool => self::canAccess() && config('financial_candidate.bank_fees') === true)
+                ->visible(fn (): bool => self::canAccess() && self::enabled('bank_fees'))
                 ->form([
                     Hidden::make('operation_uuid')->default(fn () => (string) Str::uuid())->required()->rules(['uuid']),
                     Select::make('line_id')->label('حركة الخصم البنكي')->options(fn (): array => $this->lineOptions(true))
@@ -139,7 +145,7 @@ final class TreasuryBankReconciliation extends Page
                 ])
                 ->requiresConfirmation()
                 ->action(fn (array $data) => $this->bankAction(function (User $actor) use ($data): void {
-                    abort_unless(config('financial_candidate.bank_fees') === true, 403);
+                    abort_unless(self::enabled('bank_fees'), 403);
                     $line = $this->line((int) $data['line_id']);
                     app(GatedBankFeeWriter::class)->record($actor, (int) $line->bank_statement_id,
                         (int) $line->id, $line->booked_on, $data['reference'], $data['reason'], $data['evidence'],
@@ -162,10 +168,10 @@ final class TreasuryBankReconciliation extends Page
             ->required()->minLength(3)->maxLength(150);
         return Action::make($late ? 'clear_late_bank' : 'clear_claim')
             ->label($late ? 'اعتماد التحصيل البنكي المتأخر' : 'اعتماد التحصيل غير النقدي')
-            ->visible(fn (): bool => self::canAccess() && config('financial_candidate.noncash_settlements') === true)
+            ->visible(fn (): bool => self::canAccess() && self::enabled('noncash_settlements'))
             ->form($fields)->requiresConfirmation()
             ->action(fn (array $data) => $this->bankAction(function (User $actor) use ($data, $late): void {
-                abort_unless(config('financial_candidate.noncash_settlements') === true, 403);
+                abort_unless(self::enabled('noncash_settlements'), 403);
                 $line = $this->line((int) $data['line_id']);
                 $common = ['statement_id' => (int) $line->bank_statement_id, 'line_id' => (int) $line->id,
                     'evidence' => $data['evidence']];

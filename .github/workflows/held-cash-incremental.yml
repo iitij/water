@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify mandatory treasury cash count adjustment gates
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_filament_full_observation_review_and_settlement_cycle|test_cash_count_adjustment_filament_shares_gate_and_api_replay|test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass|test_legacy_adjustment_and_conflicting_replay_are_not_adopted|test_confirmed_shortage_posts_exact_negative_variance_and_replays_once|test_registry_failure_rolls_back_adjustment_and_audit_then_retries' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify mandatory bank fees and noncash settlement routes
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_bank_fee_entry_blocks_direct_writer_and_preserves_single_debit|test_filament_bank_claim_clearance_and_report|test_filament_late_bank_clearance_and_report|test_filament_bank_evidence_import_match_and_fee_use_shared_services|test_round139_legacy_bank_fee_cannot_be_silently_adopted|test_bank_period_evidence_rejects_matched_but_unregistered_fee|test_bank_fee_refuses_frozen_adjacent_statement_period_before_posting|test_release_bank_confirmation_fence_|test_release_settlement_api_(claim|late_bank)' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify mandatory treasury cash count adjustment gates
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_filament_full_observation_review_and_settlement_cycle|test_cash_count_adjustment_filament_shares_gate_and_api_replay|test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass|test_legacy_adjustment_and_conflicting_replay_are_not_adopted|test_confirmed_shortage_posts_exact_negative_variance_and_replays_once|test_registry_failure_rolls_back_adjustment_and_audit_then_retries' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify mandatory bank fees and noncash settlement routes
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_bank_fee_entry_blocks_direct_writer_and_preserves_single_debit|test_filament_bank_claim_clearance_and_report|test_filament_late_bank_clearance_and_report|test_filament_bank_evidence_import_match_and_fee_use_shared_services|test_round139_legacy_bank_fee_cannot_be_silently_adopted|test_bank_period_evidence_rejects_matched_but_unregistered_fee|test_bank_fee_refuses_frozen_adjacent_statement_period_before_posting|test_release_bank_confirmation_fence_|test_release_settlement_api_(claim|late_bank)' tests/Feature/GatedCashCountAdjustmentWriterTest.php

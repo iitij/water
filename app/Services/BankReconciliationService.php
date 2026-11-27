@@ -380,6 +380,10 @@ final class BankReconciliationService
         }
 
         return DB::transaction(function () use ($actor, $id, $lineId, $reference, $reason, $evidence, $gatedWriter): array {
+            $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
+            if ($scope && ! ($gatedWriter !== null && $gatedWriter->allowsMutation($id, $lineId, (int) $actor->id))) {
+                throw new \DomainException('gated_bank_fee_writer_required');
+            }
             $this->lock();
             $statement = DB::table('bank_statements')->where('id', $id)->lockForUpdate()->first();
             abort_unless($statement, 404);

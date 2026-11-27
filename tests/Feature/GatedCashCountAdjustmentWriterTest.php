@@ -5388,7 +5388,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             return;
         }
         if ($web) {
-            config(['financial_candidate.bank_evidence' => true, 'financial_candidate.noncash_settlements' => true]);
+            config(['financial_candidate.bank_evidence' => $enabled, 'financial_candidate.noncash_settlements' => $enabled]);
             $page = \App\Filament\Pages\TreasuryBankReconciliation::class;
             \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
             $this->actingAs($reviewer, 'web');
@@ -8082,7 +8082,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(9525, app(TreasuryRegisterService::class)->inspect($reviewer, $accountId)['provisional_recorded_balance_minor']);
     }
 
-    public function test_release_bank_fee_entry_blocks_direct_writer_and_preserves_single_debit(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_bank_fee_entry_blocks_direct_writer_and_preserves_single_debit(bool $enabled): void
     {
         [, , $cash, , , $subscriber] = $this->held();
         $importer = $this->actor();
@@ -8117,7 +8118,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
-        config(['financial_candidate.bank_fees' => true]);
+        config(['financial_candidate.bank_fees' => $enabled, 'financial_candidate.bank_evidence' => $enabled]);
         $this->rejects('gated_bank_fee_writer_required', $direct);
         $this->rejects('gated_bank_fee_writer_required', fn () => DB::transaction(fn () => $direct($writer)));
         \Laravel\Sanctum\Sanctum::actingAs($importer);
@@ -8140,8 +8141,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->postJson($url, array_replace($data, ['operation_uuid' => '99999999-9999-4999-8999-999999999999']))->assertConflict();
         config(['financial_candidate.bank_fees' => false]);
         $this->rejects('gated_bank_fee_writer_required', $direct);
-        $this->postJson($url, $data)->assertConflict();
-        $this->postJson($url, array_diff_key($data, ['operation_uuid' => true]))->assertConflict();
+        $this->postJson($url, $data)->assertOk()->assertJsonPath('posting.id', $postingId);
+        $this->postJson($url, array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
         $this->assertFalse($record()['registry_created']);
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $this->assertSame($before['payments'], $snapshot('payments'));
@@ -8229,6 +8230,32 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($verified['source_coverage_verified']);
     }
 
+    /** Synthetic unregistered import for negative evidence tests only. */
+    private function seedUnregisteredBankFee(User $reviewer, int $accountId, int $lineId, string $reference, string $reason): array
+    {
+        return DB::transaction(function () use ($reviewer, $accountId, $lineId, $reference, $reason): array {
+            $record = ['treasury_account_id' => $accountId, 'bank_statement_line_id' => $lineId,
+                'amount_minor' => 40, 'charged_on' => '2026-11-25', 'reference' => $reference,
+                'reason' => $reason, 'evidence' => self::EVIDENCE, 'approved_by' => $reviewer->id];
+            $timestamps = ['created_at' => now(), 'updated_at' => now()];
+            $feeId = DB::table('treasury_bank_fees')->insertGetId($record + $timestamps);
+            $postingId = DB::table('treasury_postings')->insertGetId([
+                'treasury_account_id' => $accountId, 'treasury_bank_fee_id' => $feeId, 'kind' => 'bank_fee',
+                'amount_minor' => -40, 'effective_on' => '2026-11-25', 'evidence_reference' => $reference,
+                'posted_by' => $reviewer->id,
+            ] + $timestamps);
+            $matchId = DB::table('bank_statement_matches')->insertGetId([
+                'bank_statement_line_id' => $lineId, 'treasury_posting_id' => $postingId,
+                'matched_by' => $reviewer->id, 'evidence' => self::EVIDENCE,
+            ] + $timestamps);
+            app(TreasuryRegisterService::class)->requiredAudit('treasury.bank_fee_recorded', [
+                'entity_type' => 'treasury_bank_fee', 'entity_id' => $feeId, 'actor_user_id' => $reviewer->id,
+                'after' => $record + ['posting_id' => $postingId, 'match_id' => $matchId, 'subscriber_posting_created' => false],
+            ]);
+            return ['posting' => (array) DB::table('treasury_postings')->find($postingId)];
+        });
+    }
+
     public function test_round139_legacy_bank_fee_cannot_be_silently_adopted(): void
     {
         [, , , , , $subscriber] = $this->held();
@@ -8249,7 +8276,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $statementId = (int) $statement['statement']['id'];
         $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->value('id');
         $reason = 'Independent documented bank service fee';
-        $old = $bank->recordFee($reviewer, $statementId, $lineId, 'QA-R139-LEGACY-FEE', $reason, self::EVIDENCE);
+        $this->rejects('gated_bank_fee_writer_required', fn () =>
+            $bank->recordFee($reviewer, $statementId, $lineId, 'QA-R139-LEGACY-FEE', $reason, self::EVIDENCE));
+        $this->assertDatabaseCount('treasury_bank_fees', 0);
+        $old = $this->seedUnregisteredBankFee($reviewer, (int) $account['id'], $lineId, 'QA-R139-LEGACY-FEE', $reason);
         $uuid = '88888888-8888-4888-8888-888888888888';
         $this->rejects('gated_bank_fee_operation_conflict', fn () => app(\App\Services\GatedBankFeeWriter::class)
             ->record($reviewer, $statementId, $lineId, $date, 'QA-R139-LEGACY-FEE', $reason, self::EVIDENCE, $uuid, $this->nowAt()));
@@ -11615,17 +11645,20 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['closure_authorized']);
     }
 
-    public function test_filament_bank_claim_clearance_and_report(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_filament_bank_claim_clearance_and_report(bool $enabled): void
     {
-        $this->round134Collection('claim', web: true);
+        $this->round134Collection('claim', web: true, enabled: $enabled);
     }
 
-    public function test_filament_late_bank_clearance_and_report(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_filament_late_bank_clearance_and_report(bool $enabled): void
     {
-        $this->round134Collection('late_bank', web: true);
+        $this->round134Collection('late_bank', web: true, enabled: $enabled);
     }
 
-    public function test_filament_bank_evidence_import_match_and_fee_use_shared_services(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_filament_bank_evidence_import_match_and_fee_use_shared_services(bool $enabled): void
     {
         $importer = $this->actor();
         $reviewer = $this->actor();
@@ -11644,8 +11677,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $page = \App\Filament\Pages\TreasuryBankReconciliation::class;
         \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
         $this->actingAs($importer, 'web');
-        $this->assertFalse($page::canAccess());
-        config(['financial_candidate.bank_evidence' => true, 'financial_candidate.bank_fees' => true]);
+        config(['financial_candidate.bank_evidence' => $enabled, 'financial_candidate.bank_fees' => $enabled]);
+        $this->assertTrue($page::canAccess());
         $this->actingAs(User::factory()->create(['role' => 'admin']), 'web');
         $this->assertFalse($page::canAccess());
         $this->actingAs($importer, 'web');
@@ -11985,8 +12018,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         ]);
         $sid = (int) $statement['statement']['id'];
         $line = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $sid)->value('id');
-        $bank->recordFee($reviewer, $sid, $line, 'QA-CLOSE-GAP-FEE',
-            'Independent documented bank service fee', self::EVIDENCE);
+        $this->seedUnregisteredBankFee($reviewer, $id, $line, 'QA-CLOSE-GAP-FEE',
+            'Independent documented bank service fee');
         $this->travelTo(\Carbon\Carbon::parse('2026-11-30T15:00:00+03:00'));
         $bank->import($importer, $id, [
             'reference' => 'QA-CLOSE-GAP-FINAL', 'from_date' => '2026-11-26', 'to_date' => '2026-11-30',
