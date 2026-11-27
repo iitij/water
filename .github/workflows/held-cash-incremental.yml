@@ -102,6 +102,9 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
+      - name: Verify independent cash session decision and shortage carry
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_cash_session_decision_requires_independent_actor|test_custody_source_coverage_keeps_shortage_visible_after_full_handover' tests/Feature/GatedCashCountAdjustmentWriterTest.php
       - name: Provision disposable restricted runtime fixture
         env:
           QA_CONTAINER: ${{ job.services.mysql.id }}
@@ -117,13 +120,6 @@ jobs:
           GRANT SELECT, INSERT, UPDATE, DELETE ON `water\_test`.* TO 'water_runtime'@'%';
           GRANT EXECUTE ON PROCEDURE `water_test`.`financial_read_trigger_metadata` TO 'water_runtime'@'%';
           SQL
-      - name: Verify independent cash session decision and shortage carry
-        run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_cash_session_decision_requires_independent_actor|test_custody_source_coverage_keeps_shortage_visible_after_full_handover' tests/Feature/GatedCashCountAdjustmentWriterTest.php
-      - name: Reset disposable fixture before runtime isolation test
-        run: |
-          php artisan migrate:fresh --force
-          php -r 'require "vendor/autoload.php"; $app = require "bootstrap/app.php"; $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); app(App\Services\LedgerProtection::class)->install(); app(App\Services\AllocationHistoryProtection::class)->install(); app(App\Services\FinancialTriggerMetadata::class)->install();'
       - name: Verify runtime DML isolation and live financial protections
         env:
           WATER_QA_RUNTIME: '1'
