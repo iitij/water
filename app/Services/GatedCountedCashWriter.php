@@ -42,6 +42,16 @@ final class GatedCountedCashWriter
         $evidence = trim($evidence);
         return $this->gate->withinOpenPeriod('water', $effectiveOn, $now,
             function (array $context) use ($actor, $reviewId, $reference, $evidence, $uuid, $now): array {
+                app(SubscriberFinancialWriteProtection::class)->requireActive();
+                try {
+                    $active = app(CollectionEvidenceAuditProtection::class)->active()
+                        && app(CollectionEvidencePeriodProtection::class)->active()
+                        && app(FinancialEvidenceDestinationProtection::class)->active()
+                        && app(SessionTransferDestinationProtection::class)->active();
+                } catch (\LogicException $error) {
+                    throw new DomainException('counted_cash_write_protection_missing', 0, $error);
+                }
+                $this->need($active, 'counted_cash_write_protection_missing');
                 $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
                 DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null,
