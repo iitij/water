@@ -84,6 +84,9 @@ final class TreasuryRegisterService
             'opening_reference' => $reference, 'opening_evidence' => $evidence, 'opened_by' => $actor->id,
         ];
         return DB::transaction(function () use ($record, $actor, $gatedWriter): array {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_treasury_opening_writer_required');
+            }
             $this->lockRegister();
             $existing = DB::table('treasury_accounts')->where('code', $record['code'])->lockForUpdate()->first();
             $registered = $existing !== null && DB::table('financial_posting_events')

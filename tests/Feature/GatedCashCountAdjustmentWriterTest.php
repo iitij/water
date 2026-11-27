@@ -7124,7 +7124,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payment_account_transfers', 0);
     }
 
-    public function test_release_funding_entry_preserves_cash_custody_and_registered_replay(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_funding_entry_preserves_cash_custody_and_registered_replay(bool $enabled): void
     {
         [, , $account, , , $subscriber] = $this->held();
         $issuer = $this->actor();
@@ -7151,7 +7152,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
-        config(['financial_candidate.treasury_opening_funding' => true]);
+        config(['financial_candidate.treasury_opening_funding' => $enabled]);
         $this->rejects('gated_treasury_opening_writer_required', fn () => $treasury->open($issuer, $opening));
         $this->rejects('gated_treasury_opening_writer_required', fn () =>
             DB::transaction(fn () => $treasury->open($issuer, $opening, $writer)));
@@ -7161,7 +7162,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->postJson($url, $opening)->assertUnprocessable();
         $this->postJson($fundUrl, $fund)->assertUnprocessable();
         $this->postJson($fundUrl, $fund + ['operation_uuid' => $fundUuid, 'issued_on' => $date])->assertUnprocessable();
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->postJson($url, $opening + ['operation_uuid' => $openUuid])->assertConflict();
         $this->postJson($fundUrl, $fund + ['operation_uuid' => $fundUuid])->assertConflict();
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
@@ -7183,15 +7184,17 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($tables as $table) $committed[$table] = $snapshot($table);
         $this->postJson($url, $opening + ['operation_uuid' => $openUuid])->assertOk()->assertJsonPath('account.id', $newId);
         $this->postJson($fundUrl, $fund + ['operation_uuid' => $fundUuid])->assertOk()->assertJsonPath('cash_session.id', $sessionId);
-        config(['financial_candidate.treasury_opening_funding' => false]);
-        $this->postJson($url, $opening)->assertConflict();
-        $this->postJson($fundUrl, $fund)->assertConflict();
-        $this->postJson($fundUrl, $fund + ['operation_uuid' => $fundUuid])->assertConflict();
+        config(['financial_candidate.treasury_opening_funding' => ! $enabled]);
+        $this->postJson($url, $opening)->assertUnprocessable();
+        $this->postJson($fundUrl, $fund)->assertUnprocessable();
+        $this->postJson($url, $opening + ['operation_uuid' => $openUuid])->assertOk()->assertJsonPath('account.id', $newId);
+        $this->postJson($fundUrl, $fund + ['operation_uuid' => $fundUuid])->assertOk()->assertJsonPath('cash_session.id', $sessionId);
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         foreach (['payments', 'transactions'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
     }
 
-    public function test_release_treasury_transfer_entry_preserves_transit_and_independent_receipt(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_treasury_transfer_entry_preserves_transit_and_independent_receipt(bool $enabled): void
     {
         [, , $account, , , $subscriber] = $this->held();
         $sender = $this->actor();
@@ -7219,13 +7222,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
-        config(['financial_candidate.treasury_transfers' => true]);
+        config(['financial_candidate.treasury_transfers' => $enabled]);
         $this->rejects('gated_treasury_transfer_writer_required', fn () => $service->dispatch($sender, $dispatch));
         $this->rejects('gated_treasury_transfer_writer_required', fn () =>
             DB::transaction(fn () => $service->dispatch($sender, $dispatch, $writer)));
         \Laravel\Sanctum\Sanctum::actingAs($sender);
         $this->postJson($url, $dispatch)->assertUnprocessable();
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->postJson($url, $dispatch + ['operation_uuid' => $dispatchUuid])->assertConflict();
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -7240,10 +7243,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->rejects('gated_treasury_transfer_writer_required', fn () => $service->receive($receiver, $id, $receive));
         $this->rejects('gated_treasury_transfer_writer_required', fn () =>
             DB::transaction(fn () => $service->receive($receiver, $id, $receive, $writer)));
-        config(['financial_candidate.treasury_transfers' => false]);
-        $this->postJson($receiptUrl, $receive)->assertConflict();
-        $this->postJson($receiptUrl, $receive + ['operation_uuid' => $receiveUuid])->assertConflict();
-        config(['financial_candidate.treasury_transfers' => true]);
+        config(['financial_candidate.treasury_transfers' => ! $enabled]);
+        $this->postJson($receiptUrl, $receive)->assertUnprocessable();
         $this->postJson($receiptUrl, array_replace($receive, ['amount' => '3.99', 'operation_uuid' => $receiveUuid]))->assertUnprocessable();
         $this->postJson($receiptUrl, $receive + ['operation_uuid' => $receiveUuid])->assertOk()
             ->assertJsonPath('transfer.status', 'received')->assertJsonPath('transfer.in_transit_minor', 0);
@@ -7253,8 +7254,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         \Laravel\Sanctum\Sanctum::actingAs($sender);
         $this->postJson($url, $dispatch + ['operation_uuid' => $dispatchUuid])->assertOk()
             ->assertJsonPath('transfer.id', $id);
-        config(['financial_candidate.treasury_transfers' => false]);
-        $this->postJson($url, $dispatch)->assertConflict();
+        config(['financial_candidate.treasury_transfers' => $enabled]);
+        $this->postJson($url, $dispatch)->assertUnprocessable();
+        $this->postJson($url, $dispatch + ['operation_uuid' => $dispatchUuid])->assertOk()->assertJsonPath('transfer.id', $id);
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $dispatchUuid, 'leg' => 'treasury', 'amount_minor' => -400]);
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $receiveUuid, 'leg' => 'treasury', 'amount_minor' => 400]);

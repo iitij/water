@@ -174,6 +174,9 @@ class CashSessionService
         $minor = Cash::input($amount, 'amount', DecimalDomain::D14, 1, digitsOnly: true);
 
         return DB::transaction(function () use ($collector, $issuer, $accountId, $minor, $reference, $evidence, $squareId, $notes, $gatedWriter): CashSession {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_collector_funding_writer_required');
+            }
             // Same lock order as treasury posting and payment issuance: global register,
             // treasury account, then collector and new till. No subscriber lock is needed.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {

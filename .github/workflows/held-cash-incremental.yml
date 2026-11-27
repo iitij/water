@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify mandatory invoice, reading issuance and reversal gates
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_invoice_api_shares_issue_identity_and_cancellation_reversal|test_release_invoice_filament_create_and_modals_share_financial_identity|test_release_reading_batch_invoice_api_preserves_partial_success_and_replay|test_release_reading_auto_invoice_filament_resumes_original_after_commit|test_release_reading_auto_invoice_api_recovers_only_original_intent|test_release_invoice_service_fence_preserves_original_and_reversal' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify mandatory treasury opening, collector funding and internal transfers
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_funding_entry_preserves_cash_custody_and_registered_replay|test_release_treasury_transfer_entry_preserves_transit_and_independent_receipt|test_round138_funded_till_returns_registered_funding_and_net_receipts_once|test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify mandatory invoice, reading issuance and reversal gates
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_invoice_api_shares_issue_identity_and_cancellation_reversal|test_release_invoice_filament_create_and_modals_share_financial_identity|test_release_reading_batch_invoice_api_preserves_partial_success_and_replay|test_release_reading_auto_invoice_filament_resumes_original_after_commit|test_release_reading_auto_invoice_api_recovers_only_original_intent|test_release_invoice_service_fence_preserves_original_and_reversal' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify mandatory treasury opening, collector funding and internal transfers
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_funding_entry_preserves_cash_custody_and_registered_replay|test_release_treasury_transfer_entry_preserves_transit_and_independent_receipt|test_round138_funded_till_returns_registered_funding_and_net_receipts_once|test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate' tests/Feature/GatedCashCountAdjustmentWriterTest.php

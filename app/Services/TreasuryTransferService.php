@@ -109,6 +109,9 @@ final class TreasuryTransferService
             'dispatched_by' => $actor->id,
         ];
         return DB::transaction(function () use ($actor, $record, $gatedWriter): array {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_treasury_transfer_writer_required');
+            }
             $this->lock();
             [$from, $to] = $this->accounts($record['from_account_id'], $record['to_account_id']);
             $existing = DB::table('treasury_transfers')->where('reference', $record['reference'])->lockForUpdate()->first();
@@ -145,6 +148,9 @@ final class TreasuryTransferService
         app(TreasuryRegisterService::class)->authorize($actor);
         $record = $this->evidence($data, 'received_on') + ['treasury_transfer_id' => $id, 'received_by' => $actor->id];
         return DB::transaction(function () use ($actor, $id, $record, $gatedWriter): array {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_treasury_transfer_writer_required');
+            }
             $this->lock();
             $transfer = DB::table('treasury_transfers')->where('id', $id)->lockForUpdate()->first();
             abort_unless($transfer, 404);
