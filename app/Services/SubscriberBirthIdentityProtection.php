@@ -31,6 +31,15 @@ final class SubscriberBirthIdentityProtection
             $defs['fin_subscriber_birth_replace'] = ['subscribers', 'INSERT',
                 "BEFORE INSERT ON subscribers FOR EACH ROW {$body}", $body];
         }
+        // A missing/invalid creation timestamp would otherwise disappear
+        // from cutoff queries. Keep historical rows untouched; reject new ones.
+        $invalid = $sqlite ? "NEW.created_at IS NULL OR strftime('%Y-%m-%d %H:%M:%S', NEW.created_at) IS NULL"
+            : 'NEW.created_at IS NULL OR YEAR(NEW.created_at) = 0';
+        $message = 'Subscriber birth timestamp is required';
+        $body = $sqlite ? "WHEN {$scope} AND ({$invalid}) BEGIN SELECT RAISE(ABORT, '{$message}'); END"
+            : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF locked_scope IS NOT NULL AND ({$invalid}) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END";
+        $defs['fin_subscriber_birth_insert'] = ['subscribers', 'INSERT',
+            "BEFORE INSERT ON subscribers FOR EACH ROW {$body}", $body];
         return $defs;
     }
 

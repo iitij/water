@@ -10385,6 +10385,45 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($report, $diagnostic->inspect($reviewer, $period, $now));
     }
 
+    public function test_subscriber_cutoff_rejects_missing_birth_even_without_financial_activity(): void
+    {
+        $subscriber = Subscriber::create(['name' => 'Synthetic valid birth',
+            'square_id' => Square::create(['name' => 'Synthetic birth square'])->id, 'status' => 'active']);
+        $raw = (array) DB::table('subscribers')->where('id', $subscriber->id)->sole();
+        unset($raw['id']);
+        $raw['name'] = 'Synthetic unknown birth';
+        $raw['created_at'] = null;
+        try {
+            DB::table('subscribers')->insert($raw);
+            $this->fail('Missing birth timestamp was accepted.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('Subscriber birth timestamp is required', $error->getMessage());
+        }
+        $this->assertDatabaseCount('subscribers', 1);
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($period));
+        $before = $inspect();
+        $this->assertTrue($before['all_cutoff_accounts_match'], json_encode($before));
+        $guard = app(\App\Services\SubscriberBirthIdentityProtection::class);
+        // Isolated fixture simulates an existing ambiguous record, not a repair.
+        DB::unprepared('DROP TRIGGER fin_subscriber_birth_insert');
+        try {
+            $id = DB::table('subscribers')->insertGetId($raw);
+            $this->assertFalse($inspect()['all_cutoff_accounts_match']);
+        } finally {
+            $guard->install();
+        }
+        $report = $inspect();
+        $this->assertFalse($report['all_cutoff_accounts_match']);
+        $this->assertFalse($report['allocation_policy_verified']);
+        $this->assertContains(['code' => 'subscriber_cutoff_birth_timestamp_unverified',
+            'subscriber_id' => (int) $id], $report['issues']);
+        $this->assertDatabaseHas('subscribers', ['id' => $id, 'created_at' => null]);
+        $this->assertDatabaseCount('transactions', 0);
+        $this->assertFalse($report['closure_authorized']);
+    }
+
     public function test_subscriber_birth_identity_cannot_shift_across_cutoff(): void
     {
         $actor = $this->actor();

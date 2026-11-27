@@ -43,6 +43,19 @@ final class FinancialSubscriberPeriodEvidence
             return $base + ['scanned_cutoff_accounts_match' => false, 'rows' => [], 'prior_accounts' => [], 'prior_account_movements' => [], 'all_cutoff_accounts_match' => false,
                 'issues' => [['code' => 'subscriber_cutoff_source_or_guard_unverified']]];
         }
+        // SQL comparisons omit NULL birth timestamps entirely. Explicitly
+        // inventory ambiguous records, regardless of their financial activity.
+        $invalidBirth = DB::table('subscribers')->where(function ($query) {
+            $query->whereNull('created_at');
+            if (DB::getDriverName() === 'sqlite') {
+                $query->orWhereRaw("strftime('%Y-%m-%d %H:%M:%S', created_at) IS NULL");
+            } else {
+                $query->orWhereRaw('YEAR(created_at) = 0');
+            }
+        })->orderBy('id')->lockForUpdate()->pluck('id');
+        foreach ($invalidBirth as $id) {
+            $issues[] = ['code' => 'subscriber_cutoff_birth_timestamp_unverified', 'subscriber_id' => (int) $id];
+        }
         $predecessor = app(FinancialOpeningContinuityDiagnostic::class)->predecessor($periodId);
         $periods = DB::table('financial_periods')->where('scope_key', 'water')
             ->where('start_on', '<=', $period->start_on)->orderBy('start_on')->lockForUpdate()->get();
@@ -61,6 +74,7 @@ final class FinancialSubscriberPeriodEvidence
             $id = (int) $account->id;
             $legs = $byAccount[$id] ?? [];
             unset($byAccount[$id]);
+            if ($invalidBirth->contains($account->id)) continue;
             if ($account->created_at < $start) {
                 $birthDate = (new DateTimeImmutable($account->created_at, $utc))->setTimezone($zone)->format('Y-m-d');
                 $chain = $periods->filter(fn ($p) => $p->next_on > $birthDate)->values();
