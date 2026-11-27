@@ -22,8 +22,14 @@ final class BankReconciliationService
      */
     private function evidenceTransaction(User $actor, string $from, string $to, callable $work): array
     {
-        if (config('financial_candidate.bank_evidence') !== true) {
-            return DB::transaction(fn () => $work($actor), 3);
+        $candidate = config('financial_candidate.bank_evidence') === true;
+        if (! $candidate && ! DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
+            return DB::transaction(function () use ($actor, $work): array {
+                if (DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                    throw new \DomainException('financial_scope_configured_retry');
+                }
+                return $work($actor);
+            }, 3);
         }
         abort_unless(app()->environment(['testing', 'staging']), 503);
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $to, now()->toDateTimeImmutable(),

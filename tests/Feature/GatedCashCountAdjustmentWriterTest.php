@@ -11704,7 +11704,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->round134Collection('late_bank', statementRange: true);
     }
 
-    public function test_bank_evidence_entry_requires_every_statement_month_open_and_independent_match(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_bank_evidence_entry_requires_every_statement_month_open_and_independent_match(bool $enabled): void
     {
         $importer = $this->actor();
         $reviewer = $this->actor();
@@ -11723,7 +11724,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->travelTo(\Carbon\Carbon::parse('2026-12-02T10:00:00+03:00'));
         DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
             'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
-        config(['financial_candidate.bank_evidence' => true]);
+        config(['financial_candidate.bank_evidence' => $enabled]);
         $url = '/api/treasury/accounts/'.$bank['id'].'/bank-statements';
         $payload = ['reference' => 'QA-BANK-RANGE-STMT', 'from_date' => '2026-11-25', 'to_date' => '2026-12-02',
             'opening_amount' => '100.00', 'closing_amount' => '99.75', 'evidence' => self::EVIDENCE,
@@ -11752,6 +11753,25 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertDatabaseCount('financial_posting_events', 3);
         $this->assertDatabaseCount('transactions', 0);
+        $before = [];
+        foreach (['bank_statements', 'bank_statement_lines', 'bank_statement_matches', 'treasury_postings', 'audit_events'] as $table) {
+            $before[$table] = DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all();
+        }
+        $disabled = $this->actor();
+        DB::table('users')->where('id', $disabled->id)->update(['disabled_at' => now()]);
+        $service = app(\App\Services\BankReconciliationService::class);
+        foreach ([fn () => $service->import($disabled, (int) $bank['id'], $payload),
+            fn () => $service->matchLine($disabled, (int) $sid, (int) $line->id, (int) $posting->id, self::EVIDENCE)] as $action) {
+            try {
+                $action();
+                $this->fail('Disabled stale actor accepted for bank evidence.');
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+                $this->assertSame(403, $error->getStatusCode());
+            }
+        }
+        foreach ($before as $table => $rows) {
+            $this->assertSame($rows, DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all(), $table);
+        }
         DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
         $this->postJson($matchUrl, $match)->assertConflict();
         \Laravel\Sanctum\Sanctum::actingAs($importer);
