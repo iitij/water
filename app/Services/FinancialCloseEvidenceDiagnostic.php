@@ -100,6 +100,7 @@ final class FinancialCloseEvidenceDiagnostic
         if ($continuity !== null && (! $continuity['adjacent_snapshots_match'] || ! $continuity['carry_snapshots_unchanged'])) {
             $blockers[] = 'snapshot_continuity_unmatched';
         }
+        if (! app(LedgerProtection::class)->active()) $blockers[] = 'close_ledger_protection_missing';
         if (! app(FinancialCloseJournalProtection::class)->active()) $blockers[] = 'close_journal_protection_missing';
         sort($blockers, SORT_STRING);
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
