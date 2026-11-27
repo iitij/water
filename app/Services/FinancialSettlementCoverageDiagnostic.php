@@ -150,11 +150,19 @@ final class FinancialSettlementCoverageDiagnostic
                 $issue('counted_cash_orphan_audit', 'audit_events', (string) $audit->id);
             }
         }
+        $shortages = app(CustodyShortageSettlementCoverage::class)->inspect($end);
+        foreach ($shortages['issues'] as $finding) {
+            $issue($finding['code'], 'audit_events', (string) $finding['audit_id']);
+        }
+        if ($shortages['pending_count'] !== 0) {
+            $issue('shortage_settlement_pending', 'cash_sessions', 'scope', ['count' => $shortages['pending_count']]);
+        }
         ksort($issues, SORT_STRING);
         return ['period_id' => $periodId, 'start_on' => $start, 'through' => $through,
             'bank_accounts_checked' => $accounts->count(), 'bank_statements_checked' => $statementsChecked,
             'bank_period_evidence' => $bankEvidence,
             'counted_reviews_checked' => $reviews->count(), 'counted_sessions_verified' => $verifiedSessions,
+            'shortage_settlements' => $shortages,
             'issues' => array_values($issues), 'scanned_settlements_match' => $issues === [],
             'source_coverage_verified' => false, 'closure_authorized' => false];
     }
