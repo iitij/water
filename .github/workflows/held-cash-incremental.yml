@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify held cash destination and later discharge
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_held_fence_blocks_closed_liability_and_discharge_insertions|test_held_payout_posting_failure_rolls_back_all_effects_and_allows_retry|test_held_credit_allocation_failure_rolls_back_document_ledger_registry_and_reservation|test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify cash session and transfer destinations
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_cash_session_fence_preserves_closed_evidence|test_source_local_cutoff_reversals_and_transfer_match_aden_month_at_midnight|test_release_subscriber_transfer_entry_preserves_original_cash_and_both_balances' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify held cash destination and later discharge
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_held_fence_blocks_closed_liability_and_discharge_insertions|test_held_payout_posting_failure_rolls_back_all_effects_and_allows_retry|test_held_credit_allocation_failure_rolls_back_document_ledger_registry_and_reservation|test_held_period_payout_carry_preserves_prior_authorization_and_later_cash_discharge' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify cash session and transfer destinations
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_cash_session_fence_preserves_closed_evidence|test_source_local_cutoff_reversals_and_transfer_match_aden_month_at_midnight|test_release_subscriber_transfer_entry_preserves_original_cash_and_both_balances' tests/Feature/GatedCashCountAdjustmentWriterTest.php

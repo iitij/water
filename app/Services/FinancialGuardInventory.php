@@ -33,6 +33,7 @@ final class FinancialGuardInventory
             'allocation_history' => fn () => app(AllocationHistoryProtection::class)->active(),
             'held_documents' => fn () => app(HeldCashDocumentProtection::class)->active(),
             'held_cash_destinations' => fn () => app(HeldCashDestinationProtection::class)->active(),
+            'session_transfer_destinations' => fn () => app(SessionTransferDestinationProtection::class)->active(),
             'refund_release_period' => fn () => app(RefundReleasePeriodProtection::class)->active(),
             'held_release' => fn () => app(HeldCashReleaseDocumentProtection::class)->active(),
             'held_release_journal' => fn () => app(HeldCashReleaseDocumentProtection::class)->journalActive(),

@@ -8749,6 +8749,28 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->assertSame($count, $report['matched_legs']);
             $this->assertFalse($report['closure_authorized']);
         }
+        $this->assertTrue(app(\App\Services\SessionTransferDestinationProtection::class)->active());
+        $row = (array) DB::table('payment_account_transfers')->sole();
+        $raw = array_diff_key($row, ['id' => true]);
+        $raw['payment_id'] = $receipt->id;
+        $audits = DB::table('audit_events')->count();
+        foreach (['2026-11-30 20:59:59', '2026-12-31 21:00:00'] as $outside) {
+            foreach ([
+                fn () => DB::table('payment_account_transfers')->insert(array_replace($raw, ['created_at' => $outside])),
+                fn () => DB::table('audit_events')->insert(['event' => 'payment.account_transferred',
+                    'entity_type' => \App\Models\PaymentAccountTransfer::class, 'entity_id' => '999999',
+                    'actor_user_id' => $reviewer->id, 'source' => 'internal', 'occurred_at' => $outside]),
+            ] as $attempt) {
+                try {
+                    $attempt();
+                    $this->fail('Transfer destination bypass accepted.');
+                } catch (\Illuminate\Database\QueryException $error) {
+                    $this->assertStringContainsString('Financial transfer period is fenced', $error->getMessage());
+                }
+            }
+        }
+        $this->assertSame($row, (array) DB::table('payment_account_transfers')->sole());
+        $this->assertSame($audits, DB::table('audit_events')->count());
         $this->assertTrue(app(\App\Services\FinancialSourceInsertProtection::class)->active());
     }
 
@@ -10079,8 +10101,6 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->decide($sessions->close($sessions->open($collector), '0.00', null, $collector), true, $reviewer);
         $before = (array) DB::table('cash_sessions')->where('id', $session->id)->sole();
         $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
-        DB::table('financial_periods')->where('id', $period)->update(['state' => 'FROZEN']);
-        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
         $reject = function (callable $action, bool $userDeletion = false): void {
             try {
                 $action();
@@ -10091,6 +10111,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 if (DB::getDriverName() === 'mysql') $this->assertSame('45000', $error->errorInfo[0]);
             }
         };
+        $this->assertTrue(app(\App\Services\SessionTransferDestinationProtection::class)->active());
+        $raw = array_diff_key($before, ['id' => true]);
+        foreach (['2026-10-31', '2026-12-01'] as $outside) {
+            $reject(fn () => DB::table('cash_sessions')->insert(array_replace($raw, ['session_date' => $outside])));
+            $reject(fn () => DB::table('cash_sessions')->where('id', $session->id)->update(['session_date' => $outside]));
+        }
+        $this->assertSame($before, (array) DB::table('cash_sessions')->where('id', $session->id)->sole());
+        DB::table('financial_periods')->where('id', $period)->update(['state' => 'FROZEN']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
         $reject(fn () => DB::table('cash_sessions')->where('id', $session->id)->update(['counted_amount' => '1.00']));
         $reject(fn () => DB::table('cash_sessions')->where('id', $session->id)->delete());
         $reject(fn () => DB::table('users')->where('id', $collector->id)->delete(), true);
