@@ -9026,6 +9026,116 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($after, $snapshot());
     }
 
+    public function test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate(): void
+    {
+        app(\App\Services\LedgerProtection::class)->install();
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $period)->update(['version' => 0]);
+        [$counter, $reviewer, $cash, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $collector = $this->actor();
+        $sender = $this->actor();
+        $receiver = $this->actor();
+        $cashId = (int) $cash['id'];
+        \App\Models\Tariff::create(['name' => 'Integrated synthetic tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-FINAL-CYCLE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\GatedInvoiceTransferWriter::class)->issue($sender, (int) $subscriber->id, (int) $meter->id,
+            '55555555-5555-4555-8555-555555555555', $this->nowAt());
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, $cashId,
+            '0.40', 'QA-FINAL-CYCLE-HANDOVER', '2026-11-25', self::EVIDENCE,
+            '77777777-7777-4777-8777-777777777777', $this->nowAt());
+        $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($receiver, [
+            'code' => 'QA-FINAL-CYCLE-BANK', 'name' => 'Synthetic bank', 'channel' => 'bank',
+            'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-FINAL-CYCLE-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '88888888-8888-4888-8888-888888888888', $this->nowAt())['account'];
+        $bankId = (int) $bank['id'];
+        app(\App\Services\GatedTreasuryTransferWriter::class)->dispatch($sender, ['from_account_id' => $cashId,
+            'to_account_id' => $bankId, 'amount' => '4.00', 'reference' => 'QA-FINAL-CYCLE-TRANSIT',
+            'dispatched_on' => '2026-11-25', 'evidence' => self::EVIDENCE],
+            '99999999-9999-4999-8999-999999999999', $this->nowAt());
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-30T15:00:00+03:00'));
+        $counts = app(TreasuryCashCountService::class);
+        $count = $counts->record($counter, $cashId, '96.65', 'QA-FINAL-CYCLE-CASH', self::EVIDENCE)['count'];
+        $counts->review($reviewer, (int) $count['id'], true, self::EVIDENCE);
+        app(\App\Services\BankReconciliationService::class)->import($sender, $bankId, [
+            'reference' => 'QA-FINAL-CYCLE-STMT', 'from_date' => '2026-11-25', 'to_date' => '2026-11-30',
+            'opening_amount' => '100.00', 'closing_amount' => '100.00', 'evidence' => self::EVIDENCE, 'lines' => [],
+        ]);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $current = $diagnostic->inspect($reviewer, $period, now()->toDateTimeImmutable());
+        $this->assertTrue($current['current_subscriber_diagnostic']['scanned_accounts_match'], json_encode($current));
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $now = now()->toDateTimeImmutable();
+        $report = $diagnostic->inspect($reviewer, $period, $now);
+        $this->assertTrue($report['source']['scanned_sources_match'], json_encode($report['source']));
+        $this->assertTrue($report['movements']['recorded_movements_verified']);
+        $this->assertTrue($report['cash_period_evidence']['all_accounts_matched'], json_encode($report['cash_period_evidence']));
+        $this->assertSame(9665, $report['cash_period_evidence']['rows'][0]['closing_minor']);
+        $this->assertTrue($report['settlement']['bank_period_evidence']['all_accounts_matched']);
+        $this->assertSame(10000, $report['settlement']['bank_period_evidence']['rows'][0]['closing_minor']);
+        $outstanding = $report['outstanding_period_evidence'];
+        $this->assertTrue($outstanding['transit']['recorded_rollforward_verified']);
+        $this->assertTrue($outstanding['custody']['recorded_rollforward_verified']);
+        $this->assertSame(400, $outstanding['transit']['recorded_closing_minor']);
+        $this->assertSame(60, $outstanding['custody']['recorded_closing_minor']);
+        $this->assertSame(5, $outstanding['liability']['closing_minor']);
+        $this->assertSame(0, $outstanding['variance_exposure']['unresolved_shortage_minor']);
+        $this->assertFalse($report['writer_coverage']['complete_writer_coverage_verified']);
+        $this->assertFalse($report['closure_authorized']);
+        $coordinator = new \App\Services\FinancialCloseCoordinator(new \App\Support\FinancialClosePolicy(),
+            app(\App\Services\FinancialCloseReadinessProofSource::class));
+        $this->rejects('close_readiness_unverified:'.implode(',', $report['blockers']), fn () =>
+            $coordinator->execute('water', '2026-11', 'freeze', (int) $reviewer->id,
+                ['uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'version' => 0, 'reason' => 'Independent integrated accounting close review'], $now));
+        $this->assertDatabaseCount('financial_close_commands', 0);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+        $this->assertSame($report, $diagnostic->inspect($reviewer, $period, $now));
+    }
+
+    public function test_final_accounting_cash_session_fence_preserves_closed_evidence(): void
+    {
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->decide($sessions->close($sessions->open($collector), '0.00'), true, $reviewer);
+        $before = (array) DB::table('cash_sessions')->where('id', $session->id)->sole();
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $period)->update(['state' => 'FROZEN']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+        $reject = function (callable $action): void {
+            try {
+                $action();
+                $this->fail('Expected cash session fence.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial cash session evidence is fenced', $error->getMessage());
+            }
+        };
+        $reject(fn () => DB::table('cash_sessions')->where('id', $session->id)->update(['counted_amount' => '1.00']));
+        $reject(fn () => DB::table('cash_sessions')->where('id', $session->id)->delete());
+        $reject(fn () => DB::table('users')->where('id', $collector->id)->delete());
+        DB::table('financial_periods')->where('id', $period)->update(['state' => 'CLOSED']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        $reject(fn () => DB::table('cash_sessions')->where('id', $session->id)->update(['approved_by' => $collector->id]));
+        $reject(fn () => DB::table('users')->where('id', $reviewer->id)->delete());
+        $this->assertSame($before, (array) DB::table('cash_sessions')->where('id', $session->id)->sole());
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-02T12:00:00+03:00'));
+        $later = $sessions->decide($sessions->close($sessions->open($collector), '0.00'), true, $reviewer);
+        $this->assertTrue($later->isApproved());
+        $this->assertSame($before, (array) DB::table('cash_sessions')->where('id', $session->id)->sole());
+    }
+
     public function test_close_evidence_actual_coordinator_refuses_incomplete_proof(): void
     {
         app(\App\Services\LedgerProtection::class)->install();
@@ -9540,6 +9650,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->assertSame(30, $row['source_evidence']['voided_minor']);
             $this->assertSame(600, $row['source_evidence']['expected_minor']);
             $this->assertSame(20, $row['source_evidence']['shortage_minor']);
+            $this->assertSame(20, $proof['variance_exposure']['unresolved_shortage_minor']);
+            $this->assertFalse($proof['variance_exposure']['rows'][0]['recoverable_recognized']);
             $this->assertSame(0, $row['source_evidence']['surplus_minor']);
             $this->assertFalse($row['source_evidence']['variance_disposition_verified']);
             $this->assertFalse($proof['closure_authorized']);
