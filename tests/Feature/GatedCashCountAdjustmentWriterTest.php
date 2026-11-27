@@ -9767,6 +9767,29 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 1);
     }
 
+    public function test_final_accounting_cash_session_decision_requires_independent_actor(): void
+    {
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->close($sessions->open($collector), '0.00');
+        $before = DB::table('audit_events')->count();
+        foreach ([true, false] as $approve) {
+            try {
+                $sessions->decide($session, $approve, $collector, 'Independent review required');
+                $this->fail('Self decision was accepted.');
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+                $this->assertSame(403, $error->getStatusCode());
+            }
+            $this->assertTrue($session->fresh()->isClosed());
+            $this->assertNull($session->fresh()->approved_by);
+            $this->assertSame($before, DB::table('audit_events')->count());
+        }
+        $approved = $sessions->decide($session, true, $reviewer);
+        $this->assertTrue($approved->isApproved());
+        $this->assertSame((int) $reviewer->id, (int) $approved->approved_by);
+    }
+
     public function test_custody_source_coverage_keeps_shortage_visible_after_full_handover(): void
     {
         [, , $account, , , $subscriber] = $this->held();
