@@ -163,6 +163,9 @@ final class LateReceiptReviewService
             throw ValidationException::withMessages(['evidence' => 'يلزم دليل مستقل ومرجع تسوية صالح.']);
         }
         $work = function (User $actor) use ($id, $candidate, $evidence, $approve, $reference, $method, $verifiedCashDestination, $gatedWriter): array {
+            if ($approve && $candidate->payment_method === 'cash' && $gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_late_cash_writer_required');
+            }
             $this->lockIssuance();
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();
@@ -248,6 +251,9 @@ final class LateReceiptReviewService
         $candidate = DB::table('late_receipt_reviews')->find($id);
         abort_unless($candidate, 404);
         return DB::transaction(function () use ($id, $actor, $accountId, $receivedOn, $reference, $evidence, $candidate, $gatedWriter): array {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_late_cash_writer_required');
+            }
             $this->lockIssuance();
             Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();

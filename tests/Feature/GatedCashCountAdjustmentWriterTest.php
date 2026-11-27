@@ -5472,6 +5472,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $cashFence = $kind === 'late_cash';
             $switch = $cashFence ? 'financial_candidate.late_cash_settlements' : 'financial_candidate.noncash_settlements';
             $reason = $cashFence ? 'gated_late_cash_writer_required' : 'gated_collection_writer_required';
+            config([$switch => false]);
+            $this->rejects($reason, $direct);
+            if ($cashFence) $this->rejects($reason, $directIssue);
             config([$switch => true]);
             $this->rejects($reason, $direct);
             $this->rejects($reason, fn () => DB::transaction(fn () => $direct($writer)));
@@ -12242,13 +12245,16 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'financial_posting_operations', 'financial_posting_events', 'audit_events', 'document_sequences'];
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
-        config(['financial_candidate.late_cash_settlements' => true]);
         $reason = 'gated_late_cash_writer_required';
+        config(['financial_candidate.late_cash_settlements' => false]);
+        $this->rejects($reason, $direct);
+        $this->rejects($reason, $issue);
+        config(['financial_candidate.late_cash_settlements' => true]);
         $this->rejects($reason, $direct);
         $this->rejects($reason, $issue);
         $this->rejects($reason, fn () => DB::transaction(fn () => $direct($writer)));
         $this->rejects($reason, fn () => DB::transaction(fn () => $issue($writer)));
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->rejects('financial_period_not_open', $act);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);

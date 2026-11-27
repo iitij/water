@@ -612,6 +612,9 @@ final class BankReconciliationService
         }
         $candidate = Payment::findOrFail($paymentId);
         return DB::transaction(function () use ($actor, $id, $lineId, $paymentId, $reference, $evidence, $candidate, $gatedWriter): array {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_bank_collection_writer_required');
+            }
             // Issuance -> subscriber -> payment -> statement/account. The shared
             // fence serializes these writers before any business-resource lock.
             $this->lock();
