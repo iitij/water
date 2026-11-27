@@ -1,4 +1,4 @@
-name: Cash period balance evidence
+name: Outstanding period evidence
 on:
   pull_request:
     branches: ['main']
@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-cash-period-evidence'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-transit-custody-liability'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -39,11 +39,11 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify physical cash cutoff evidence and affected close diagnostics
+      - name: Verify combined outstanding period evidence and affected close diagnostics
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_period_evidence_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_outstanding_period_evidence_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-cash-period-evidence'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-transit-custody-liability'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -102,6 +102,6 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify physical cash cutoff evidence and affected close diagnostics
+      - name: Verify combined outstanding period evidence and affected close diagnostics
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_period_evidence_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_outstanding_period_evidence_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
