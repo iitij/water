@@ -23,6 +23,84 @@ use Tests\TestCase;
 /** Requires a freshly migrated disposable CI database and separate DML-only user. */
 final class FinancialCloseRuntimePrivilegesTest extends TestCase
 {
+    public function test_close_control_read_only_runtime_can_post_but_cannot_write_close_control(): void
+    {
+        if (! app()->environment('testing') || DB::getDriverName() !== 'mysql'
+            || DB::getDatabaseName() !== 'water_test' || getenv('WATER_QA_CLOSE_CONTROL') !== '1') {
+            $this->markTestSkipped('Requires isolated MySQL close-control privilege fixture.');
+        }
+        $this->assertSame(0, DB::table('financial_scopes')->count());
+        $admin = DB::getDefaultConnection();
+        $originalConfig = config('database.financial_trigger_metadata_routine');
+        config(['database.connections.qa_close_runtime' => array_replace(config('database.connections.'.$admin), [
+            'username' => 'water_close_runtime', 'password' => 'disposable_close_password', 'url' => null,
+        ])]);
+        $now = new DateTimeImmutable('2026-11-25T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($now));
+        DB::table('financial_scopes')->insert([
+            'scope_key' => 'water', 'currency' => 'YER', 'timezone' => 'Asia/Aden',
+            'mode' => 'ACTIVE', 'calendar_version' => 1, 'fence_epoch' => 5,
+        ]);
+        DB::table('financial_periods')->insert([
+            'scope_key' => 'water', 'month' => '2026-11', 'start_on' => '2026-11-01',
+            'next_on' => '2026-12-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $actor = User::factory()->create(['role' => 'admin']);
+        $actor->assignRole(Role::findOrCreate('super_admin', 'web'));
+        $subscriber = Subscriber::create(['name' => 'Synthetic isolated runtime subscriber',
+            'square_id' => Square::create(['name' => 'Synthetic isolated runtime square'])->id, 'status' => 'active']);
+        Tariff::create(['name' => 'Synthetic runtime tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-CLOSE-RUNTIME-METER']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $protected = ['financial_scopes', 'financial_periods', 'financial_close_commands', 'financial_period_closures'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $protected);
+        $before = $snapshot();
+        try {
+            DB::setDefaultConnection('qa_close_runtime');
+            config(['database.financial_trigger_metadata_routine' => true]);
+            $this->assertStringStartsWith('water_close_runtime@', (string) DB::selectOne('SELECT CURRENT_USER() AS identity')->identity);
+            $report = app(RuntimeDatabasePrivileges::class)->inspect();
+            $this->assertTrue($report['accepted'], json_encode($report));
+            $this->assertTrue($report['close_control_write_isolated'], json_encode($report));
+            $this->assertSame([], $report['close_control_issues']);
+            $this->artisan('financial:database-preflight', ['--close-control' => true])->assertExitCode(0);
+            foreach ($protected as $table) {
+                $column = $table === 'financial_scopes' ? 'scope_key' : ($table === 'financial_close_commands' ? 'command_uuid' : 'period_id');
+                if ($table === 'financial_periods') $column = 'id';
+                foreach ([
+                    "INSERT INTO {$table} ({$column}) SELECT {$column} FROM {$table} WHERE 1 = 0",
+                    "UPDATE {$table} SET {$column} = {$column} WHERE 1 = 0",
+                    "DELETE FROM {$table} WHERE 1 = 0",
+                ] as $sql) {
+                    try {
+                        DB::unprepared($sql);
+                        $this->fail('Operational identity received prohibited close-control write permission.');
+                    } catch (QueryException $error) {
+                        $this->assertContains((int) ($error->errorInfo[1] ?? 0), [1142, 1143], $error->getMessage());
+                    }
+                }
+            }
+            $this->assertEquals($before, $snapshot());
+            $invoice = app(GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id,
+                (int) $meter->id, '66666666-6666-4666-8666-666666666666', $now)['invoice'];
+            $this->assertSame('0.10', $invoice->total_amount);
+            $receipt = app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '0.04',
+                '77777777-7777-4777-8777-777777777777', $now);
+            $this->assertTrue($receipt['registry_created']);
+            $this->assertDatabaseCount('financial_posting_operations', 2);
+            $this->assertDatabaseCount('financial_posting_events', 2);
+            $this->assertEquals($before, $snapshot());
+            $inventory = DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
+            $this->assertTrue($inventory['runtime_close_control_write_isolated']);
+            $this->assertFalse($inventory['closure_authorized']);
+        } finally {
+            DB::setDefaultConnection($admin);
+            config(['database.financial_trigger_metadata_routine' => $originalConfig]);
+            DB::purge('qa_close_runtime');
+        }
+    }
+
     public function test_restricted_runtime_can_post_and_verify_guards_but_cannot_remove_them(): void
     {
         if (! app()->environment('testing') || DB::getDriverName() !== 'mysql'
