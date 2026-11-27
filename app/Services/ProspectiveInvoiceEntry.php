@@ -9,6 +9,7 @@ use App\Models\Meter;
 use App\Models\Subscriber;
 use App\Models\User;
 use DomainException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Validator;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -17,7 +18,8 @@ final class ProspectiveInvoiceEntry
 {
     public function enabled(): bool
     {
-        if (config('financial_candidate.invoices') !== true) return false;
+        if (config('financial_candidate.invoices') !== true
+            && ! DB::table('financial_scopes')->where('scope_key', 'water')->exists()) return false;
         abort_unless(app()->environment(['testing', 'staging']), 503);
         return true;
     }

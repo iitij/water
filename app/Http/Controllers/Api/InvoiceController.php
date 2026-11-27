@@ -177,7 +177,7 @@ class InvoiceController extends ApiController
         // The server issues from locked, unbilled readings and approved tariffs.
         return $this->generateResponse(fn () => app(\App\Services\ProspectiveInvoiceEntry::class)->issue(
             $request->user(), $subscriber, $meter, $data['notes'] ?? null, $data['operation_uuid'] ?? null
-        ), config('financial_candidate.invoices') === true || isset($data['operation_uuid']));
+        ), app(\App\Services\ProspectiveInvoiceEntry::class)->enabled() || isset($data['operation_uuid']));
     }
 
     public function update(Request $request, int $id)
@@ -394,7 +394,7 @@ class InvoiceController extends ApiController
         $meter = Meter::with('subscriber')->where('subscriber_id', $data['subscriber_id'])->findOrFail($data['meter_id']);
         return $this->generateResponse(fn () => app(\App\Services\ProspectiveInvoiceEntry::class)->issue(
             $request->user(), $meter->subscriber, $meter, $data['notes'] ?? null, $data['operation_uuid'] ?? null
-        ), config('financial_candidate.invoices') === true || isset($data['operation_uuid']));
+        ), app(\App\Services\ProspectiveInvoiceEntry::class)->enabled() || isset($data['operation_uuid']));
     }
 
     public function pay(Request $request, int $id, PaymentService $paymentService)

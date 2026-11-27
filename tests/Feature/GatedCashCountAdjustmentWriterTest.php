@@ -5629,7 +5629,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->round134Collection('claim', true);
     }
 
-    public function test_release_reading_auto_invoice_filament_resumes_original_after_commit(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_reading_auto_invoice_filament_resumes_original_after_commit(bool $enabled): void
     {
         [, , $account, , , $subscriber] = $this->held();
         $actor = $this->actor();
@@ -5640,7 +5641,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'start_date' => '2026-11-01', 'is_active' => true]);
         $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-WEB-AUTO',
             'installed_at' => '2026-11-01', 'initial_reading' => '0.00']);
-        config(['financial_candidate.invoices' => true]);
+        config(['financial_candidate.invoices' => $enabled]);
         \App\Models\Setting::set('auto_issue_invoice_on_reading', '1');
         \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
         $this->actingAs($actor, 'web');
@@ -5885,10 +5886,6 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             ->assertJsonPath('invoice_error', 'gated_auto_invoice_pending_changed_or_disabled');
         config(['financial_candidate.invoices' => false]);
         \App\Models\Setting::set('auto_issue_invoice_on_reading', '1');
-        $this->postJson('/api/readings', $data)->assertOk()->assertJsonPath('invoice_issued', false)
-            ->assertJsonPath('invoice_error', 'gated_invoice_entry_disabled');
-        $this->assertDatabaseCount('invoices', 0);
-        config(['financial_candidate.invoices' => true]);
         $this->postJson('/api/readings', $data)->assertOk()->assertJsonPath('duplicate', true)->assertJsonPath('invoice_issued', true);
         $invoice = \App\Models\Invoice::where('meter_id', $meter->id)->sole();
         $this->assertSame('0.10', $invoice->total_amount);
@@ -5949,7 +5946,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
 
-    public function test_release_reading_batch_invoice_api_preserves_partial_success_and_replay(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_reading_batch_invoice_api_preserves_partial_success_and_replay(bool $enabled): void
     {
         [, , $account, , , $first] = $this->held();
         $actor = $this->actor();
@@ -5978,10 +5976,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($r) => (array) $r)->all();
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
-        config(['financial_candidate.invoices' => true]);
+        config(['financial_candidate.invoices' => $enabled]);
         \Laravel\Sanctum\Sanctum::actingAs($actor);
         $this->postJson($url, array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->postJson($url, $data)->assertUnprocessable()->assertJsonPath('invoices_issued', 0);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -6006,8 +6004,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->rejects('gated_invoice_replay_conflict', fn () => $writer->issue($actor, (int) $subscriber->id,
                 (int) $meters[$i]->id, $uuid, $this->nowAt(), $data['notes'], [$ids[2]]));
         }
-        config(['financial_candidate.invoices' => false]);
-        $this->postJson($url, $data)->assertConflict();
+        config(['financial_candidate.invoices' => ! $enabled]);
+        $this->postJson($url, $data)->assertCreated()->assertJsonPath('invoices_issued', 2)->assertJsonCount(1, 'errors');
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         foreach (['payments', 'treasury_postings'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
@@ -6049,7 +6047,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('invoices', 1);
     }
 
-    public function test_release_invoice_filament_create_and_modals_share_financial_identity(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_invoice_filament_create_and_modals_share_financial_identity(bool $enabled): void
     {
         [, , $account, , , $subscriber] = $this->held();
         $actor = $this->actor();
@@ -6060,7 +6059,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-INVOICE-FILAMENT']);
         $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
             'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
-        config(['financial_candidate.invoices' => true]);
+        config(['financial_candidate.invoices' => $enabled]);
         \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
         $this->actingAs($actor, 'web');
         $create = \App\Filament\Resources\InvoiceResource\Pages\CreateInvoice::class;
@@ -6076,7 +6075,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
         $component->fillForm($data);
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $component->call('create')->assertHasErrors();
         $this->assertSame($uuid, $component->get('data.operation_uuid'));
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -6092,7 +6091,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $cancelData = ['reason' => 'Independent prospective invoice cancellation', 'operation_uuid' => $cancelUuid];
         $action = \Filament\Actions\Testing\TestAction::make('cancel_invoice')->table($invoice);
         $modal = \Livewire\Livewire::test($list)->mountAction($action)->setActionData($cancelData);
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $modal->callMountedAction()->assertHasActionErrors();
         $modal->assertActionDataSet(['operation_uuid' => $cancelUuid]);
         foreach ($afterIssue as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -6114,7 +6113,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
-    public function test_release_invoice_api_shares_issue_identity_and_cancellation_reversal(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_invoice_api_shares_issue_identity_and_cancellation_reversal(bool $enabled): void
     {
         [, , $account, , , $subscriber] = $this->held();
         $actor = $this->actor();
@@ -6133,7 +6133,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'financial_posting_operations', 'financial_posting_events', 'treasury_postings'];
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
-        config(['financial_candidate.invoices' => true]);
+        config(['financial_candidate.invoices' => $enabled]);
         $unauthorized = User::factory()->create(['role' => 'collector']);
         $unauthorized->assignRole(Role::findOrCreate('collector', 'web'));
         \Laravel\Sanctum\Sanctum::actingAs($unauthorized);
@@ -6142,7 +6142,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         \Laravel\Sanctum\Sanctum::actingAs($actor);
         $this->postJson('/api/invoices', array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
         $this->postJson('/api/invoices/generate-meter', array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->postJson('/api/invoices', $data)->assertConflict();
         $this->postJson('/api/invoices/generate-meter', $data)->assertConflict();
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
@@ -6158,7 +6158,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertForbidden();
         \Laravel\Sanctum\Sanctum::actingAs($actor);
         $this->postJson('/api/invoices/'.$id.'/cancel', array_diff_key($cancelData, ['operation_uuid' => true]))->assertUnprocessable();
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertConflict();
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         foreach ($afterIssue as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -6167,10 +6167,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($tables as $table) $committed[$table] = $snapshot($table);
         $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertOk()->assertJsonPath('invoice.id', $id);
         $this->postJson('/api/invoices/'.$id.'/cancel', array_replace($cancelData, ['reason' => 'Different cancellation intent']))->assertConflict();
-        config(['financial_candidate.invoices' => false]);
-        $this->postJson('/api/invoices', $data)->assertConflict();
-        $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertConflict();
-        $this->postJson('/api/invoices/'.$id.'/cancel', array_diff_key($cancelData, ['operation_uuid' => true]))->assertConflict();
+        config(['financial_candidate.invoices' => ! $enabled]);
+        $this->postJson('/api/invoices', $data)->assertCreated()->assertJsonPath('invoice.id', $id);
+        $this->postJson('/api/invoices/'.$id.'/cancel', $cancelData)->assertOk()->assertJsonPath('invoice.id', $id);
+        $this->postJson('/api/invoices/'.$id.'/cancel', array_diff_key($cancelData, ['operation_uuid' => true]))->assertUnprocessable();
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $issueUuid, 'leg' => 'subscriber', 'amount_minor' => -10]);
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $cancelUuid, 'leg' => 'subscriber', 'amount_minor' => 10]);
@@ -6859,6 +6859,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'financial_posting_operations', 'financial_posting_events', 'treasury_postings'];
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.invoices' => false]);
+        $this->rejects('gated_invoice_writer_required', $directIssue);
         config(['financial_candidate.invoices' => true]);
         $this->rejects('gated_invoice_writer_required', $directIssue);
         $this->rejects('gated_invoice_writer_required', fn () => DB::transaction(fn () => $directIssue($writer)));

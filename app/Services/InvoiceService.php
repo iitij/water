@@ -34,6 +34,9 @@ class InvoiceService
         }
 
         return DB::transaction(function () use ($subscriber, $meter, $notes, $includeReadings, $invoiceType, $gatedWriter) {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_invoice_writer_required');
+            }
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
             }
