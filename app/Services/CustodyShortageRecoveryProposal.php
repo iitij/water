@@ -12,13 +12,13 @@ use DateTimeZone;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
-/** Proposal of a full factual cash recovery. Not a receipt or cash posting. */
+/** Proposal of one factual cash recovery (full or partial). Not a receipt or cash posting. */
 final class CustodyShortageRecoveryProposal
 {
     public const EVENT = 'financial.custody_shortage_recovery_proposed';
 
     public function propose(User $actor, int $sessionId, int $accountId, string $reference, string $evidence,
-        string $uuid, DateTimeImmutable $now): array
+        string $uuid, DateTimeImmutable $now, ?int $recoveryMinor = null): array
     {
         CompletedCashRefundRequest::authenticated($actor);
         abort_unless(app()->environment(['testing', 'staging']), 503);
@@ -32,7 +32,7 @@ final class CustodyShortageRecoveryProposal
         $local = $now->setTimezone(new DateTimeZone('Asia/Aden'));
         $date = $local->format('Y-m-d');
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
-            function () use ($actor, $sessionId, $accountId, $reference, $evidence, $uuid, $date, $local): array {
+            function () use ($actor, $sessionId, $accountId, $reference, $evidence, $uuid, $date, $local, $recoveryMinor): array {
                 if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()
                     || ! app(CustodyShortageRecoveryProposalProtection::class)->active()) {
                     throw new DomainException('shortage_recovery_protection_required');
@@ -55,7 +55,11 @@ final class CustodyShortageRecoveryProposal
                     ->lockForUpdate()->first()) {
                     throw new DomainException('shortage_recovery_loss_conflict');
                 }
-                $intent = $source + ['account_id' => $accountId, 'reference' => $reference,
+                $amount = $recoveryMinor ?? $source['shortage_minor'];
+                if ($amount <= 0 || $amount > $source['shortage_minor']) {
+                    throw new DomainException('shortage_recovery_amount_invalid');
+                }
+                $intent = $source + ['recovery_minor' => $amount, 'account_id' => $accountId, 'reference' => $reference,
                     'evidence' => $evidence, 'operation_uuid' => $uuid, 'proposed_on' => $date,
                     'proposed_by' => (int) $actor->id];
                 foreach (AuditEvent::query()->where('event', self::EVENT)->orderBy('id')->lockForUpdate()->get() as $row) {
