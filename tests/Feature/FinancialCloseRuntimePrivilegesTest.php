@@ -75,6 +75,13 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             $this->assertStringStartsWith('water_runtime@', (string) DB::selectOne('SELECT CURRENT_USER() AS identity')->identity);
             $result = app(RuntimeDatabasePrivileges::class)->inspect();
             $this->assertTrue($result['accepted'], json_encode($result));
+            $inventory = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
+            $verified = $inventory();
+            $this->assertTrue($verified['runtime_grant_allowlist_accepted'], json_encode($verified));
+            $this->assertSame([], $verified['runtime_grant_issues']);
+            $this->assertTrue($verified['listed_guards_active'], json_encode($verified['guards']));
+            $this->assertFalse($verified['complete_writer_coverage_verified']);
+            $this->assertFalse($verified['closure_authorized']);
             $this->artisan('financial:database-preflight', ['--runtime' => true])->assertExitCode(0);
             $exit = \Illuminate\Support\Facades\Artisan::call('financial:database-preflight', ['--guards' => true]);
             $this->assertSame(0, $exit, \Illuminate\Support\Facades\Artisan::output());
@@ -119,6 +126,11 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             try {
                 $useRuntime();
                 $this->assertFalse(app(FinancialSourceInsertProtection::class)->active());
+                $damaged = $inventory();
+                $this->assertTrue($damaged['runtime_grant_allowlist_accepted']);
+                $this->assertFalse($damaged['guards']['source_period']);
+                $this->assertFalse($damaged['listed_guards_active']);
+                $this->assertFalse($damaged['closure_authorized']);
                 $this->artisan('financial:database-preflight', ['--guards' => true])
                     ->expectsOutput('financial_source_fences: missing or unverifiable')->assertExitCode(1);
             } finally {
