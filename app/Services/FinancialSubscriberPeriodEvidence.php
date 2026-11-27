@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\DB;
 
 /** Read-only cutoff reconciliation of recorded prospective subscriber sources.
  * Existing accounts with a prior balance need independent opening evidence.
- * Allocation membership/conservation is not independent target/FIFO replay.
+ * Independently replay target/FIFO from cutoff source amounts and stable document keys.
  */
 final class FinancialSubscriberPeriodEvidence
 {
@@ -37,7 +37,8 @@ final class FinancialSubscriberPeriodEvidence
         }
         $source = $this->sources->inspect($periodId);
         $issues = $rows = $prior = $priorMovements = $byAccount = [];
-        if (! $source['scanned_sources_match'] || ! app(AllocationHistoryProtection::class)->active()) {
+        if (! $source['scanned_sources_match'] || ! app(AllocationHistoryProtection::class)->active()
+            || ! app(FinancialSourceInsertProtection::class)->active()) {
             return $base + ['scanned_cutoff_accounts_match' => false, 'rows' => [], 'prior_accounts' => [], 'prior_account_movements' => [], 'all_cutoff_accounts_match' => false,
                 'issues' => [['code' => 'subscriber_cutoff_source_or_guard_unverified']]];
         }
@@ -169,11 +170,16 @@ final class FinancialSubscriberPeriodEvidence
                 if ($paid !== min($billed, $available) || SignedMinor::add($paid, $unallocated) !== $available) {
                     throw new DomainException('subscriber_cutoff_allocation_conservation');
                 }
+                $policyRows = $this->replay($id, $invoices, $credits, $until);
+                if ($revision && ! hash_equals($revision->allocation_hash,
+                    $this->integrity->fingerprint($id, $available, $paid, $unallocated, $policyRows))) {
+                    throw new DomainException('subscriber_cutoff_allocation_policy_mismatch');
+                }
                 $row = ['subscriber_id' => $id, 'billed_minor' => $billed, 'available_minor' => $available,
                     'allocated_minor' => $paid, 'unallocated_minor' => $unallocated,
                     'recorded_balance_minor' => SignedMinor::subtract($available, $billed),
                     'revision_id' => $revision ? (int) $revision->id : null,
-                    'revision_hash' => $revision?->allocation_hash, 'registry_sources' => $hashes];
+                    'revision_hash' => $revision?->allocation_hash, 'allocation_policy_matched' => true, 'registry_sources' => $hashes];
                 $row['source_hash'] = hash('sha256', json_encode($row, JSON_THROW_ON_ERROR));
                 $rows[] = $row;
             } catch (DomainException $error) {
@@ -181,8 +187,78 @@ final class FinancialSubscriberPeriodEvidence
             }
         }
         foreach (array_keys($byAccount) as $id) $issues[] = ['code' => 'subscriber_cutoff_owner_not_present', 'subscriber_id' => $id];
+        $base['allocation_policy_verified'] = $issues === [] && $prior === [];
         return $base + ['scanned_cutoff_accounts_match' => $issues === [], 'rows' => $rows,
             'issues' => $issues, 'prior_accounts' => $prior, 'prior_account_movements' => $priorMovements,
             'all_cutoff_accounts_match' => $issues === [] && $prior === []];
+    }
+
+    /** Amounts come from registered cutoff effects, never today's status or paid amount.
+     * Historical corrections are outside this prospective replay; do not guess their targets.
+     */
+    private function replay(int $subscriberId, array $caps, array $credits, string $until): array
+    {
+        $ordered = DB::table('invoices')->where('subscriber_id', $subscriberId)
+            ->whereIn('id', array_keys($caps))->orderBy('bill_date')->orderBy('id')
+            ->lockForUpdate()->pluck('id')->map(fn ($id) => (int) $id)->all();
+        if (count($ordered) !== count($caps)) throw new DomainException('subscriber_cutoff_policy_invoice_missing');
+        $sources = [];
+        $targets = array_keys($caps);
+        foreach ($credits as $key => $minor) {
+            if ($minor === 0) continue;
+            [$kind, $rawId] = explode(':', $key, 2);
+            $id = (int) $rawId;
+            $target = null;
+            switch ($kind) {
+                case 'payment':
+                    $doc = \App\Models\Payment::withTrashed()->where('subscriber_id', $subscriberId)->lockForUpdate()->findOrFail($id);
+                    $date = $doc->payment_date->format('Y-m-d H:i:s');
+                    $target = $doc->invoice_id === null ? null : (int) $doc->invoice_id;
+                    if ($target !== null) $targets[] = $target;
+                    $order = 0;
+                    break;
+                case 'transfer':
+                    $doc = \App\Models\PaymentAccountTransfer::where('to_subscriber_id', $subscriberId)->lockForUpdate()->findOrFail($id);
+                    $date = $doc->created_at->format('Y-m-d H:i:s');
+                    $order = 1;
+                    break;
+                case 'held':
+                    $doc = \App\Models\TreasuryHeldCashCredit::where('subscriber_id', $subscriberId)->lockForUpdate()->findOrFail($id);
+                    $date = $doc->effective_on.' 00:00:00';
+                    $order = 2;
+                    break;
+                default:
+                    throw new DomainException('subscriber_cutoff_policy_source_unsupported');
+            }
+            $sources[] = ['id' => $id, 'kind' => $order, 'date' => $date, 'target' => $target, 'minor' => $minor];
+        }
+        if ($targets !== [] && \App\Models\HistoricalInvoiceCorrection::query()->where('created_at', '<', $until)
+            ->where(fn ($q) => $q->whereIn('original_invoice_id', $targets)->orWhereIn('replacement_invoice_id', $targets))
+            ->lockForUpdate()->first()) {
+            throw new DomainException('subscriber_cutoff_historical_target_requires_proof');
+        }
+        usort($sources, fn ($a, $b) => [$a['date'], $a['kind'], $a['id']] <=> [$b['date'], $b['kind'], $b['id']]);
+        $rows = [];
+        foreach ($sources as $credit) {
+            $remaining = $credit['minor'];
+            $source = ['payment_id' => $credit['kind'] === 0 ? $credit['id'] : null,
+                'account_transfer_id' => $credit['kind'] === 1 ? $credit['id'] : null];
+            if ($credit['kind'] === 2) $source['held_cash_credit_id'] = $credit['id'];
+            $target = $credit['target'];
+            $queue = $ordered;
+            if ($target !== null && isset($caps[$target])) {
+                $queue = array_merge([$target], array_values(array_filter($ordered, fn ($id) => $id !== $target)));
+            }
+            foreach ($queue as $invoiceId) {
+                if ($remaining === 0) break;
+                $minor = min($caps[$invoiceId], $remaining);
+                if ($minor === 0) continue;
+                $caps[$invoiceId] = SignedMinor::subtract($caps[$invoiceId], $minor);
+                $remaining = SignedMinor::subtract($remaining, $minor);
+                $rows[] = $source + ['invoice_id' => $invoiceId, 'amount_minor' => $minor];
+            }
+            if ($remaining > 0) $rows[] = $source + ['invoice_id' => null, 'amount_minor' => $remaining];
+        }
+        return $rows;
     }
 }
