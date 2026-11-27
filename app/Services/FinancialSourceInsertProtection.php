@@ -414,6 +414,49 @@ final class FinancialSourceInsertProtection
             $defs['fin_ledger_scope_'.strtolower($event)] = ['transactions',
                 "BEFORE {$event} ON transactions FOR EACH ROW {$body}", $body, $event];
         }
+        // Count and approval evidence is consumed by the period-close proof.
+        // Prevent rewriting it, including direct SQL and MySQL cascades.
+        $sessionFenced = static function (string $row) use ($current): string {
+            return "EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water' AND s.active_freeze_uuid IS NOT NULL{$current})
+                OR EXISTS (SELECT 1 FROM financial_periods p WHERE p.scope_key = 'water'
+                    AND {$row}.session_date >= p.start_on AND {$row}.session_date < p.next_on
+                    AND (p.state <> 'OPEN'
+                        OR EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id{$current})
+                        OR EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve'{$current})){$current})";
+        };
+        $old = $sessionFenced('OLD');
+        $new = $sessionFenced('NEW');
+        $conditions = ['INSERT' => $new, 'UPDATE' => "({$old}) OR ({$new})", 'DELETE' => $old];
+        if ($sqlite) {
+            $victim = $sessionFenced('v');
+            $conditions['INSERT'] .= " OR EXISTS (SELECT 1 FROM cash_sessions v WHERE v.id = NEW.id AND ({$victim}))";
+            $conditions['UPDATE'] .= " OR EXISTS (SELECT 1 FROM cash_sessions v WHERE v.id = NEW.id AND v.id <> OLD.id AND ({$victim}))";
+        }
+        $add = static function (string $name, string $table, string $event, string $condition) use (&$defs, $sqlite): void {
+            $condition = preg_replace('/\s+/', ' ', trim($condition));
+            $msg = 'Financial cash session evidence is fenced';
+            $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+            $defs[$name] = [$table, "BEFORE {$event} ON {$table} FOR EACH ROW {$body}", $body, $event];
+        };
+        foreach ($conditions as $event => $condition) {
+            $add('fin_cash_session_scope_'.strtolower($event), 'cash_sessions', $event, $condition);
+        }
+        foreach (['users' => ['user_id', 'approved_by'], 'squares' => ['square_id']] as $parent => $columns) {
+            $link = implode(' OR ', array_map(fn ($col) => "cs.{$col} = OLD.id", $columns));
+            $guard = "EXISTS (SELECT 1 FROM cash_sessions cs WHERE ({$link}) AND (".$sessionFenced('cs')."){$current})";
+            $add('fin_cash_session_'.$parent.'_delete', $parent, 'DELETE', $guard);
+            $add('fin_cash_session_'.$parent.'_update', $parent, 'UPDATE', "OLD.id <> NEW.id AND ({$guard})");
+            if ($sqlite) {
+                $keys = $parent === 'users' ? ['id', 'email'] : ['id', 'code'];
+                $collision = implode(' OR ', array_map(fn ($key) => "v.{$key} = NEW.{$key}", $keys));
+                $linked = str_replace('OLD.id', 'v.id', $guard);
+                $add('fin_cash_session_'.$parent.'_replace', $parent, 'INSERT',
+                    "EXISTS (SELECT 1 FROM {$parent} v WHERE ({$collision}) AND ({$linked}))");
+                $add('fin_cash_session_'.$parent.'_replace_update', $parent, 'UPDATE',
+                    "EXISTS (SELECT 1 FROM {$parent} v WHERE ({$collision}) AND v.id <> OLD.id AND ({$linked}))");
+            }
+        }
         return $defs;
     }
 
