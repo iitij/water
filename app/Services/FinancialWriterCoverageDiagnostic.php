@@ -52,6 +52,7 @@ final class FinancialWriterCoverageDiagnostic
             'held_reinstatement' => fn () => app(HeldCashReleaseDocumentProtection::class)->reinstatementActive(),
             'held_active_release' => fn () => app(ActiveHeldCashRelease::class)->protectionActive(),
             'financial_approval_audit' => fn () => app(FinancialApprovalAuditProtection::class)->active(),
+            'custody_shortage_decisions' => fn () => app(CustodyShortageDecisionProtection::class)->active(),
             'completed_refund_request' => fn () => app(CompletedCashRefundRequestProtection::class)->active(),
             'completed_refund_decision' => fn () => app(CompletedCashRefundDecisionProtection::class)->active(),
             'completed_refund_resolution_proposal' => fn () => app(CompletedCashRefundResolutionProposalProtection::class)->active(),
