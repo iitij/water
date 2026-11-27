@@ -484,7 +484,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $verify = fn () => $this->gate(fn () => $service->verifyCoverage());
         $this->assertSame(20, $verify()['identified_minor']);
         $before = DB::table('financial_posting_events')->count();
-        $this->rejects('held_cash_coverage_orphan_event', fn () => $this->gate(function (array $context) use ($service): void {
+        // Simulate privileged removal in this isolated fixture to exercise the independent diagnostic.
+        DB::unprepared('DROP TRIGGER fin_held_link_registry_first_event');
+        try {
+            $this->rejects('held_cash_coverage_orphan_event', fn () => $this->gate(function (array $context) use ($service): void {
             $this->assertTrue(app(FinancialPostingRegistry::class)->record($context,
                 '66666666-6666-4666-8666-666666666666', [[
                     'source_type' => 'held_cash_assignment', 'source_id' => self::NEXT,
@@ -492,8 +495,47 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                     'source_hash' => str_repeat('a', 64),
                 ]], $this->nowAt()));
             $service->verifyCoverage();
-        }));
+            }));
+        } finally {
+            app(\App\Services\HeldRegistryLinkProtection::class)->install();
+        }
         $this->assertDatabaseCount('financial_posting_events', $before);
+        $this->assertSame(20, $verify()['identified_minor']);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+    }
+
+    public function test_held_registry_first_guard_rejects_wrong_identity_or_direction(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $actor = $this->actor();
+        $this->assignHeld($actor, $lot, $subscriber, 20);
+        $service = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $verify = fn () => $this->gate(fn () => $service->verifyCoverage());
+        $this->assertSame(20, $verify()['identified_minor']);
+        $uuid = '66666666-6666-4666-8666-666666666666';
+        $before = DB::table('financial_posting_events')->orderBy('id')->get()->all();
+        $operations = DB::table('financial_posting_operations')->count();
+        foreach ([
+            ['held_cash_assignment', self::NEXT, 'identified_liability', 5],
+            ['held_cash_assignment', $uuid, 'bank', 5],
+            ['held_cash_assignment', $uuid, 'unidentified_liability', 5],
+            ['held_cash_assignment', $uuid, 'identified_liability', -5],
+            ['held_cash_payout', $uuid, 'treasury', 5],
+            ['held_cash_payout', $uuid, 'unidentified_liability', -5],
+            ['held_cash_payout', self::NEXT, 'treasury', -5],
+        ] as [$type, $source, $leg, $amount]) {
+            try {
+                $this->gate(fn (array $context) => app(FinancialPostingRegistry::class)->record($context,
+                    $uuid, [['source_type' => $type, 'source_id' => $source, 'leg' => $leg,
+                        'amount_minor' => $amount, 'currency' => 'YER', 'source_hash' => str_repeat('a', 64)]], $this->nowAt()));
+                $this->fail('Invalid held registry-first leg was persisted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial registry source identity is invalid', $error->getMessage());
+            }
+            $this->assertEquals($before, DB::table('financial_posting_events')->orderBy('id')->get()->all());
+            $this->assertDatabaseCount('financial_posting_operations', $operations);
+        }
+        $this->assertFalse($this->assignHeld($actor, $lot, $subscriber, 20)['created']);
         $this->assertSame(20, $verify()['identified_minor']);
         $this->assertDatabaseCount('financial_period_closures', 0);
     }
