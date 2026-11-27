@@ -36,6 +36,11 @@ final class FinancialCloseCoordinatorTest extends TestCase
         }
         RefreshDatabaseState::$migrated = false;
         $this->artisan('migrate:fresh', ['--force' => true])->assertExitCode(0);
+        // MySQL migrations deliberately leave ledger trigger installation to
+        // a privileged deployment step; emulate that step only in this QA DB.
+        $ledger = app(\App\Services\LedgerProtection::class);
+        $ledger->install();
+        $this->assertTrue($ledger->active());
         DB::table('financial_scopes')->insert([
             'scope_key' => 'water', 'currency' => 'YER', 'timezone' => 'Asia/Aden',
             'mode' => 'ACTIVE', 'calendar_version' => 1, 'fence_epoch' => 10,
