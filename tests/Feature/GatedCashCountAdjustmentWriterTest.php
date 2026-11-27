@@ -8857,6 +8857,58 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseHas('financial_periods', ['month' => '2026-11', 'state' => 'CLOSED']);
     }
 
+    public function test_refund_release_audit_fence_requires_actual_open_period(): void
+    {
+        $actor = $this->actor();
+        $guard = app(\App\Services\RefundReleasePeriodProtection::class);
+        $this->assertTrue($guard->active());
+        $events = [
+            'financial.completed_cash_refund_requested' => 'completed_cash_refund_request',
+            'financial.completed_cash_refund_closed' => 'completed_cash_refund_request',
+            'financial.completed_cash_refund_resolution_proposed' => 'completed_cash_refund_request',
+            'financial.completed_cash_refund_resolution_approved' => 'completed_cash_refund_request',
+            'financial.completed_cash_refund_resolution_revised' => 'completed_cash_refund_request',
+            'financial.completed_cash_refund_batch_approved' => 'completed_cash_refund_request',
+            'financial.completed_cash_refund_document_recorded' => 'completed_cash_refund_request',
+            'financial.completed_cash_refund_document_reviewed' => 'completed_cash_refund_request',
+            'financial.completed_cash_refund_source_attested' => 'completed_cash_refund_request',
+            'financial.completed_cash_refund' => \App\Models\PaymentRefund::class,
+            'treasury.held_release_proposed' => 'held_cash_release_proposal',
+            'treasury.held_release_withdrawn' => 'held_cash_release_proposal',
+            'treasury.held_release_journal_recorded' => 'held_cash_release_journal',
+            'treasury.held_release_activated' => 'held_cash_active_release',
+        ];
+        $before = DB::table('audit_events')->count();
+        $attempt = function (string $date) use ($events, $actor): void {
+            foreach ($events as $event => $type) {
+                try {
+                    DB::table('audit_events')->insert([
+                        'event' => $event, 'entity_type' => $type, 'entity_id' => self::UUID,
+                        'actor_user_id' => $actor->id, 'source' => 'internal', 'occurred_at' => $date,
+                    ]);
+                    $this->fail('Fenced refund or release audit accepted: '.$event);
+                } catch (\Illuminate\Database\QueryException $error) {
+                    $this->assertStringContainsString('Refund or release audit period is fenced', $error->getMessage(), $event);
+                    if (DB::getDriverName() === 'mysql') $this->assertSame('45000', (string) $error->errorInfo[0]);
+                }
+            }
+        };
+        foreach (['FROZEN', 'CLOSED'] as $state) {
+            DB::table('financial_periods')->where('month', '2026-11')->update(['state' => $state]);
+            $attempt('2026-11-25 08:30:00');
+        }
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'OPEN']);
+        $attempt('2026-11-30 21:00:00');
+        DB::table('financial_scopes')->update(['active_freeze_uuid' => self::ADJUST]);
+        $attempt('2026-11-25 08:30:00');
+        DB::table('financial_scopes')->update(['active_freeze_uuid' => null]);
+        $this->assertSame($before, DB::table('audit_events')->count());
+        // Unrelated operational audit is not made subject to the financial period.
+        DB::table('audit_events')->insert(['event' => 'qa.unrelated', 'source' => 'internal',
+            'actor_user_id' => $actor->id, 'occurred_at' => '2026-11-30 21:00:00']);
+        $this->assertSame($before + 1, DB::table('audit_events')->count());
+    }
+
     public function test_source_held_fence_blocks_closed_release_journal_and_activation(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
@@ -8878,6 +8930,18 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         config(['financial_candidate.active_held_release' => true]);
         $service->recordActiveRelease($reviewer, (int) $account['id'], $proposal,
             '88888888-8888-4888-8888-888888888888', self::EVIDENCE, $this->nowAt());
+        $proposalRow = (array) DB::table('held_cash_release_proposals')->sole();
+        unset($proposalRow['id']);
+        $proposalRow['operation_uuid'] = '99999999-9999-4999-8999-999999999999';
+        $proposalRow['reference'] = 'QA-FENCED-WRONG-PERIOD';
+        $proposalRow['effective_on'] = '2026-12-01';
+        try {
+            DB::table('held_cash_release_proposals')->insert($proposalRow);
+            $this->fail('Release accepted without a matching open period.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('Held cash source period is fenced', $error->getMessage());
+        }
+        $this->assertDatabaseCount('held_cash_release_proposals', 1);
         $this->assertHeldSourceInsertFence(['held_cash_release_proposals', 'held_cash_release_journal', 'held_cash_active_releases']);
     }
 

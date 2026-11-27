@@ -53,6 +53,7 @@ final class FinancialDatabasePreflight extends Command
                 'bank_evidence_period' => fn () => app(\App\Services\BankEvidencePeriodProtection::class)->active(),
                 'allocations' => fn () => app(AllocationHistoryProtection::class)->active(),
                 'held_documents' => fn () => app(HeldCashDocumentProtection::class)->active(),
+                'refund_release_period' => fn () => app(\App\Services\RefundReleasePeriodProtection::class)->active(),
                 'held_release' => fn () => app(HeldCashReleaseDocumentProtection::class)->active(),
                 'held_release_journal' => fn () => app(HeldCashReleaseDocumentProtection::class)->journalActive(),
                 'held_reinstatement' => fn () => app(HeldCashReleaseDocumentProtection::class)->reinstatementActive(),
