@@ -30,6 +30,7 @@ class ListReadings extends ListRecords
                     Gate::authorize('create', Reading::class);
                     $actor = auth()->user();
                     return DB::transaction(function () use ($data, $actor): Reading {
+                        app(\App\Services\ReadingObservationFence::class)->lock();
                         $meter = Meter::findOrFail($data['meter_id']);
                         Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
                         $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);

@@ -225,8 +225,12 @@ class ReadingController extends ApiController
         $deleted = 0;
         $skipped = 0;
         DB::transaction(function () use ($data, &$deleted, &$skipped) {
+            app(\App\Services\ReadingObservationFence::class)->lock();
             $meterIds = Reading::whereIn('id', $data['ids'])->whereNotNull('meter_id')->pluck('meter_id')->unique()->sort()->values();
-            Meter::query()->whereIn('id', $meterIds)->orderBy('id')->lockForUpdate()->get();
+            $ownerIds = Meter::query()->whereIn('id', $meterIds)->pluck('subscriber_id')->unique()->sort()->values();
+            \App\Models\Subscriber::query()->whereIn('id', $ownerIds)->orderBy('id')->lockForUpdate()->get();
+            $meters = Meter::query()->whereIn('id', $meterIds)->orderBy('id')->lockForUpdate()->get();
+            abort_unless($meters->every(fn ($meter) => $ownerIds->contains($meter->subscriber_id)), 409);
             foreach (Reading::whereIn('id', $data['ids'])->orderBy('id')->lockForUpdate()->get() as $reading) {
                 if ($reading->is_invoiced) {
                     $skipped++;
@@ -425,6 +429,7 @@ class ReadingController extends ApiController
         // reading cannot slip between the preflight guard and meter deletion.
         try {
             $reading = DB::transaction(function () use ($meter, $data, $request, $batchIndex) {
+                app(\App\Services\ReadingObservationFence::class)->lock();
                 \App\Models\Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
                 $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
                 abort_unless((int) $locked->subscriber_id === (int) $meter->subscriber_id, 409);

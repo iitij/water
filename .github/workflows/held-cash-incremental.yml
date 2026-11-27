@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify meter retirement scope, provenance and held credit conservation
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_retirement_fence_preserves_closed_registry_and_single_meter|test_meter_replacement_preserves_held_credit_allocation_and_cash_reserve|test_release_registered_document_db_fence_preserves_identity_and_meter_retirement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify observation scope lock and durable automatic invoice recovery
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_observation_scope_fence_rejects_new_edit_and_delete_during_active_freeze|test_release_reading_auto_invoice_api_recovers_only_original_intent|test_release_reading_auto_invoice_filament_resumes_original_after_commit|test_release_reading_auto_invoice_filament_issues_after_successful_observation_commit' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify meter retirement scope, provenance and held credit conservation
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_retirement_fence_preserves_closed_registry_and_single_meter|test_meter_replacement_preserves_held_credit_allocation_and_cash_reserve|test_release_registered_document_db_fence_preserves_identity_and_meter_retirement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify observation scope lock and durable automatic invoice recovery
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_observation_scope_fence_rejects_new_edit_and_delete_during_active_freeze|test_release_reading_auto_invoice_api_recovers_only_original_intent|test_release_reading_auto_invoice_filament_resumes_original_after_commit|test_release_reading_auto_invoice_filament_issues_after_successful_observation_commit' tests/Feature/GatedCashCountAdjustmentWriterTest.php

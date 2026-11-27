@@ -47,6 +47,7 @@ class CreateReading extends CreateRecord
     protected function handleRecordCreation(array $data): Model
     {
         return DB::transaction(function () use ($data): Model {
+            app(\App\Services\ReadingObservationFence::class)->lock();
             $subscriberId = Meter::findOrFail((int) $data['meter_id'])->subscriber_id;
             \App\Models\Subscriber::query()->lockForUpdate()->findOrFail($subscriberId);
             $meter = Meter::query()->lockForUpdate()->findOrFail((int) $data['meter_id']);

@@ -63,9 +63,13 @@ class Reading extends Model
     private function withLockedObservation(callable $callback)
     {
         return \Illuminate\Support\Facades\DB::transaction(function () use ($callback) {
+            app(\App\Services\ReadingObservationFence::class)->lock();
             $meterId = $this->getOriginal('meter_id');
             if ($meterId) {
-                Meter::query()->lockForUpdate()->findOrFail($meterId);
+                $candidate = Meter::query()->findOrFail($meterId);
+                Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
+                $locked = Meter::query()->lockForUpdate()->findOrFail($meterId);
+                abort_unless((int) $locked->subscriber_id === (int) $candidate->subscriber_id, 409);
             }
             $fresh = self::withTrashed()->lockForUpdate()->findOrFail($this->getKey());
             foreach (['meter_id', 'reading_date', 'actual_reading_date', 'period_start', 'period_end',
@@ -95,6 +99,7 @@ class Reading extends Model
         if (! $this->exists) {
             $meter = Meter::findOrFail($this->meter_id);
             return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $meter) {
+                app(\App\Services\ReadingObservationFence::class)->lock();
                 Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
                 $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
                 abort_unless((int) $locked->subscriber_id === (int) $meter->subscriber_id, 409);

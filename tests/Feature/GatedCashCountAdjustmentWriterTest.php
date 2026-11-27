@@ -5642,7 +5642,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $data = ['subscriber_id' => $subscriber->id, 'meter_id' => $meter->id,
             'reading_date' => '2026-11-24', 'period_start' => '2026-11-01', 'period_end' => '2026-11-24',
             'previous_reading' => '0.00', 'current_reading' => '1.00'];
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         \Livewire\Livewire::test($page)->callAction('create', data: $data)->assertHasNoActionErrors();
         $reading = \App\Models\Reading::where('meter_id', $meter->id)->sole();
         $audit = AuditEvent::where('event', 'financial.reading_auto_invoice_intent')->where('entity_id', (string) $reading->id)->sole();
@@ -5719,6 +5719,42 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payments', 0);
     }
 
+    public function test_observation_scope_fence_rejects_new_edit_and_delete_during_active_freeze(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-OBS-FREEZE',
+            'installed_at' => '2026-11-01', 'initial_reading' => '0.00']);
+        config(['financial_candidate.invoices' => false]);
+        \App\Models\Setting::set('auto_issue_invoice_on_reading', '0');
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $data = ['meter_id' => $meter->id, 'reading_date' => '2026-11-22', 'current_reading' => '1.00',
+            'sync_uuid' => '66666666-6666-4666-8666-666666666666'];
+        $id = $this->postJson('/api/readings', $data)->assertCreated()->json('reading.id');
+        $before = DB::table('readings')->where('id', $id)->sole();
+        $next = array_replace($data, ['reading_date' => '2026-11-24', 'current_reading' => '2.00',
+            'sync_uuid' => '77777777-7777-4777-8777-777777777777']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+        $this->postJson('/api/readings', $next)->assertUnprocessable()->assertJsonValidationErrors('reading_date');
+        $this->postJson('/api/readings', $data)->assertOk()->assertJsonPath('duplicate', true);
+        foreach ([fn () => \App\Models\Reading::findOrFail($id)->update(['current_reading' => '1.50']),
+            fn () => \App\Models\Reading::findOrFail($id)->delete()] as $write) {
+            try {
+                $write();
+                $this->fail('Observation mutation bypassed active financial freeze.');
+            } catch (\Illuminate\Validation\ValidationException $error) {
+                $this->assertArrayHasKey('reading_date', $error->errors());
+            }
+        }
+        $this->assertEquals($before, DB::table('readings')->where('id', $id)->sole());
+        $this->assertDatabaseCount('readings', 1);
+        $this->assertDatabaseCount('invoices', 0);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        $this->postJson('/api/readings', $next)->assertCreated();
+        $this->assertDatabaseCount('readings', 2);
+        $this->assertDatabaseCount('invoices', 0);
+    }
+
     public function test_release_reading_auto_invoice_api_recovers_only_original_intent(): void
     {
         [, , $account, , , $subscriber] = $this->held();
@@ -5732,7 +5768,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         \Laravel\Sanctum\Sanctum::actingAs($actor);
         $data = ['meter_id' => $meter->id, 'reading_date' => '2026-11-24', 'current_reading' => '1.00',
             'sync_uuid' => '66666666-6666-4666-8666-666666666666', 'notes' => 'Original automatic invoice intent'];
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $response = $this->postJson('/api/readings', $data)->assertCreated()
             ->assertJsonPath('invoice_issued', false)->assertJsonPath('invoice_error', 'financial_period_not_open');
         $readingId = (int) $response->json('reading.id');
