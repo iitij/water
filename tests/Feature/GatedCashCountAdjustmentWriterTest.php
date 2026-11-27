@@ -10171,6 +10171,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             app(\App\Services\HeldCashRecordedLiquidityEvidence::class)->balance($accountId, '2026-11-25'));
         $outflow = fn (int $amount) => DB::transaction(fn () =>
             app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($accountId, $amount, '2026-11-25'));
+        $shortageCoverage = fn () => DB::transaction(fn () =>
+            app(\App\Services\CustodyShortageSettlementCoverage::class)->inspect('2026-12-01'));
+        $this->assertTrue($shortageCoverage()['scanned_documents_match']);
         $this->assertSame(10225, $balance());
         $outflow(10200);
         $this->rejects('held_cash_reserved', fn () => $outflow(10201));
@@ -10186,6 +10189,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
         try {
             $this->rejects('held_cash_liquidity_source', fn () => $outflow(1));
+            $report = $shortageCoverage();
+            $this->assertFalse($report['scanned_documents_match']);
+            $this->assertContains('shortage_coverage_registry_unmatched', array_column($report['issues'], 'code'));
             $this->assertSame($before + 1, DB::table('treasury_postings')->count());
             $this->assertSame($events + 1, DB::table('financial_posting_events')->count());
         } finally {

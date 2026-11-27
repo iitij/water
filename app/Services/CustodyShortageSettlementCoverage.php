@@ -24,6 +24,7 @@ final class CustodyShortageSettlementCoverage
             ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
         $issues = $rows = [];
         $pending = 0;
+        $checkedPeriods = [];
         $events = [CustodyShortageRecoveryProposal::EVENT, CustodyShortageLossDecision::PROPOSED,
             CustodyShortageLossDecision::APPROVED];
         foreach (AuditEvent::query()->whereIn('event', $events)->where('occurred_at', '<', $until)
@@ -58,16 +59,33 @@ final class CustodyShortageSettlementCoverage
                         continue;
                     }
                     $leg = app(CustodyShortageRecoveryWriter::class)->leg((int) $r->treasury_posting_id);
-                    $registered = DB::table('financial_posting_events as e')
+                    $registeredRows = DB::table('financial_posting_events as e')
                         ->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
-                        ->where('e.scope_key', 'water')->where('e.source_type', 'treasury_posting')
+                        ->join('financial_periods as p', 'p.id', '=', 'o.period_id')
+                        ->where('e.scope_key', 'water')->where('o.scope_key', 'water')->where('p.scope_key', 'water')
+                        ->whereColumn('o.effective_on', '>=', 'p.start_on')->whereColumn('o.effective_on', '<', 'p.next_on')
+                        ->where('e.source_type', 'treasury_posting')
                         ->where('e.source_id', $leg['source_id'])->where('e.leg', 'treasury')
-                        ->select('e.*', 'o.effective_on')->lockForUpdate()->first();
-                    if (! $registered || $registered->operation_uuid !== $uuid
+                        ->select('e.*', 'o.effective_on', 'o.period_id', 'o.recorded_at_utc', 'p.next_on as period_next_on')
+                        ->lockForUpdate()->get();
+                    $registered = $registeredRows->first();
+                    if ($registeredRows->count() !== 1 || $registered->operation_uuid !== $uuid
                         || $registered->effective_on !== $r->effective_on
+                        || $registered->currency !== $leg['currency']
                         || SignedMinor::parse($registered->amount_minor) !== $leg['amount_minor']
                         || ! hash_equals($leg['source_hash'], $registered->source_hash)) {
                         throw new DomainException('shortage_coverage_registry_unmatched');
+                    }
+                    // A prior-period recovery also needs its own immutable registry proof.
+                    $periodEnd = (new DateTimeImmutable($registered->period_next_on, new DateTimeZone('Asia/Aden')))
+                        ->setTimezone(new DateTimeZone('UTC'));
+                    if (new DateTimeImmutable($registered->recorded_at_utc, new DateTimeZone('UTC')) >= $periodEnd) {
+                        throw new DomainException('shortage_coverage_registry_recorded_after_cutoff');
+                    }
+                    $periodId = (int) $registered->period_id;
+                    if (! isset($checkedPeriods[$periodId])) {
+                        app(FinancialPostingRegistry::class)->verifyPeriod('water', $periodId);
+                        $checkedPeriods[$periodId] = true;
                     }
                     $rows[] = ['audit_id' => (int) $audit->id, 'session_id' => $sessionId,
                         'status' => 'recovery_posted', 'recovery_id' => (int) $r->id];
