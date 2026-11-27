@@ -62,66 +62,17 @@ final class FinancialSettlementCoverageDiagnostic
         $periodEnded = $through === (new DateTimeImmutable($period->next_on, $zone))->modify('-1 day')->format('Y-m-d')
             && now('Asia/Aden')->toDateString() >= $period->next_on;
         foreach ($accounts as $account) {
-            $cursor = max($start, $account->opening_on);
             $issueCount = count($issues);
-            $first = null;
-            $last = null;
-            $statementProofs = [];
-            $statements = DB::table('bank_statements')->where('treasury_account_id', $account->id)
-                ->where('from_date', '<=', $through)->where('to_date', '>=', $cursor)
-                ->orderBy('from_date')->orderBy('id')->lockForUpdate()->get();
-            $prior = null;
-            foreach ($statements as $statement) {
-                $id = (string) $statement->id;
-                $statementsChecked++;
-                if ($statement->from_date > $cursor) {
-                    $issue('bank_statement_gap', 'treasury_accounts', $account->id.':'.$cursor,
-                        ['missing_from' => $cursor, 'missing_until_exclusive' => $statement->from_date]);
-                }
-                if ($prior !== null && $statement->from_date <= $prior->to_date) {
-                    $issue('bank_statement_overlap', 'bank_statements', $id);
-                }
-                if ($statement->from_date < max($start, $account->opening_on) || $statement->to_date > $through) {
-                    $issue('bank_statement_boundary_requires_proof', 'bank_statements', $id);
-                }
-                $report = $this->bank->inspect($actor, (int) $statement->id);
-                $proofs = AuditEvent::query()->where('event', 'bank_statement.imported')
-                    ->where('entity_type', 'bank_statement')->where('entity_id', $id)->lockForUpdate()->get();
-                if ($proofs->count() !== 1 || (int) $proofs[0]->actor_user_id !== (int) $statement->imported_by
-                    || ($proofs[0]->after['content_hash'] ?? null) !== $statement->content_hash) {
-                    $issue('bank_statement_import_proof_missing_or_conflicting', 'bank_statements', $id);
-                }
-                if (! $report['fully_matched']) {
-                    $issue('bank_statement_unresolved', 'bank_statements', $id, [
-                        'unmatched_bank_count' => count($report['unmatched_bank_lines']),
-                        'unmatched_ledger_count' => count($report['unmatched_ledger_postings']),
-                        'bank_unmatched_minor' => $report['bank_unmatched_minor'],
-                        'ledger_unmatched_minor' => $report['ledger_unmatched_minor'],
-                        'opening_difference_minor' => $report['opening_difference_minor'],
-                        'closing_difference_minor' => $report['closing_difference_minor'],
-                        'integrity_matches' => $report['statement_integrity_matches'],
-                    ]);
-                }
-                $first ??= $statement;
-                $last = $statement;
-                $statementProofs[] = ['id' => (int) $statement->id, 'content_hash' => $statement->content_hash,
-                    'import_audit_id' => $proofs->count() === 1 ? (int) $proofs[0]->id : null];
-                $cursor = max($cursor, $next($statement->to_date));
-                $prior = $statement;
-            }
-            if ($cursor < $end) {
-                $issue('bank_statement_gap', 'treasury_accounts', $account->id.':'.$cursor,
-                    ['missing_from' => $cursor, 'missing_until_exclusive' => $end]);
-            }
-            if ($periodEnded && count($issues) === $issueCount && $first !== null && $last !== null) {
-                $bankCandidates[] = ['account' => $account, 'first' => $first, 'last' => $last, 'statements' => $statementProofs];
+            $candidate = $this->bankStatementCandidate($actor, $account, $start, $through, $issue, $statementsChecked);
+            if ($periodEnded && count($issues) === $issueCount && $candidate !== null) {
+                $bankCandidates[] = $candidate;
             }
         }
 
         $bankEvidence = ['period_ended' => $periodEnded, 'all_accounts_matched' => false,
             'rows' => [], 'issues' => [], 'closure_authorized' => false];
         if ($periodEnded) {
-            $bankEvidence = $this->bankPeriodEvidence($period, $accounts->count(), $bankCandidates);
+            $bankEvidence = $this->bankPeriodEvidence($actor, $period, $accounts->count(), $bankCandidates);
         }
 
         // Audit decisions in the inspected interval, plus effective dates in it.
@@ -167,11 +118,72 @@ final class FinancialSettlementCoverageDiagnostic
             'source_coverage_verified' => false, 'closure_authorized' => false];
     }
 
+    /** Reuse one inventory for current and adjacent-period statement evidence. */
+    private function bankStatementCandidate(User $actor, object $account, string $start,
+        string $through, callable $issue, int &$statementsChecked): ?array
+    {
+        $next = static fn (string $day): string => (new DateTimeImmutable($day, new DateTimeZone('Asia/Aden')))->modify('+1 day')->format('Y-m-d');
+        $end = $next($through);
+        $cursor = max($start, $account->opening_on);
+        $first = null;
+        $last = null;
+        $statementProofs = [];
+        $statements = DB::table('bank_statements')->where('treasury_account_id', $account->id)
+            ->where('from_date', '<=', $through)->where('to_date', '>=', $cursor)
+            ->orderBy('from_date')->orderBy('id')->lockForUpdate()->get();
+        $prior = null;
+        foreach ($statements as $statement) {
+            $id = (string) $statement->id;
+            $statementsChecked++;
+            if ($statement->from_date > $cursor) {
+                $issue('bank_statement_gap', 'treasury_accounts', $account->id.':'.$cursor,
+                    ['missing_from' => $cursor, 'missing_until_exclusive' => $statement->from_date]);
+            }
+            if ($prior !== null && $statement->from_date <= $prior->to_date) {
+                $issue('bank_statement_overlap', 'bank_statements', $id);
+            }
+            if ($statement->from_date < max($start, $account->opening_on) || $statement->to_date > $through) {
+                $issue('bank_statement_boundary_requires_proof', 'bank_statements', $id);
+            }
+            $report = $this->bank->inspect($actor, (int) $statement->id);
+            $proofs = AuditEvent::query()->where('event', 'bank_statement.imported')
+                ->where('entity_type', 'bank_statement')->where('entity_id', $id)->lockForUpdate()->get();
+            if ($proofs->count() !== 1 || (int) $proofs[0]->actor_user_id !== (int) $statement->imported_by
+                || ($proofs[0]->after['content_hash'] ?? null) !== $statement->content_hash) {
+                $issue('bank_statement_import_proof_missing_or_conflicting', 'bank_statements', $id);
+            }
+            if (! $report['fully_matched']) {
+                $issue('bank_statement_unresolved', 'bank_statements', $id, [
+                    'unmatched_bank_count' => count($report['unmatched_bank_lines']),
+                    'unmatched_ledger_count' => count($report['unmatched_ledger_postings']),
+                    'bank_unmatched_minor' => $report['bank_unmatched_minor'],
+                    'ledger_unmatched_minor' => $report['ledger_unmatched_minor'],
+                    'opening_difference_minor' => $report['opening_difference_minor'],
+                    'closing_difference_minor' => $report['closing_difference_minor'],
+                    'integrity_matches' => $report['statement_integrity_matches'],
+                ]);
+            }
+            $first ??= $statement;
+            $last = $statement;
+            $statementProofs[] = ['id' => (int) $statement->id, 'content_hash' => $statement->content_hash,
+                'import_audit_id' => $proofs->count() === 1 ? (int) $proofs[0]->id : null];
+            $cursor = max($cursor, $next($statement->to_date));
+            $prior = $statement;
+        }
+        if ($cursor < $end) {
+            $issue('bank_statement_gap', 'treasury_accounts', $account->id.':'.$cursor,
+                ['missing_from' => $cursor, 'missing_until_exclusive' => $end]);
+        }
+        return $first !== null && $last !== null
+            ? ['account' => $account, 'first' => $first, 'last' => $last, 'statements' => $statementProofs]
+            : null;
+    }
+
     /** Called only with statement candidates derived above under the scope lock.
      * The statement opening is independent documentary evidence for the
      * inspected interval, not an adopted historical balance or predecessor.
      */
-    private function bankPeriodEvidence(object $period, int $accountCount, array $candidates): array
+    private function bankPeriodEvidence(User $actor, object $period, int $accountCount, array $candidates, bool $requirePrior = true): array
     {
         $issues = [];
         $rows = [];
@@ -243,6 +255,37 @@ final class FinancialSettlementCoverageDiagnostic
                 'registered_movement_minor' => $movements, 'movement_minor' => $periodMovement,
                 'closing_minor' => $closing, 'statements' => $candidate['statements'],
                 'registry_sources' => $proofs, 'predecessor_verified' => false];
+            if (! $openedInPeriod && $requirePrior) {
+                $prior = DB::table('financial_periods')->where('scope_key', 'water')
+                    ->where('next_on', $period->start_on)->lockForUpdate()->get();
+                if ($prior->count() !== 1) {
+                    $issues[] = ['code' => 'bank_period_prior_period_missing', 'account_id' => $id];
+                    continue;
+                }
+                $previous = $prior->first();
+                $previousThrough = (new DateTimeImmutable($previous->next_on, new DateTimeZone('Asia/Aden')))
+                    ->modify('-1 day')->format('Y-m-d');
+                $priorIssues = [];
+                $checked = 0;
+                $recordIssue = static function (string $code, string $source, string $key, array $details = []) use (&$priorIssues): void {
+                    $priorIssues[] = ['code' => $code, 'source' => $source, 'id' => $key] + $details;
+                };
+                $priorCandidate = $this->bankStatementCandidate($actor, $account, $previous->start_on,
+                    $previousThrough, $recordIssue, $checked);
+                $priorEvidence = $priorIssues === [] && $priorCandidate !== null
+                    ? $this->bankPeriodEvidence($actor, $previous, 1, [$priorCandidate], false) : null;
+                if ($priorEvidence === null || ! $priorEvidence['all_accounts_matched']
+                    || $priorEvidence['rows'][0]['closing_minor'] !== $opening) {
+                    $issues[] = ['code' => 'bank_period_prior_statement_unverified', 'account_id' => $id];
+                    continue;
+                }
+                $priorRow = $priorEvidence['rows'][0];
+                $row['prior_statement'] = ['period_id' => (int) $previous->id,
+                    'closing_minor' => $priorRow['closing_minor'], 'source_hash' => $priorRow['source_hash'],
+                    'statements' => $priorRow['statements']];
+                $row['prior_statement_verified'] = true;
+            }
+            // Adjacent statement reconciliation does not certify a close journal.
             $row['source_hash'] = hash('sha256', json_encode($row, JSON_THROW_ON_ERROR));
             $rows[] = $row;
         }

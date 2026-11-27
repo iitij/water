@@ -11119,6 +11119,31 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'Independent documented bank service fee', self::EVIDENCE, self::NEXT, $later);
         $this->assertSame(9860, app(TreasuryRegisterService::class)->inspect($reviewer, $id)['provisional_recorded_balance_minor']);
         $this->assertSame($proof, $inspect()['bank_period_evidence']);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-31T15:00:00+03:00'));
+        $bank->import($importer, $id, [
+            'reference' => 'QA-CLOSE-DEC-FIRST', 'from_date' => '2026-12-01', 'to_date' => '2026-12-01',
+            'opening_amount' => '99.60', 'closing_amount' => '99.60', 'evidence' => self::EVIDENCE, 'lines' => [],
+        ]);
+        $bank->import($importer, $id, [
+            'reference' => 'QA-CLOSE-DEC-LAST', 'from_date' => '2026-12-03', 'to_date' => '2026-12-31',
+            'opening_amount' => '98.60', 'closing_amount' => '98.60', 'evidence' => self::EVIDENCE, 'lines' => [],
+        ]);
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $dec = (int) DB::table('financial_periods')->where('month', '2026-12')->value('id');
+        $inspectDec = fn () => DB::transaction(fn () => app(\App\Services\FinancialSettlementCoverageDiagnostic::class)
+            ->inspect($reviewer, $dec, '2026-12-31'))['bank_period_evidence'];
+        $decProof = $inspectDec();
+        $this->assertTrue($decProof['all_accounts_matched'], json_encode($decProof));
+        $decRow = $decProof['rows'][0];
+        $this->assertSame(9960, $decRow['opening_minor']);
+        $this->assertSame(-100, $decRow['movement_minor']);
+        $this->assertSame(9860, $decRow['closing_minor']);
+        $this->assertSame($periodId, $decRow['prior_statement']['period_id']);
+        $this->assertSame($row['source_hash'], $decRow['prior_statement']['source_hash']);
+        $this->assertTrue($decRow['prior_statement_verified']);
+        $this->assertFalse($decRow['predecessor_verified']);
+        $this->assertFalse($decProof['closure_authorized']);
+
         $guard = app(\App\Services\FinancialPostingRegistryProtection::class);
         $op = DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)->sole();
         DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
@@ -11133,6 +11158,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->assertFalse($late['all_accounts_matched']);
             $this->assertSame([], $late['rows']);
             $this->assertContains(['code' => 'bank_period_registered_movements_unmatched', 'account_id' => $id], $late['issues']);
+            $lateDec = $inspectDec();
+            $this->assertFalse($lateDec['all_accounts_matched']);
+            $this->assertSame([], $lateDec['rows']);
+            $this->assertContains(['code' => 'bank_period_prior_statement_unverified', 'account_id' => $id], $lateDec['issues']);
         } finally {
             DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
             try {
@@ -11143,6 +11172,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             }
         }
         $this->assertSame($proof, $inspect()['bank_period_evidence']);
+        $this->assertSame($decProof, $inspectDec());
     }
 
     public function test_bank_period_evidence_rejects_matched_but_unregistered_fee(): void
