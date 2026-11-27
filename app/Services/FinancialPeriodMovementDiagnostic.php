@@ -35,6 +35,7 @@ final class FinancialPeriodMovementDiagnostic
                 'movement_hash' => null, 'registry_events' => $source['registry_events']];
         }
         $rows = $totals = [];
+        $physicalEffects = [];
         $count = 0;
         $digest = hash_init('sha256');
         $encode = static fn (array $value): string => json_encode($value,
@@ -72,6 +73,16 @@ final class FinancialPeriodMovementDiagnostic
                 $row['net_movement_minor'] = SignedMinor::add($row['net_movement_minor'], $minor);
             }
             unset($row);
+            // Secondary source view only: never add these effects to sector totals.
+            if ($event->source_type === 'treasury_posting' && $event->leg === 'treasury') {
+                $posting = DB::table('treasury_postings')->where('id', $event->source_id)->lockForUpdate()->sole();
+                if (in_array($posting->kind, ['internal_transfer_out', 'internal_transfer_in', 'cash_handover'], true)) {
+                    $physicalEffects[] = ['kind' => $posting->kind, 'posting_id' => (int) $posting->id,
+                        'account_id' => (int) $posting->treasury_account_id, 'amount_minor' => $minor,
+                        'source_hash' => $event->source_hash];
+                }
+            }
+
             hash_update($digest, $encode([$event->operation_uuid, $event->source_type, $event->source_id,
                 $event->leg, $event->effective_on, $sector, $owner, $opening, (string) $minor, $event->source_hash])."\n");
             $count++;
@@ -91,6 +102,7 @@ final class FinancialPeriodMovementDiagnostic
         // not a total liability roll-forward (recognition is separate evidence).
         return $base + ['recorded_movements_verified' => true, 'registry_events' => $count,
             'rows' => array_values($rows), 'sector_totals' => $totals,
+            'physical_effects' => $physicalEffects,
             'movement_hash' => hash_final($digest), 'liability_rollforward_verified' => false];
     }
 
