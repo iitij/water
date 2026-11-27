@@ -88,6 +88,8 @@ final class FinancialLedgerRegistryVerifier
                     $actual = $this->custody->leg((int) $id);
                 } elseif ($posting->kind === 'collector_funding') {
                     $actual = $this->openingFunding->funding((int) $id, $event->operation_effective_on);
+                } elseif ($posting->kind === 'custody_shortage_recovery') {
+                    $actual = app(CustodyShortageRecoveryWriter::class)->leg((int) $id);
                 } elseif (in_array($posting->kind, ['bank_fee', 'cash_count_adjustment'], true)) {
                     $actual = $this->adjustment->leg((int) $id);
                 } elseif (in_array($posting->kind, ['bank_collection', 'late_cash_receipt'], true)) {
