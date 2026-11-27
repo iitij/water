@@ -108,6 +108,7 @@ final class FinancialCloseEvidenceDiagnostic
         if (! app(FinancialCloseJournalProtection::class)->active()) $blockers[] = 'close_journal_protection_missing';
         if ($outstanding !== null && ! $outstanding['transit']['recorded_rollforward_verified']) $blockers[] = 'transit_period_unmatched';
         if ($outstanding !== null && ! $outstanding['custody']['recorded_rollforward_verified']) $blockers[] = 'custody_period_unmatched';
+        if ($outstanding !== null && ! $outstanding['custody']['all_count_variances_resolved']) $blockers[] = 'custody_count_variances_unresolved';
         sort($blockers, SORT_STRING);
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
