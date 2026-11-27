@@ -172,6 +172,12 @@ final class FinancialOutstandingPeriodEvidence
                 if ($approved >= $from && $priorReceived !== 0) throw new DomainException('custody_period_date_conflict');
                 $closing = SignedMinor::subtract(SignedMinor::add($opening, $recognized), $received);
                 if (min($opening, $closing) < 0) throw new DomainException('custody_period_conservation');
+                if ($source['variance_minor'] > 0) {
+                    $source['surplus_disposition'] = $this->surplusDisposition($session, $audits[0],
+                        $handovers, $source['variance_minor'], $target, $next);
+                    $source['variance_disposition_verified'] =
+                        $source['surplus_disposition']['unallocated_minor'] === 0;
+                }
                 $rows[] = ['session_id' => $id, 'collector_id' => (int) $session->user_id,
                     'approval_audit_id' => (int) $audits[0]->id, 'opening_minor' => $opening,
                     'recognized_counted_minor' => $recognized, 'received_minor' => $received,
@@ -203,7 +209,7 @@ final class FinancialOutstandingPeriodEvidence
             throw new DomainException('custody_period_count_sources_mismatch');
         }
         if (DB::table('closed_cash_corrections')->where('cash_session_id', $id)->lockForUpdate()->first()
-            || DB::table('late_receipt_reviews')->where('cash_session_id', $id)->lockForUpdate()->first()) {
+            || ($variance <= 0 && DB::table('late_receipt_reviews')->where('cash_session_id', $id)->lockForUpdate()->first())) {
             throw new DomainException('custody_period_special_settlement_requires_proof');
         }
         $fundings = DB::table('cash_session_fundings')->where('cash_session_id', $id)->lockForUpdate()->get();
@@ -261,6 +267,44 @@ final class FinancialOutstandingPeriodEvidence
             'shortage_minor' => $variance < 0 ? SignedMinor::negate($variance) : 0,
             'surplus_minor' => max(0, $variance), 'funding_hash' => $fundingHash, 'collection_hashes' => $hashes,
             'variance_disposition_verified' => $variance === 0];
+    }
+
+    /** Surplus attribution changes ownership, not the physical cash total.
+     * A conservative reserve remains a restriction on liquidity, not an
+     * additional liability once the same cash has been attributed.
+     */
+    private function surplusDisposition(CashSession $session, AuditEvent $approval, iterable $handovers,
+        int $variance, int $counted, string $next): array
+    {
+        $allocation = app(GatedCountedCashWriter::class)->verifySessionThrough((int) $session->id, $next);
+        if ($allocation['capacity_minor'] !== $variance) throw new DomainException('custody_period_surplus_capacity_mismatch');
+        $received = [];
+        foreach ($handovers as $handover) {
+            if ($handover->received_on->toDateString() < $next) $received[] = $handover;
+        }
+        $reserve = null;
+        if ($received !== []) {
+            if (count($received) !== 1) throw new DomainException('custody_period_surplus_handover_mismatch');
+            $handover = $received[0];
+            $posting = DB::table('treasury_postings')->where('cash_handover_id', $handover->id)->lockForUpdate()->sole();
+            $audit = AuditEvent::query()->where('event', 'financial.handover_surplus_reserved')
+                ->where('entity_type', CashHandover::class)->where('entity_id', (string) $handover->id)
+                ->lockForUpdate()->first();
+            $until = (new DateTimeImmutable($next, new DateTimeZone('Asia/Aden')))
+                ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+            if (! $audit || $audit->getRawOriginal('occurred_at') >= $until
+                || ($audit->after['approval_id'] ?? null) !== (int) $approval->id
+                || ($audit->after['reserved_minor'] ?? null) !== $variance
+                || SignedMinor::parse($posting->amount_minor) !== $counted
+                || app(HandoverSurplusReservation::class)->forAccount((int) $posting->treasury_account_id) < $variance) {
+                throw new DomainException('custody_period_surplus_reserve_unverified');
+            }
+            $reserve = ['account_id' => (int) $posting->treasury_account_id,
+                'handover_id' => (int) $handover->id, 'audit_id' => (int) $audit->id, 'reserved_minor' => $variance];
+        }
+        return ['capacity_minor' => $variance, 'allocated_minor' => $allocation['allocated_minor'],
+            'unallocated_minor' => $allocation['unallocated_minor'], 'allocations' => $allocation['allocations'],
+            'liquidity_reserve' => $reserve, 'new_cash_movement' => false, 'reserve_release_authorized' => false];
     }
 
     private function section(array $rows, array $issues): array
