@@ -72,8 +72,17 @@ final class HeldCashDestinationProtection
 
     public function install(): void
     {
+        $missing = [];
         foreach ($this->definitions() as $name => $definition) {
-            if (! $this->verified($name, $definition)) DB::unprepared("CREATE TRIGGER {$name} {$definition[1]}");
+            if ($this->verified($name, $definition)) continue;
+            $exists = DB::getDriverName() === 'sqlite'
+                ? DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)->exists()
+                : FinancialTriggerMetadata::query()->where('TRIGGER_NAME', $name)->isNotEmpty();
+            if ($exists) throw new \LogicException('Unexpected HeldCashDestinationProtection trigger: '.$name);
+            $missing[$name] = $definition;
+        }
+        foreach ($missing as $name => $definition) {
+            DB::unprepared("CREATE TRIGGER {$name} {$definition[1]}");
         }
         if (! $this->active()) throw new \LogicException('Held cash destination period protection incomplete.');
     }
