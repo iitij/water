@@ -11266,6 +11266,55 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(1, DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->count());
     }
 
+    public function test_shortage_recovery_requires_live_treasury_guards(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $proposer = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $uuid = '77777777-7777-4777-8777-777777777777';
+        app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($proposer, (int) $session->id,
+            (int) $account['id'], 'QA-RECOVERY-GUARD', self::EVIDENCE, $uuid, $this->nowAt());
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $action = fn () => app(\App\Services\CustodyShortageRecoveryWriter::class)
+            ->approve($reviewer, (int) $session->id, $this->nowAt());
+        $tables = ['cash_sessions', 'custody_shortage_recoveries', 'treasury_postings', 'payments',
+            'transactions', 'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy(
+            $table === 'financial_posting_operations' ? 'operation_uuid' : 'id')->get()->toArray(), $tables);
+        $guard = app(\App\Services\DatedFinancialSourcePeriodProtection::class);
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_dated_treasury_postings_insert');
+        try {
+            $this->rejects('treasury_financial_write_protection_missing', $action);
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            $guard->install();
+        }
+        $result = $action();
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(200, $result['recovered_minor']);
+        $this->assertSame('-2.00', (string) $session->fresh()->variance_amount);
+        $this->assertFalse($action()['registry_created']);
+        $this->assertDatabaseCount('custody_shortage_recoveries', 1);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid,
+            'leg' => 'treasury', 'amount_minor' => 200]);
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_dated_treasury_postings_insert');
+        try {
+            $this->rejects('treasury_financial_write_protection_missing', $action);
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            $guard->install();
+        }
+    }
+
     public function test_final_accounting_shortage_recovery_posts_once_after_independent_approval(): void
     {
         [, , $account, , , $subscriber] = $this->held();
