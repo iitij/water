@@ -32,6 +32,14 @@ final class CollectionEvidenceGate
             return app(FinancialWriteGate::class)->withinOpenPeriod('water',
                 $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d'), $now,
                 function () use ($actor, $authorize, $work): array {
+                    try {
+                        $active = app(CollectionEvidenceAuditProtection::class)->active()
+                            && app(CollectionEvidencePeriodProtection::class)->active()
+                            && app(FinancialEvidenceDestinationProtection::class)->active();
+                    } catch (\LogicException $error) {
+                        throw new \DomainException('collection_evidence_write_protection_missing', 0, $error);
+                    }
+                    if (! $active) throw new \DomainException('collection_evidence_write_protection_missing');
                     if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                         throw new \LogicException('Payment issuance lock missing.');
                     }
