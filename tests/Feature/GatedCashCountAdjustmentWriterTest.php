@@ -9794,6 +9794,43 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 1);
     }
 
+    public function test_final_accounting_shortage_recovery_proposal_requires_proven_source(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $proposer = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $service = app(\App\Services\CustodyShortageRecoveryProposal::class);
+        $before = DB::table('treasury_postings')->count();
+        $events = DB::table('financial_posting_events')->count();
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $propose = fn () => $service->propose($proposer, (int) $session->id, (int) $account['id'],
+            'QA-SHORTAGE-RECOVERY', self::EVIDENCE, '77777777-7777-4777-8777-777777777777', $this->nowAt());
+        $result = $propose();
+        $this->assertTrue($result['created']);
+        $this->assertFalse($result['cash_posted']);
+        $this->assertFalse($propose()['created']);
+        $document = \App\Models\AuditEvent::findOrFail($result['proposal_id']);
+        $this->assertSame(200, $document->after['shortage_minor']);
+        $this->assertMatchesRegularExpression('/\A[0-9a-f]{64}\z/', $document->after['original_source_hash']);
+        $this->rejects('shortage_loss_recovery_conflict', fn () => app(\App\Services\CustodyShortageLossDecision::class)
+            ->propose($proposer, (int) $session->id, 'Conflicting full loss proposal', self::EVIDENCE, $this->nowAt()));
+        $this->assertSame($before, DB::table('treasury_postings')->count());
+        $this->assertSame($events, DB::table('financial_posting_events')->count());
+        $this->assertDatabaseCount('custody_shortage_recoveries', 0);
+        try {
+            DB::table('audit_events')->where('id', $document->id)->delete();
+            $this->fail('Recovery proposal was deleted.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('Custody shortage audit is immutable or invalid', $error->getMessage());
+        }
+    }
+
     public function test_final_accounting_shortage_loss_decision_is_independent_and_immutable(): void
     {
         [, , $account, , , $subscriber] = $this->held();
