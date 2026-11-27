@@ -9028,6 +9028,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_close_evidence_actual_coordinator_refuses_incomplete_proof(): void
     {
+        app(\App\Services\LedgerProtection::class)->install();
         $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
         // Establish the initial journal version before registering any posting.
         DB::table('financial_periods')->where('id', $periodId)->update(['version' => 0]);
