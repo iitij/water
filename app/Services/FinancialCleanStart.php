@@ -54,6 +54,9 @@ final class FinancialCleanStart
             $roles = $actor->roles()->lockForUpdate()->get();
             abort_unless($roles->contains(fn ($role) => $role->name === 'super_admin'
                 && $role->guard_name === 'web'), 403);
+            if (! app(FinancialCleanStartAuditProtection::class)->active()) {
+                throw new DomainException('clean_start_audit_protection_missing');
+            }
             // Raw table reads deliberately include soft-deleted records.
             foreach (self::EMPTY_TABLES as $table) {
                 if (DB::table($table)->lockForUpdate()->first() !== null) {
