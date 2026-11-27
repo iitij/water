@@ -71,6 +71,48 @@ final class FinancialCleanStartTest extends TestCase
         $this->assertDatabaseCount('financial_period_closures', 0);
     }
 
+    public function test_clean_start_audit_is_immutable_and_requires_installed_guards(): void
+    {
+        $actor = $this->actor();
+        $service = app(FinancialCleanStart::class);
+        $guard = app(\App\Services\FinancialCleanStartAuditProtection::class);
+        $this->assertTrue($guard->active());
+        DB::unprepared('DROP TRIGGER fin_start_audit_delete');
+        try {
+            $this->rejects('clean_start_audit_protection_missing',
+                fn () => $service->initialize($actor, '2026-12'));
+            $this->assertDatabaseCount('financial_scopes', 0);
+            $this->assertDatabaseCount('audit_events', 0);
+        } finally {
+            $guard->install();
+        }
+        $service->initialize($actor, '2026-12');
+        $row = (array) DB::table('audit_events')->sole();
+        $duplicate = $row;
+        unset($duplicate['id']);
+        $actions = [
+            fn () => DB::table('audit_events')->where('id', $row['id'])->update(['entity_id' => 'other']),
+            fn () => DB::table('audit_events')->where('id', $row['id'])->delete(),
+            fn () => DB::table('audit_events')->insert($duplicate),
+        ];
+        if (DB::getDriverName() === 'sqlite') {
+            $replacement = $row;
+            $replacement['event'] = 'unrelated.event';
+            $actions[] = fn () => DB::statement('INSERT OR REPLACE INTO audit_events ('.implode(',', array_keys($replacement))
+                .') VALUES ('.implode(',', array_fill(0, count($replacement), '?')).')', array_values($replacement));
+        }
+        foreach ($actions as $action) {
+            try {
+                $action();
+                $this->fail('Expected protected audit mutation rejection.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial clean-start audit is immutable or invalid', $error->getMessage());
+            }
+            $this->assertEquals($row, (array) DB::table('audit_events')->sole());
+        }
+        $this->assertTrue($guard->active());
+    }
+
     public function test_clean_start_refuses_existing_records_without_deleting_them(): void
     {
         $actor = $this->actor();
