@@ -10251,6 +10251,108 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    public function test_final_accounting_multiple_shortage_recoveries_and_residual_loss(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $proposer = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $uuid = '77777777-7777-4777-8777-777777777777';
+        app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($proposer, (int) $session->id,
+            (int) $account['id'], 'QA-RECOVERY-PART', self::EVIDENCE, $uuid, $this->nowAt(), 120);
+        $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $dec = (int) DB::table('financial_periods')->insertGetId(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $inspect = fn (int $period) => DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($period));
+        $november = $inspect($nov);
+        $this->assertSame(200, $november['variance_exposure']['unresolved_shortage_minor']);
+        $this->assertSame(0, $november['variance_exposure']['recovered_minor']);
+        $writer = app(\App\Services\CustodyShortageRecoveryWriter::class);
+        $before = DB::table('treasury_postings')->count();
+        $events = DB::table('financial_posting_events')->count();
+        $this->rejects('shortage_recovery_independence', fn () => $writer->approve($proposer, (int) $session->id, $later));
+        $this->assertDatabaseCount('custody_shortage_recoveries', 0);
+        $this->assertSame($before, DB::table('treasury_postings')->count());
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $result = $writer->approve($reviewer, (int) $session->id, $later);
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(120, $result['recovered_minor']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertFalse($writer->approve($reviewer, (int) $session->id, $later)['registry_created']);
+        $this->assertDatabaseCount('custody_shortage_recoveries', 1);
+        $this->assertSame($before + 1, DB::table('treasury_postings')->count());
+        $this->assertSame($events + 1, DB::table('financial_posting_events')->count());
+        $this->assertSame(120, (int) DB::table('treasury_postings')->where('id', $result['posting_id'])->value('amount_minor'));
+        $this->assertSame('-2.00', (string) $session->fresh()->variance_amount);
+        $this->assertSame($november, $inspect($nov));
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $december = $inspect($dec);
+        $this->assertSame(200, $december['variance_exposure']['opening_unresolved_shortage_minor']);
+        $this->assertSame(120, $december['variance_exposure']['recovered_minor']);
+        $this->assertSame(0, $december['variance_exposure']['confirmed_loss_minor']);
+        $this->assertSame(80, $december['variance_exposure']['unresolved_shortage_minor']);
+        $this->assertSame(0, $december['custody']['recorded_closing_minor']);
+        $this->assertFalse($december['custody']['all_count_variances_resolved'], json_encode($december['custody']));
+        $this->assertFalse($december['closure_authorized']);
+        $jan = (int) DB::table('financial_periods')->insertGetId(['scope_key' => 'water', 'month' => '2027-01',
+            'start_on' => '2027-01-01', 'next_on' => '2027-02-01', 'state' => 'OPEN', 'version' => 0]);
+        $when = new DateTimeImmutable('2027-01-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($when));
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $secondUuid = '88888888-8888-4888-8888-888888888888';
+        $proposals = app(\App\Services\CustodyShortageRecoveryProposal::class);
+        $this->rejects('shortage_recovery_amount_invalid', fn () => $proposals->propose($proposer, (int) $session->id,
+            (int) $account['id'], 'QA-RECOVERY-SECOND', self::EVIDENCE, $secondUuid, $when, 81));
+        $second = $proposals->propose($proposer, (int) $session->id,
+            (int) $account['id'], 'QA-RECOVERY-SECOND', self::EVIDENCE, $secondUuid, $when, 50);
+        $this->assertTrue($second['created']);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->rejects('shortage_recovery_uuid_required', fn () => $writer->approve($reviewer, (int) $session->id, $when));
+        $secondPosting = $writer->approve($reviewer, (int) $session->id, $when, $secondUuid);
+        $this->assertTrue($secondPosting['registry_created']);
+        $this->assertSame(50, $secondPosting['recovered_minor']);
+        $this->assertFalse($writer->approve($reviewer, (int) $session->id, $when, $secondUuid)['registry_created']);
+        $this->assertDatabaseCount('custody_shortage_recoveries', 2);
+        $this->assertSame($before + 2, DB::table('treasury_postings')->count());
+        $this->assertSame($events + 2, DB::table('financial_posting_events')->count());
+        $beforeLoss = DB::table('treasury_postings')->count();
+        $loss = app(\App\Services\CustodyShortageLossDecision::class);
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $this->assertTrue($loss->propose($proposer, (int) $session->id, 'Independent evidence confirms residual loss', self::EVIDENCE, $when)['created']);
+        $this->rejects('shortage_loss_independence', fn () => $loss->approve($proposer, (int) $session->id, $when));
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $decision = $loss->approve($reviewer, (int) $session->id, $when);
+        $this->assertSame(30, $decision['confirmed_loss_minor']);
+        $this->assertSame(0, $decision['remaining_minor']);
+        $this->assertFalse($loss->approve($reviewer, (int) $session->id, $when)['created']);
+        $this->assertSame($beforeLoss, DB::table('treasury_postings')->count());
+        $this->assertSame($december, $inspect($dec));
+        $this->travelTo(\Carbon\Carbon::parse('2027-02-01T00:00:00+03:00'));
+        $january = $inspect($jan);
+        $this->assertSame(80, $january['variance_exposure']['opening_unresolved_shortage_minor']);
+        $this->assertSame(50, $january['variance_exposure']['recovered_minor']);
+        $this->assertSame(30, $january['variance_exposure']['confirmed_loss_minor']);
+        $this->assertSame(0, $january['variance_exposure']['unresolved_shortage_minor']);
+        $this->assertTrue($january['custody']['all_count_variances_resolved'], json_encode($january['custody']));
+        $period = $dec;
+        $coverage = DB::transaction(fn () => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($period));
+        $this->assertTrue($coverage['scanned_sources_match'], json_encode($coverage));
+        try {
+            DB::table('custody_shortage_recoveries')->where('id', $result['recovery_id'])->delete();
+            $this->fail('Recovery document deleted.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('Custody shortage recovery is immutable', $error->getMessage());
+        }
+    }
+
     public function test_final_accounting_shortage_loss_decision_is_independent_and_immutable(): void
     {
         [, , $account, , , $subscriber] = $this->held();
