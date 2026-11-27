@@ -12127,7 +12127,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $modal = \Livewire\Livewire::test($page)->mountAction($action)->setActionData(array_replace($data, ['evidence_reference' => null]));
         $modal->callMountedAction()->assertHasActionErrors();
         $modal->setActionData($data);
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $modal->callMountedAction()->assertHasActionErrors();
         foreach ($tables as $table) $this->assertSame($before[$table], $snapshot($table), $table);
         $modal->assertActionDataSet(['review_id' => $id, 'evidence_reference' => 'QA-COUNTED-MODAL']);
