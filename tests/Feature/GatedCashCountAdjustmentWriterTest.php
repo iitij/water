@@ -13967,6 +13967,72 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($reviewRow, (array) DB::table('treasury_cash_count_reviews')->where('id', $reviewRow['id'])->sole());
     }
 
+    public function test_cash_count_and_collection_evidence_fail_closed_when_guards_are_missing(): void
+    {
+        [$counter, $reviewer, $account, $count] = $this->fixture('100.00', accepted: null);
+        $service = app(TreasuryCashCountService::class);
+        $record = fn () => $service->record($counter, (int) $account['id'], '100.00', 'QA-COUNT-LIVE-GUARD', self::EVIDENCE);
+        $review = fn () => $service->review($reviewer, (int) $count['id'], true, self::EVIDENCE);
+        $tables = ['treasury_cash_counts', 'treasury_cash_count_reviews', 'noncash_collection_claims',
+            'late_receipt_reviews', 'payments', 'transactions', 'treasury_postings',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy(
+            $table === 'financial_posting_operations' ? 'operation_uuid' : 'id')->get()->toArray(), $tables);
+        config(['financial_candidate.cash_count_adjustments' => false, 'financial_candidate.collection_evidence' => false]);
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_count_treasury_cash_counts_insert');
+        try {
+            $this->rejects('cash_count_evidence_write_protection_missing', $record);
+            $this->rejects('cash_count_evidence_write_protection_missing', $review);
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            app(\App\Services\CashCountPeriodProtection::class)->install();
+        }
+        $review();
+        $record();
+        $this->assertDatabaseCount('treasury_cash_counts', 2);
+        $this->assertDatabaseCount('treasury_cash_count_reviews', 1);
+        $subscriber = Subscriber::create(['name' => 'Synthetic evidence account',
+            'square_id' => Square::create(['name' => 'Synthetic evidence square'])->id, 'status' => 'active']);
+        $issuer = $this->actor();
+        $session = app(CashSessionService::class)->open($issuer);
+        app(CashSessionService::class)->close($session, '0.00', null, $session->user);
+        $noncash = ['sync_uuid' => self::OTHER, 'subscriber_id' => $subscriber->id,
+            'amount' => '0.25', 'payment_method' => 'check',
+            'instrument_reference' => 'QA-EVIDENCE-GUARD', 'instrument_on' => '2026-11-25'];
+        $late = ['sync_uuid' => self::NEXT, 'subscriber_id' => $subscriber->id, 'cash_session_id' => $session->id,
+            'amount' => '0.35', 'payment_method' => 'cash', 'payment_date' => '2026-11-25'];
+        $guard = app(\App\Services\FinancialEvidenceDestinationProtection::class);
+        \Laravel\Sanctum\Sanctum::actingAs($issuer);
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_ev_dest_payment_allocations_i');
+        try {
+            $this->postJson('/api/noncash-claims', $noncash)->assertConflict();
+            $this->postJson('/api/late-receipt-reviews', $late)->assertConflict();
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            $guard->install();
+        }
+        $claimId = $this->postJson('/api/noncash-claims', $noncash)->assertCreated()->json('claim.id');
+        $reviewId = $this->postJson('/api/late-receipt-reviews', $late)->assertOk()->json('review.id');
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $reject = ['approve' => false, 'evidence' => self::EVIDENCE];
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_ev_dest_payment_allocations_i');
+        try {
+            $this->postJson('/api/noncash-claims/'.$claimId.'/reject', ['evidence' => self::EVIDENCE])->assertConflict();
+            $this->postJson('/api/late-receipt-reviews/'.$reviewId.'/decide', $reject)->assertConflict();
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            $guard->install();
+        }
+        $this->postJson('/api/noncash-claims/'.$claimId.'/reject', ['evidence' => self::EVIDENCE])->assertOk()->assertJsonPath('claim.status', 'rejected');
+        $this->postJson('/api/late-receipt-reviews/'.$reviewId.'/decide', $reject)->assertOk()->assertJsonPath('review.status', 'rejected');
+        $this->assertDatabaseCount('payments', 0);
+        $this->assertDatabaseCount('transactions', 0);
+        $this->assertDatabaseCount('treasury_postings', 0);
+    }
+
     public function test_cash_count_observation_and_review_require_open_scope_with_flag_disabled(): void
     {
         [$counter, $reviewer, $account, $count] = $this->fixture('100.00', accepted: null);
