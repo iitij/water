@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify cash session and bank evidence write protection
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_cash_session_and_bank_evidence_writers_require_live_guards tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify cash count and collection evidence write protection
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_cash_count_and_collection_evidence_fail_closed_when_guards_are_missing tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify cash session and bank evidence write protection
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_cash_session_and_bank_evidence_writers_require_live_guards tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify cash count and collection evidence write protection
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_cash_count_and_collection_evidence_fail_closed_when_guards_are_missing tests/Feature/GatedCashCountAdjustmentWriterTest.php
