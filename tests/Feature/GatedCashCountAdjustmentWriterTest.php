@@ -4056,7 +4056,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $other->id, '10.00',
             '77777777-7777-4777-8777-777777777777', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '15.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '15.00', null, $session->user), true, $reviewer);
         $accountId = (int) $account['id'];
         app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, $accountId,
             '15.00', 'QA-MIXED-RESERVE-HANDOVER', '2026-11-25', self::EVIDENCE,
@@ -5191,7 +5191,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $collector = $this->actor();
         $reviewer = $this->actor();
         $sessions = app(CashSessionService::class);
-        $session = $sessions->decide($sessions->close($sessions->open($collector), '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($sessions->open($collector), '0.00', null, $collector), true, $reviewer);
         $late = app(\App\Services\LateReceiptReviewService::class);
         $claim = $late->submit($collector, [
             'sync_uuid' => '88888888-8888-4888-8888-888888888888', 'cash_session_id' => $session->id,
@@ -5275,7 +5275,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = null;
         if ($kind !== 'claim') {
             $sessions = app(CashSessionService::class);
-            $session = $sessions->decide($sessions->close($sessions->open($issuer), '0.00'), true, $reviewer);
+            $session = $sessions->decide($sessions->close($sessions->open($issuer), '0.00', null, $issuer), true, $reviewer);
             $claim = $late->submit($issuer, ['sync_uuid' => $uuid, 'cash_session_id' => $session->id,
                 'subscriber_id' => $subscriber->id, 'amount' => '0.30',
                 'payment_method' => $kind === 'late_cash' ? 'cash' : 'check',
@@ -7323,7 +7323,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = app(CashSessionService::class)->open($issuer);
         $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '10.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id)['payment'];
-        $session = app(CashSessionService::class)->decide(app(CashSessionService::class)->close($session, '15.00'), true, $reviewer);
+        $session = app(CashSessionService::class)->decide(app(CashSessionService::class)->close($session, '15.00', null, $session->user), true, $reviewer);
         $accountId = (int) $account['id'];
         app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id,
             $accountId, '15.00', 'QA-REFUND-RESERVE-HANDOVER', '2026-11-25', self::EVIDENCE,
@@ -7658,7 +7658,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '10.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '15.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '15.00', null, $session->user), true, $reviewer);
         $owner = Subscriber::create(['name' => 'Synthetic prior allocation owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
         $late = app(\App\Services\LateReceiptReviewService::class);
         $allocate = function (string $uuid, string $reference) use ($late, $collector, $reviewer, $session, $owner) {
@@ -7701,7 +7701,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '10.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '15.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '15.00', null, $session->user), true, $reviewer);
         $accountId = (int) $account['id'];
         config(['financial_candidate.cash_handovers' => true]);
         app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id,
@@ -7732,7 +7732,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '10.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '15.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '15.00', null, $session->user), true, $reviewer);
         $accountId = (int) $account['id'];
         $uuid = '88888888-8888-4888-8888-888888888888';
         $writer = app(\App\Services\GatedCashHandoverWriter::class);
@@ -7783,7 +7783,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '10.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '8.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '8.00', null, $session->user), true, $reviewer);
         $accountId = (int) $account['id'];
         $uuid = '88888888-8888-4888-8888-888888888888';
         $writer = app(\App\Services\GatedCashHandoverWriter::class);
@@ -7826,7 +7826,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '1.00', null, $session->user), true, $reviewer);
         $accountId = (int) $account['id'];
         $uuid = '88888888-8888-4888-8888-888888888888';
         $data = ['amount' => '0.40', 'reference' => 'QA-HANDOVER-ENTRY', 'received_on' => '2026-11-25',
@@ -7882,7 +7882,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '1.00', null, $session->user), true, $reviewer);
         $writer = app(\App\Services\GatedCashHandoverWriter::class);
         $handovers = app(\App\Services\CashHandoverService::class);
         $treasury = app(TreasuryRegisterService::class);
@@ -7940,7 +7940,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         $receipt = app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id)['payment'];
-        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '1.00', null, $session->user), true, $reviewer);
         $writer = app(\App\Services\GatedCashHandoverWriter::class);
         $accountId = (int) $account['id'];
         $uuid = '88888888-8888-4888-8888-888888888888';
@@ -8000,7 +8000,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue(app(\App\Services\GatedReceiptVoidWriter::class)->request($collector, (int) $voided->id,
             'Independent documented current receipt cancellation', $this->nowAt(), 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa')['registry_created']);
         $sessions = app(CashSessionService::class);
-        $session = $sessions->decide($sessions->close($session, '6.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '6.00', null, $session->user), true, $reviewer);
         $writer = app(\App\Services\GatedCashHandoverWriter::class);
         $receive = fn () => $writer->receive($reviewer, (int) $session->id, $accountId, '6.00', 'QA-R138-RETURN',
             '2026-11-25', self::EVIDENCE, 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', $this->nowAt());
@@ -8032,7 +8032,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $accountId = (int) $account['id'];
         $sessions = app(CashSessionService::class);
         $session = $sessions->openFunded($collector, $reviewer, $accountId, '5.00', 'QA-R138-LEGACY-FUND', self::EVIDENCE);
-        $session = $sessions->decide($sessions->close($session, '5.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '5.00', null, $session->user), true, $reviewer);
         $uuid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
         $this->rejects('gated_handover_prerequisite_unregistered', fn () => app(\App\Services\GatedCashHandoverWriter::class)
             ->receive($reviewer, (int) $session->id, $accountId, '5.00', 'QA-R138-LEGACY-RETURN',
@@ -9468,7 +9468,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '1.00', null, $session->user), true, $reviewer);
         app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, $cashId,
             '0.40', 'QA-FINAL-CYCLE-HANDOVER', '2026-11-25', self::EVIDENCE,
             '77777777-7777-4777-8777-777777777777', $this->nowAt());
@@ -9544,7 +9544,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '1.00', null, $session->user), true, $reviewer);
         app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, $cashId,
             '0.40', 'QA-FINAL-CYCLE-HANDOVER', '2026-11-25', self::EVIDENCE,
             '77777777-7777-4777-8777-777777777777', $this->nowAt());
@@ -9552,7 +9552,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $shortSession = $sessions->open($shortCollector);
         app(GatedCashReceiptWriter::class)->collect($shortCollector, (int) $subscriber->id, '2.00',
             'b7ca5801-8840-48df-9cd5-9fc67d47f016', $this->nowAt(), (int) $shortSession->id);
-        $shortSession = $sessions->decide($sessions->close($shortSession, '0.00'), true, $reviewer);
+        $shortSession = $sessions->decide($sessions->close($shortSession, '0.00', null, $shortSession->user), true, $reviewer);
         \Laravel\Sanctum\Sanctum::actingAs($sender);
         $recoveryUuid = 'b7ca5802-8840-48df-9cd5-9fc67d47f016';
         app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($sender, (int) $shortSession->id,
@@ -9897,7 +9897,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $collector = $this->actor();
         $reviewer = $this->actor();
         $sessions = app(CashSessionService::class);
-        $session = $sessions->decide($sessions->close($sessions->open($collector), '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($sessions->open($collector), '0.00', null, $collector), true, $reviewer);
         $before = (array) DB::table('cash_sessions')->where('id', $session->id)->sole();
         $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
         DB::table('financial_periods')->where('id', $period)->update(['state' => 'FROZEN']);
@@ -9923,7 +9923,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
             'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
         $this->travelTo(\Carbon\Carbon::parse('2026-12-02T12:00:00+03:00'));
-        $later = $sessions->decide($sessions->close($sessions->open($collector), '0.00'), true, $reviewer);
+        $later = $sessions->decide($sessions->close($sessions->open($collector), '0.00', null, $collector), true, $reviewer);
         $this->assertTrue($later->isApproved());
         $this->assertSame($before, (array) DB::table('cash_sessions')->where('id', $session->id)->sole());
     }
@@ -10041,7 +10041,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($issuer);
         app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
             '88888888-8888-4888-8888-888888888888', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '1.00', null, $session->user), true, $reviewer);
         $handover = app(\App\Services\CashHandoverService::class)->record($session, $reviewer, '1.00',
             'QA-R140-UNPOSTED', '2026-11-25', self::EVIDENCE);
         $result = $this->gate(fn (array $context) => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($context['period_id']));
@@ -10123,7 +10123,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($issuer);
         app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
             '99999999-9999-4999-8999-999999999999', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '1.00', null, $session->user), true, $reviewer);
         app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, (int) $cash['id'],
             '1.00', 'QA-R141-HANDOVER', $date, self::EVIDENCE, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $this->nowAt());
         $lateUuid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -10174,7 +10174,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'QA-FENCE-FUND', self::EVIDENCE, 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', $this->nowAt())['session'];
         app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
             '99999999-9999-4999-8999-999999999999', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '6.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '6.00', null, $session->user), true, $reviewer);
         app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, (int) $cash['id'],
             '6.00', 'QA-R141-HANDOVER', $date, self::EVIDENCE, 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $this->nowAt());
         $lateUuid = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
@@ -10321,7 +10321,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
             '77777777-7777-4777-8777-777777777777', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '1.00'), true, $receiver);
+        $session = $sessions->decide($sessions->close($session, '1.00', null, $session->user), true, $receiver);
         $handover = app(\App\Services\GatedCashHandoverWriter::class);
         $handover->receive($receiver, (int) $session->id, (int) $account['id'], '0.40',
             'QA-OUTSTANDING-PART', '2026-11-25', self::EVIDENCE,
@@ -10383,7 +10383,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '10.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
         $sessions = app(CashSessionService::class);
-        $session = $sessions->decide($sessions->close($session, '15.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '15.00', null, $session->user), true, $reviewer);
         $accountId = (int) $account['id'];
         app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, $accountId,
             '15.00', 'QA-CUTOFF-SURPLUS', '2026-11-25', self::EVIDENCE,
@@ -10439,7 +10439,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $sessions = app(CashSessionService::class);
         $session = $sessions->openFunded($collector, $reviewer, (int) $account['id'], '5.00',
             'QA-CUSTODY-LEGACY-FUND', self::EVIDENCE);
-        $sessions->decide($sessions->close($session, '5.00'), true, $reviewer);
+        $sessions->decide($sessions->close($session, '5.00', null, $session->user), true, $reviewer);
         $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
         $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
         $result = DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($period));
@@ -10461,7 +10461,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
         $service = app(\App\Services\CustodyShortageRecoveryProposal::class);
         $before = DB::table('treasury_postings')->count();
         $events = DB::table('financial_posting_events')->count();
@@ -10623,7 +10623,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $first);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $first);
         \Laravel\Sanctum\Sanctum::actingAs($proposer);
         $uuid = '77777777-7777-4777-8777-777777777777';
         app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($proposer, (int) $session->id,
@@ -10654,7 +10654,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
         \Laravel\Sanctum\Sanctum::actingAs($proposer);
         $uuid = '77777777-7777-4777-8777-777777777777';
         app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($proposer, (int) $session->id,
@@ -10760,7 +10760,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
         \Laravel\Sanctum\Sanctum::actingAs($proposer);
         $uuid = '77777777-7777-4777-8777-777777777777';
         app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($proposer, (int) $session->id,
@@ -10827,7 +10827,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
         \Laravel\Sanctum\Sanctum::actingAs($proposer);
         $uuid = '77777777-7777-4777-8777-777777777777';
         app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($proposer, (int) $session->id,
@@ -10897,7 +10897,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
         \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
         $page = \App\Filament\Resources\CashSessions\Pages\ListCashSessions::class;
         $action = fn (string $name) => \Filament\Actions\Testing\TestAction::make($name)->table($session);
@@ -10967,7 +10967,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
         $url = '/api/cash-sessions/'.$session->id.'/shortage';
         $uuid = '77777777-7777-4777-8777-777777777777';
         $data = ['account_id' => (int) $account['id'], 'amount' => '1.20', 'reference' => 'QA-API-RECOVERY',
@@ -11043,7 +11043,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
         \Laravel\Sanctum\Sanctum::actingAs($proposer);
         $uuid = '77777777-7777-4777-8777-777777777777';
         app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($proposer, (int) $session->id,
@@ -11128,7 +11128,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
         \Laravel\Sanctum\Sanctum::actingAs($proposer);
         $uuid = '77777777-7777-4777-8777-777777777777';
         app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($proposer, (int) $session->id,
@@ -11240,7 +11240,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
         \Laravel\Sanctum\Sanctum::actingAs($proposer);
         $loss = app(\App\Services\CustodyShortageLossDecision::class);
         $proposal = $loss->propose($proposer, (int) $session->id, 'Independent evidence supports the loss', self::EVIDENCE, $this->nowAt());
@@ -11271,7 +11271,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($collector);
         app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '0.00', null, $session->user), true, $reviewer);
         $service = app(\App\Services\CustodyShortageLossDecision::class);
         $before = DB::table('treasury_postings')->count();
         $events = DB::table('financial_posting_events')->count();
@@ -11347,7 +11347,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $collector = $this->actor();
         $reviewer = $this->actor();
         $sessions = app(CashSessionService::class);
-        $session = $sessions->close($sessions->open($collector), '0.00');
+        $session = $sessions->close($sessions->open($collector), '0.00', null, $collector);
         $before = DB::table('audit_events')->count();
         foreach ([true, false] as $approve) {
             try {
@@ -11382,7 +11382,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         app(\App\Services\GatedReceiptVoidWriter::class)->request($collector, (int) $voided->id,
             'Independent documented current receipt cancellation', $this->nowAt(), '88888888-8888-4888-8888-888888888888');
         $sessions = app(CashSessionService::class);
-        $session = $sessions->decide($sessions->close($session, '5.80'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '5.80', null, $session->user), true, $reviewer);
         app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, (int) $account['id'],
             '5.80', 'QA-CUSTODY-SHORT-RETURN', '2026-11-25', self::EVIDENCE,
             '99999999-9999-4999-8999-999999999999', $this->nowAt());
@@ -12004,7 +12004,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($issuer);
         app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '5.00',
             '88888888-8888-4888-8888-888888888888', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '15.25'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '15.25', null, $session->user), true, $reviewer);
         $owner = Subscriber::create(['name' => 'Synthetic counted owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
         $uuid = '99999999-9999-4999-8999-999999999999';
         $claim = app(\App\Services\LateReceiptReviewService::class)->submit($issuer, [
@@ -12083,7 +12083,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($issuer);
         app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '5.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '15.25'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '15.25', null, $session->user), true, $reviewer);
         $owner = Subscriber::create(['name' => 'Synthetic modal counted owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
         $late = app(\App\Services\LateReceiptReviewService::class);
         $uuid = '88888888-8888-4888-8888-888888888888';
@@ -12137,7 +12137,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($issuer);
         app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '5.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '15.25'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '15.25', null, $session->user), true, $reviewer);
         $owner = Subscriber::create(['name' => 'Synthetic API counted owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
         $late = app(\App\Services\LateReceiptReviewService::class);
         $uuid = '88888888-8888-4888-8888-888888888888';
@@ -12192,7 +12192,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($issuer);
         app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '5.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '15.25'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '15.25', null, $session->user), true, $reviewer);
         $owner = Subscriber::create(['name' => 'Synthetic fenced counted owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
         $late = app(\App\Services\LateReceiptReviewService::class);
         $writer = app(\App\Services\GatedCountedCashWriter::class);
@@ -12262,7 +12262,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $session = $sessions->open($issuer);
         app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '5.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
-        $session = $sessions->decide($sessions->close($session, '15.25'), true, $reviewer);
+        $session = $sessions->decide($sessions->close($session, '15.25', null, $session->user), true, $reviewer);
         $uuid = '88888888-8888-4888-8888-888888888888';
         $claim = app(\App\Services\LateReceiptReviewService::class)->submit($issuer, [
             'sync_uuid' => $uuid, 'cash_session_id' => $session->id, 'subscriber_id' => $subscriber->id,
@@ -12809,7 +12809,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $subscriber = Subscriber::create(['name' => 'Synthetic cutoff claim account',
             'square_id' => Square::create(['name' => 'Synthetic cutoff claim square'])->id, 'status' => 'active']);
         $session = app(CashSessionService::class)->open($issuer);
-        app(CashSessionService::class)->close($session, '0.00');
+        app(CashSessionService::class)->close($session, '0.00', null, $session->user);
         config(['financial_candidate.collection_evidence' => true]);
         $claims = app(\App\Services\NonCashClaimService::class);
         $reviews = app(\App\Services\LateReceiptReviewService::class);
@@ -12861,7 +12861,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $subscriber = Subscriber::create(['name' => 'Synthetic fenced claim account',
             'square_id' => Square::create(['name' => 'Synthetic fenced claim square'])->id, 'status' => 'active']);
         $session = app(CashSessionService::class)->open($issuer);
-        app(CashSessionService::class)->close($session, '0.00');
+        app(CashSessionService::class)->close($session, '0.00', null, $session->user);
         config(['financial_candidate.collection_evidence' => true]);
         $claim = app(\App\Services\NonCashClaimService::class)->submit($issuer, [
             'sync_uuid' => self::UUID, 'subscriber_id' => $subscriber->id, 'amount' => '0.25',
@@ -12935,7 +12935,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $subscriber = Subscriber::create(['name' => 'Synthetic evidence account',
             'square_id' => Square::create(['name' => 'Synthetic evidence square'])->id, 'status' => 'active']);
         $session = app(CashSessionService::class)->open($issuer);
-        app(CashSessionService::class)->close($session, '0.00');
+        app(CashSessionService::class)->close($session, '0.00', null, $session->user);
         config(['financial_candidate.collection_evidence' => true]);
         $claims = app(\App\Services\NonCashClaimService::class);
         $reviews = app(\App\Services\LateReceiptReviewService::class);
@@ -12995,12 +12995,18 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
-    public function test_cash_session_lifecycle_gate_requires_open_period_and_authorized_independent_actor(): void
+    public static function cashSessionLifecycleSwitches(): array
+    {
+        return ['enabled' => [true], 'disabled' => [false]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('cashSessionLifecycleSwitches')]
+    public function test_cash_session_lifecycle_gate_requires_open_period_and_authorized_independent_actor(bool $enabled): void
     {
         $collector = $this->actor();
         $reviewer = $this->actor();
         $outsider = User::factory()->create(['role' => 'admin']);
-        config(['financial_candidate.cash_session_lifecycle' => true]);
+        config(['financial_candidate.cash_session_lifecycle' => $enabled]);
         \Laravel\Sanctum\Sanctum::actingAs($collector);
         DB::table('financial_periods')->update(['state' => 'FROZEN']);
         $this->postJson('/api/cash-sessions', ['opening_amount' => '0.00'])->assertConflict();
@@ -13048,6 +13054,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('transactions', 0);
         $this->assertDatabaseCount('treasury_postings', 0);
         $this->assertDatabaseCount('financial_posting_events', 0);
+        $this->assertDatabaseHas('audit_events', ['event' => 'cash_session.closed', 'entity_id' => (string) $id,
+            'actor_user_id' => $collector->id]);
+        $snapshot = DB::table('cash_sessions')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all();
+        DB::table('financial_periods')->update(['state' => 'CLOSED']);
+        \Laravel\Sanctum\Sanctum::actingAs($collector);
+        $this->postJson('/api/cash-sessions', ['opening_amount' => '0.00'])->assertConflict();
+        $this->assertSame($snapshot, DB::table('cash_sessions')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all());
     }
 
     public function test_cash_count_database_fence_preserves_cutoff_evidence(): void

@@ -35,8 +35,14 @@ class CashSessionService
      */
     private function lifecycle(?User $actor, ?CashSession $session, string $action, callable $work): CashSession
     {
-        if (config('financial_candidate.cash_session_lifecycle') !== true) {
-            return DB::transaction(fn () => $work($actor, $session), 3);
+        $candidate = config('financial_candidate.cash_session_lifecycle') === true;
+        if (! $candidate && ! DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
+            return DB::transaction(function () use ($actor, $session, $work): CashSession {
+                if (DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                    throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException('financial_scope_configured_retry');
+                }
+                return $work($actor, $session);
+            }, 3);
         }
         abort_unless(app()->environment(['testing', 'staging']), 503);
         abort_unless($actor instanceof User, 403, 'يلزم تحديد منفذ عملية الصندوق.');
@@ -337,6 +343,7 @@ class CashSessionService
             $this->requiredAudit('cash_session.closed', [
                 'entity_type' => CashSession::class,
                 'entity_id' => $session->id,
+                'actor_user_id' => $actor?->id,
                 'before' => $before,
                 'after' => $this->summary($session),
             ]);
