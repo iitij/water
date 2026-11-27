@@ -7767,6 +7767,48 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($verified['source_coverage_verified']);
     }
 
+    public function test_receipt_void_writer_rejects_missing_live_request_or_reversal_guard(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Setting::set('void_approval_threshold', '1.00');
+        $payment = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
+        $writer = app(\App\Services\GatedReceiptVoidWriter::class);
+        $request = fn () => $writer->request($issuer, (int) $payment->id,
+            'Independent documented cancellation request', $this->nowAt());
+        $tables = ['payments', 'transactions', 'payment_allocation_revisions', 'payment_allocations',
+            'audit_events', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER reg_receipt_request_update');
+        try {
+            $this->rejects('receipt_void_write_protection_missing', $request);
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            app(\App\Services\ReceiptVoidRequestProtection::class)->install();
+        }
+        $requested = $request();
+        $this->assertTrue($requested['pending']);
+        $approve = fn () => $writer->decide($reviewer, (int) $payment->id, true, 'Independent decision',
+            $this->nowAt(), '88888888-8888-4888-8888-888888888888', $requested['request_id']);
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER reg_receipt_void_update');
+        try {
+            $this->rejects('receipt_void_write_protection_missing', $approve);
+            $this->assertEquals($before, $snapshot());
+            $this->assertTrue($payment->fresh()->hasPendingVoidRequest());
+        } finally {
+            app(\App\Services\ReceiptVoidProtection::class)->install();
+        }
+        $this->assertTrue($approve()['registry_created']);
+        $this->assertFalse($approve()['registry_created']);
+        $this->assertSame(0, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => '88888888-8888-4888-8888-888888888888',
+            'leg' => 'subscriber', 'amount_minor' => -1000]);
+    }
+
     public function test_round137_void_immediate_and_approval_respect_gate_and_record_reversal_once(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
