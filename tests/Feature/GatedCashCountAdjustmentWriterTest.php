@@ -9030,7 +9030,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     {
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
-        $this->assertCount(25, $before['guards']);
+        $this->assertCount(27, $before['guards']);
         $this->assertCount(13, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
         $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
