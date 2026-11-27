@@ -58,8 +58,15 @@ final class FinancialSettlementCoverageDiagnostic
         $accounts = DB::table('treasury_accounts')->where('channel', 'bank')->where('opening_on', '<=', $through)
             ->orderBy('id')->lockForUpdate()->get();
         $statementsChecked = 0;
+        $bankCandidates = [];
+        $periodEnded = $through === (new DateTimeImmutable($period->next_on, $zone))->modify('-1 day')->format('Y-m-d')
+            && now('Asia/Aden')->toDateString() >= $period->next_on;
         foreach ($accounts as $account) {
             $cursor = max($start, $account->opening_on);
+            $issueCount = count($issues);
+            $first = null;
+            $last = null;
+            $statementProofs = [];
             $statements = DB::table('bank_statements')->where('treasury_account_id', $account->id)
                 ->where('from_date', '<=', $through)->where('to_date', '>=', $cursor)
                 ->orderBy('from_date')->orderBy('id')->lockForUpdate()->get();
@@ -95,6 +102,10 @@ final class FinancialSettlementCoverageDiagnostic
                         'integrity_matches' => $report['statement_integrity_matches'],
                     ]);
                 }
+                $first ??= $statement;
+                $last = $statement;
+                $statementProofs[] = ['id' => (int) $statement->id, 'content_hash' => $statement->content_hash,
+                    'import_audit_id' => $proofs->count() === 1 ? (int) $proofs[0]->id : null];
                 $cursor = max($cursor, $next($statement->to_date));
                 $prior = $statement;
             }
@@ -102,6 +113,15 @@ final class FinancialSettlementCoverageDiagnostic
                 $issue('bank_statement_gap', 'treasury_accounts', $account->id.':'.$cursor,
                     ['missing_from' => $cursor, 'missing_until_exclusive' => $end]);
             }
+            if ($periodEnded && count($issues) === $issueCount && $first !== null && $last !== null) {
+                $bankCandidates[] = ['account' => $account, 'first' => $first, 'last' => $last, 'statements' => $statementProofs];
+            }
+        }
+
+        $bankEvidence = ['period_ended' => $periodEnded, 'all_accounts_matched' => false,
+            'rows' => [], 'issues' => [], 'closure_authorized' => false];
+        if ($periodEnded) {
+            $bankEvidence = app(FinancialBankPeriodEvidence::class)->inspect($period, $accounts->count(), $bankCandidates);
         }
 
         // Audit decisions in the inspected interval, plus effective dates in it.
@@ -133,6 +153,7 @@ final class FinancialSettlementCoverageDiagnostic
         ksort($issues, SORT_STRING);
         return ['period_id' => $periodId, 'start_on' => $start, 'through' => $through,
             'bank_accounts_checked' => $accounts->count(), 'bank_statements_checked' => $statementsChecked,
+            'bank_period_evidence' => $bankEvidence,
             'counted_reviews_checked' => $reviews->count(), 'counted_sessions_verified' => $verifiedSessions,
             'issues' => array_values($issues), 'scanned_settlements_match' => $issues === [],
             'source_coverage_verified' => false, 'closure_authorized' => false];
