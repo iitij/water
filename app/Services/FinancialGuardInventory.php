@@ -26,6 +26,7 @@ final class FinancialGuardInventory
             'collection_evidence_audit' => fn () => app(CollectionEvidenceAuditProtection::class)->active(),
             'collection_evidence_period' => fn () => app(CollectionEvidencePeriodProtection::class)->active(),
             'bank_evidence_period' => fn () => app(BankEvidencePeriodProtection::class)->active(),
+            'bank_range_destinations' => fn () => app(BankRangeDestinationProtection::class)->active(),
             'cash_count_period' => fn () => app(CashCountPeriodProtection::class)->active(),
             'registry' => fn () => app(FinancialPostingRegistryProtection::class)->active(),
             'close_journal' => fn () => app(FinancialCloseJournalProtection::class)->active(),

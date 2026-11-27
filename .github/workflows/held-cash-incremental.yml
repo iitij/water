@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify financial evidence destinations
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_database_fence_preserves_cutoff_evidence|test_collection_evidence_database_fence_preserves_prior_source_and_later_decision|test_source_allocation_fence_preserves_closed_revisions_and_allows_later_reinstatement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify contiguous bank evidence range
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_bank_evidence_entry_requires_every_statement_month_open_and_independent_match|test_bank_fee_refuses_frozen_adjacent_statement_period_before_posting|test_late_bank_refuses_frozen_adjacent_statement_period' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify financial evidence destinations
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_database_fence_preserves_cutoff_evidence|test_collection_evidence_database_fence_preserves_prior_source_and_later_decision|test_source_allocation_fence_preserves_closed_revisions_and_allows_later_reinstatement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify contiguous bank evidence range
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_bank_evidence_entry_requires_every_statement_month_open_and_independent_match|test_bank_fee_refuses_frozen_adjacent_statement_period_before_posting|test_late_bank_refuses_frozen_adjacent_statement_period' tests/Feature/GatedCashCountAdjustmentWriterTest.php

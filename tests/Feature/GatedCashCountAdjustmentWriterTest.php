@@ -11914,6 +11914,29 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach (['bank_statements', 'bank_statement_lines', 'bank_statement_matches', 'treasury_postings', 'audit_events'] as $table) {
             $before[$table] = DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all();
         }
+        $this->assertTrue(app(\App\Services\BankRangeDestinationProtection::class)->active());
+        // Both endpoints are open, but January is not configured.
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2027-02',
+            'start_on' => '2027-02-01', 'next_on' => '2027-03-01', 'state' => 'OPEN', 'version' => 0]);
+        $raw = array_diff_key((array) DB::table('bank_statements')->sole(), ['id' => true]);
+        $raw['reference'] = 'QA-BANK-GAP';
+        $rawLine = array_diff_key((array) $line, ['id' => true]);
+        $rawLine['bank_reference'] = 'QA-BANK-OUTSIDE';
+        foreach ([
+            fn () => DB::table('bank_statements')->insert(array_replace($raw, ['to_date' => '2027-02-01'])),
+            fn () => DB::table('bank_statements')->where('id', $sid)->update(['to_date' => '2027-02-01']),
+            fn () => DB::table('bank_statements')->insert(array_replace($raw, ['from_date' => '2026-10-31'])),
+            fn () => DB::table('bank_statements')->insert(array_replace($raw, ['from_date' => '2026-12-03'])),
+            fn () => DB::table('bank_statement_lines')->insert(array_replace($rawLine, ['booked_on' => '2026-12-03'])),
+            fn () => DB::table('bank_statement_lines')->where('id', $line->id)->update(['booked_on' => '2026-12-03']),
+        ] as $attempt) {
+            try {
+                $attempt();
+                $this->fail('Bank range bypass accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Bank evidence period is fenced', $error->getMessage());
+            }
+        }
         $disabled = $this->actor();
         DB::table('users')->where('id', $disabled->id)->update(['disabled_at' => now()]);
         $service = app(\App\Services\BankReconciliationService::class);
