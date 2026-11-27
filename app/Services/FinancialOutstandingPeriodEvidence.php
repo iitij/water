@@ -72,7 +72,8 @@ final class FinancialOutstandingPeriodEvidence
             $recovery = $source['recovery_disposition'] ?? null;
             $priorLoss = $loss !== null && $loss['approved_on'] < $start;
             $priorRecovery = $recovery !== null && $recovery['effective_on'] < $start;
-            $shortageOpening = $row['approval_before_period'] && ! $priorLoss && ! $priorRecovery ? $shortage : 0;
+            $shortageOpening = $row['approval_before_period'] && ! $priorLoss
+                ? SignedMinor::subtract($shortage, $priorRecovery ? $recovery['recovered_minor'] : 0) : 0;
             $shortageNew = $row['approval_before_period'] ? 0 : $shortage;
             $classified = $loss !== null && ! $priorLoss ? $loss['confirmed_loss_minor'] : 0;
             $recovered = $recovery !== null && ! $priorRecovery ? $recovery['recovered_minor'] : 0;
@@ -234,7 +235,8 @@ final class FinancialOutstandingPeriodEvidence
                         throw new DomainException('shortage_recovery_loss_conflict');
                     }
                     $source['recovery_disposition'] = $recovery;
-                    $source['variance_disposition_verified'] = $source['loss_disposition'] !== null || $recovery !== null;
+                    $source['variance_disposition_verified'] = $source['loss_disposition'] !== null
+                        || ($recovery !== null && $recovery['recovered_minor'] === $source['shortage_minor']);
                 }
                 $rows[] = ['session_id' => $id, 'collector_id' => (int) $session->user_id,
                     'approval_audit_id' => (int) $audits[0]->id, 'approval_before_period' => $approved < $from,
@@ -251,7 +253,7 @@ final class FinancialOutstandingPeriodEvidence
     }
 
 
-    /** Full recovery is a new treasury inflow, not a change to counted custody. */
+    /** Recovery is a new treasury inflow, not a change to counted custody. */
     private function recoveryDisposition(CashSession $session, AuditEvent $approval, array $source, string $next): ?array
     {
         $r = DB::table('custody_shortage_recoveries')->where('cash_session_id', $session->id)
@@ -263,7 +265,7 @@ final class FinancialOutstandingPeriodEvidence
         $sourceHash = hash('sha256', json_encode($source, JSON_THROW_ON_ERROR));
         if (! $posting || ! is_array($p) || (int) $r->count_approval_id !== (int) $approval->id
             || ($p['original_source_hash'] ?? null) !== $sourceHash
-            || SignedMinor::parseUnsigned($r->amount_minor) !== $source['shortage_minor']) {
+            || SignedMinor::parseUnsigned($r->amount_minor) > $source['shortage_minor']) {
             throw new DomainException('shortage_recovery_source_changed');
         }
         $leg = app(CustodyShortageRecoveryWriter::class)->leg((int) $posting->id);
@@ -273,7 +275,7 @@ final class FinancialOutstandingPeriodEvidence
             ->where('source_type', 'treasury_posting')->where('source_id', (string) $posting->id)
             ->where('leg', 'treasury')->lockForUpdate()->first();
         if (! $op || ! $event || $event->operation_uuid !== $r->operation_uuid
-            || $op->effective_on !== $r->effective_on || $leg['amount_minor'] !== $source['shortage_minor']) {
+            || $op->effective_on !== $r->effective_on || $leg['amount_minor'] !== SignedMinor::parseUnsigned($r->amount_minor)) {
             throw new DomainException('shortage_recovery_registry_mismatch');
         }
         return ['recovery_id' => (int) $r->id, 'effective_on' => $r->effective_on,
