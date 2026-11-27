@@ -10485,6 +10485,37 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    public function test_final_accounting_invalid_shortage_decision_cannot_erase_exposure(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $proposer = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $loss = app(\App\Services\CustodyShortageLossDecision::class);
+        $proposal = $loss->propose($proposer, (int) $session->id, 'Independent evidence supports the loss', self::EVIDENCE, $this->nowAt());
+        // A malformed audit document inserted directly in the open period is
+        // not proof. Keep the full shortage even when its validation fails.
+        app(\App\Services\AuditLogger::class)->recordRequired(\App\Services\CustodyShortageLossDecision::APPROVED, [
+            'entity_type' => 'custody_shortage_loss', 'entity_id' => $session->id, 'actor_user_id' => $reviewer->id,
+            'source' => 'internal', 'after' => ['proposal_id' => $proposal['proposal_id'], 'minor' => 200],
+        ]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $report = DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($period));
+        $this->assertSame(200, $report['variance_exposure']['new_shortage_minor']);
+        $this->assertSame(200, $report['variance_exposure']['unresolved_shortage_minor']);
+        $this->assertSame(0, $report['variance_exposure']['confirmed_loss_minor']);
+        $this->assertFalse($report['custody']['all_count_variances_resolved']);
+        $this->assertNotEmpty($report['custody']['issues']);
+        $this->assertFalse($report['closure_authorized']);
+    }
+
     public function test_final_accounting_shortage_loss_decision_is_independent_and_immutable(): void
     {
         [, , $account, , , $subscriber] = $this->held();
