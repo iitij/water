@@ -94,6 +94,9 @@ final class GatedTreasuryOpeningFundingWriterTest extends TestCase
 
     public function test_treasury_writers_reject_missing_live_protection(): void
     {
+        // Funding records the real application clock; keep it aligned with the explicit gate date.
+        $this->travelTo(\Carbon\Carbon::instance($this->nowAt())->setTimezone('Asia/Aden'));
+        $this->assertSame('2026-11-25', now()->toDateString());
         $issuer = $this->actor();
         $collector = $this->actor();
         $receiver = $this->actor();
