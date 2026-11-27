@@ -9794,6 +9794,47 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 1);
     }
 
+    public function test_final_accounting_shortage_loss_decision_is_independent_and_immutable(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $proposer = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $service = app(\App\Services\CustodyShortageLossDecision::class);
+        $before = DB::table('treasury_postings')->count();
+        $events = DB::table('financial_posting_events')->count();
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $proposed = $service->propose($proposer, (int) $session->id, 'Independent documented count loss', self::EVIDENCE, $this->nowAt());
+        $this->assertTrue($proposed['created']);
+        $this->assertFalse($service->propose($proposer, (int) $session->id, 'Independent documented count loss', self::EVIDENCE, $this->nowAt())['created']);
+        $this->rejects('shortage_loss_independence', fn () => $service->approve($proposer, (int) $session->id, $this->nowAt()));
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $result = $service->approve($reviewer, (int) $session->id, $this->nowAt());
+        $this->assertTrue($result['created']);
+        $this->assertSame(200, $result['confirmed_loss_minor']);
+        $this->assertSame(0, $result['remaining_minor']);
+        $this->assertFalse($result['source_coverage_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertFalse($service->approve($reviewer, (int) $session->id, $this->nowAt())['created']);
+        $this->assertSame($before, DB::table('treasury_postings')->count());
+        $this->assertSame($events, DB::table('financial_posting_events')->count());
+        foreach ([$proposed['proposal_id'], $result['decision_id']] as $id) {
+            try {
+                DB::table('audit_events')->where('id', $id)->delete();
+                $this->fail('Immutable shortage decision deleted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Custody shortage audit is immutable or invalid', $error->getMessage());
+            }
+        }
+        $this->assertTrue(app(\App\Services\CustodyShortageDecisionProtection::class)->active());
+        $this->assertSame('-2.00', (string) $session->fresh()->variance_amount);
+    }
+
     public function test_final_accounting_cash_session_decision_requires_independent_actor(): void
     {
         $collector = $this->actor();
