@@ -40,14 +40,50 @@ final class FinancialWriterCoverageDiagnostic
                 'exclusive_entrypoints_verified' => false];
         }
         $guards = [];
-        foreach (['ledger' => LedgerProtection::class, 'source_period' => FinancialSourceInsertProtection::class,
-            'registry' => FinancialPostingRegistryProtection::class, 'close_journal' => FinancialCloseJournalProtection::class,
-            'allocation_history' => AllocationHistoryProtection::class] as $key => $guard) {
-            $guards[$key] = app($guard)->active();
+        $checks = [
+            'ledger' => fn () => app(LedgerProtection::class)->active(),
+            'source_period' => fn () => app(FinancialSourceInsertProtection::class)->active(),
+            'registry' => fn () => app(FinancialPostingRegistryProtection::class)->active(),
+            'close_journal' => fn () => app(FinancialCloseJournalProtection::class)->active(),
+            'allocation_history' => fn () => app(AllocationHistoryProtection::class)->active(),
+            'held_documents' => fn () => app(HeldCashDocumentProtection::class)->active(),
+            'held_release' => fn () => app(HeldCashReleaseDocumentProtection::class)->active(),
+            'held_release_journal' => fn () => app(HeldCashReleaseDocumentProtection::class)->journalActive(),
+            'held_reinstatement' => fn () => app(HeldCashReleaseDocumentProtection::class)->reinstatementActive(),
+            'held_active_release' => fn () => app(ActiveHeldCashRelease::class)->protectionActive(),
+            'financial_approval_audit' => fn () => app(FinancialApprovalAuditProtection::class)->active(),
+            'completed_refund_request' => fn () => app(CompletedCashRefundRequestProtection::class)->active(),
+            'completed_refund_decision' => fn () => app(CompletedCashRefundDecisionProtection::class)->active(),
+            'completed_refund_resolution_proposal' => fn () => app(CompletedCashRefundResolutionProposalProtection::class)->active(),
+            'completed_refund_resolution_approval' => fn () => app(CompletedCashRefundResolutionApprovalProtection::class)->active(),
+            'completed_refund_resolution_revision' => fn () => app(CompletedCashRefundResolutionRevisionProtection::class)->active(),
+            'completed_refund_batch_approval' => fn () => app(CompletedCashRefundBatchApprovalProtection::class)->active(),
+            'completed_refund_document' => fn () => app(CompletedCashRefundDocumentProtection::class)->active(),
+            'completed_refund_source' => fn () => app(CompletedCashRefundSourceProtection::class)->active(),
+            'correction_documents' => fn () => app(FinancialCorrectionDocumentProtection::class)->active(),
+            'registered_documents' => fn () => app(RegisteredDocumentProtection::class)->active(),
+            'invoice_projection' => fn () => app(InvoiceProjectionProtection::class)->active(),
+            'receipt_void' => fn () => app(ReceiptVoidProtection::class)->active(),
+            'receipt_request' => fn () => app(ReceiptVoidRequestProtection::class)->active(),
+        ];
+        foreach ($checks as $key => $check) {
+            try {
+                $guards[$key] = $check() === true;
+            } catch (\Throwable) {
+                // Preserve the failed check without exposing database details.
+                $guards[$key] = false;
+            }
+        }
+        try {
+            $grantReport = app(RuntimeDatabasePrivileges::class)->inspect();
+        } catch (\Throwable) {
+            $grantReport = ['accepted' => false, 'issues' => ['runtime_grants_unverifiable']];
         }
         return ['writers' => $writers, 'guards' => $guards,
             'all_candidate_switches_enabled' => ! in_array(false, array_column($writers, 'candidate_enabled'), true),
             'listed_guards_active' => ! in_array(false, $guards, true),
+            'runtime_grant_allowlist_accepted' => $grantReport['accepted'],
+            'runtime_grant_issues' => $grantReport['issues'],
             'exclusive_entrypoints_verified' => false, 'runtime_privileges_verified' => false,
             'complete_writer_coverage_verified' => false, 'closure_authorized' => false];
     }
