@@ -9425,6 +9425,63 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_period_closures', 0);
     }
 
+    public function test_surplus_cutoff_evidence_separates_allocation_from_reserved_cash(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $session = app(CashSessionService::class)->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '10.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->decide($sessions->close($session, '15.00'), true, $reviewer);
+        $accountId = (int) $account['id'];
+        app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, $accountId,
+            '15.00', 'QA-CUTOFF-SURPLUS', '2026-11-25', self::EVIDENCE,
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $owner = Subscriber::create(['name' => 'Synthetic cutoff surplus owner', 'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $late = app(\App\Services\LateReceiptReviewService::class);
+        $allocate = function (string $amount, string $key, string $reference) use ($late, $collector, $session, $owner, $reviewer): void {
+            $review = $late->submit($collector, ['sync_uuid' => $key, 'cash_session_id' => $session->id,
+                'subscriber_id' => $owner->id, 'amount' => $amount, 'payment_method' => 'cash', 'payment_date' => '2026-11-25']);
+            app(\App\Services\GatedCountedCashWriter::class)->allocate($reviewer, (int) $review['id'], '2026-11-25',
+                $reference, self::EVIDENCE, $key, $this->nowAt());
+        };
+        $allocate('2.00', '99999999-9999-4999-8999-999999999999', 'QA-CUTOFF-PART');
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($period));
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $first = $inspect();
+        $this->assertTrue($first['custody']['recorded_rollforward_verified'], json_encode($first));
+        $this->assertFalse($first['custody']['all_count_variances_resolved']);
+        $this->assertSame(0, $first['custody']['recorded_closing_minor']);
+        $proof = $first['custody']['rows'][0]['source_evidence']['surplus_disposition'];
+        $this->assertSame(500, $proof['capacity_minor']);
+        $this->assertSame(200, $proof['allocated_minor']);
+        $this->assertSame(300, $proof['unallocated_minor']);
+        $this->assertSame(500, $proof['liquidity_reserve']['reserved_minor']);
+        $this->assertFalse($proof['new_cash_movement']);
+        $this->assertFalse($proof['reserve_release_authorized']);
+        $this->assertSame(25, $first['liability']['closing_minor']);
+        $this->assertFalse($first['closure_authorized']);
+        // A second independent scenario within the same still-open month.
+        // Simulated clock returns before cutoff; no actual closed period is rewritten.
+        $this->travelTo(\Carbon\Carbon::instance(new DateTimeImmutable('2026-11-26T08:30:00Z')));
+        $allocate('3.00', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'QA-CUTOFF-FULL');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $full = $inspect();
+        $this->assertTrue($full['custody']['all_count_variances_resolved'], json_encode($full));
+        $proof = $full['custody']['rows'][0]['source_evidence']['surplus_disposition'];
+        $this->assertSame(500, $proof['allocated_minor']);
+        $this->assertSame(0, $proof['unallocated_minor']);
+        $this->assertSame(500, $proof['liquidity_reserve']['reserved_minor']);
+        $this->assertCount(2, $proof['allocations']);
+        $this->assertSame(500, $owner->fresh()->getAccountBalanceMinor());
+        $this->assertSame(525, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+        $this->assertSame(25, $full['liability']['closing_minor']);
+        $this->assertFalse($full['closure_authorized']);
+    }
+
     public function test_custody_source_coverage_rejects_independently_counted_but_unregistered_funding(): void
     {
         [, , $account] = $this->fixture('100.00');
