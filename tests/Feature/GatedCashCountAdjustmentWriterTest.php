@@ -9438,7 +9438,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($manifest['independent_opening_verified']);
         $this->assertFalse($manifest['closure_authorized']);
         $this->assertSame($period, $manifest['period_id']);
-        $this->assertSame(['cash', 'bank', 'subscriber', 'transit', 'custody', 'held_liability', 'variance_exposure'], array_keys($manifest['sectors']));
+        $this->assertSame(['cash', 'bank', 'subscriber', 'transit', 'custody', 'held_liability', 'variance_exposure', 'collection_claims'], array_keys($manifest['sectors']));
         foreach ($manifest['sectors'] as $sector) {
             $this->assertTrue($sector['recorded_evidence_matched']);
             $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $sector['source_hash']);
@@ -12419,6 +12419,55 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
         $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_collection_cutoff_evidence_uses_recorded_submission_and_decision_not_current_status(): void
+    {
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic cutoff claim account',
+            'square_id' => Square::create(['name' => 'Synthetic cutoff claim square'])->id, 'status' => 'active']);
+        $session = app(CashSessionService::class)->open($issuer);
+        app(CashSessionService::class)->close($session, '0.00');
+        config(['financial_candidate.collection_evidence' => true]);
+        $claims = app(\App\Services\NonCashClaimService::class);
+        $reviews = app(\App\Services\LateReceiptReviewService::class);
+        $claim = $claims->submit($issuer, ['sync_uuid' => self::UUID, 'subscriber_id' => $subscriber->id,
+            'amount' => '0.25', 'payment_method' => 'check', 'instrument_reference' => 'QA-CUTOFF-CLAIM', 'instrument_on' => '2026-11-25']);
+        $review = $reviews->submit($issuer, ['sync_uuid' => self::OTHER, 'subscriber_id' => $subscriber->id,
+            'cash_session_id' => $session->id, 'amount' => '0.35', 'payment_method' => 'cash', 'payment_date' => '2026-11-25']);
+        $period = (int) DB::table('financial_periods')->value('id');
+        $inspect = fn (int $id) => DB::transaction(fn () => app(\App\Services\FinancialCollectionPeriodEvidence::class)->inspect($id));
+        $this->assertFalse($inspect($period)['period_ended']);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $before = $inspect($period);
+        $this->assertTrue($before['recorded_evidence_matched'], json_encode($before));
+        $this->assertSame(2, $before['pending_count']);
+        $this->assertSame(['pending', 'pending'], array_column($before['rows'], 'status_at_cutoff'));
+        $this->assertSame('2026-11-30 21:00:00', $before['cutoff_utc']);
+        DB::table('financial_periods')->where('id', $period)->update(['state' => 'CLOSED']);
+        $next = DB::table('financial_periods')->insertGetId(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $claims->reject($reviewer, $claim['id'], self::EVIDENCE);
+        $reviews->decide($review['id'], $reviewer, ['approve' => false, 'evidence' => self::EVIDENCE]);
+        $this->assertSame($before, $inspect($period));
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $later = $inspect($next);
+        $this->assertTrue($later['recorded_evidence_matched'], json_encode($later));
+        $this->assertSame(0, $later['pending_count']);
+        $this->assertSame(['rejected', 'rejected'], array_column($later['rows'], 'status_at_cutoff'));
+        $this->assertFalse($later['closure_authorized']);
+        // An unmatched audit is not evidence; no aggregate may be certified.
+        app(\App\Services\AuditLogger::class)->recordRequired('noncash_claim.submitted', [
+            'entity_type' => 'noncash_collection_claim', 'entity_id' => 999999, 'actor_user_id' => $issuer->id, 'after' => []]);
+        DB::table('audit_events')->where('entity_id', '999999')->update(['occurred_at' => '2026-12-03 08:00:00']);
+        $bad = $inspect($next);
+        $this->assertFalse($bad['recorded_evidence_matched']);
+        $this->assertNull($bad['pending_count']);
+        $this->assertSame([], $bad['rows']);
+        $this->assertContains('collection_orphan_audit', array_column($bad['issues'], 'code'));
+        $this->assertSame($before, $inspect($period));
+        foreach (['payments', 'transactions', 'treasury_postings', 'financial_posting_events'] as $table) $this->assertDatabaseCount($table, 0);
     }
 
     public function test_collection_evidence_database_fence_preserves_prior_source_and_later_decision(): void

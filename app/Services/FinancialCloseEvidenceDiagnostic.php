@@ -78,6 +78,7 @@ final class FinancialCloseEvidenceDiagnostic
         $movement = $this->movements->inspect($periodId);
         $heldPeriod = $this->heldPeriod->inspect($periodId);
         $settlement = $this->settlements->inspect($actor, $periodId, $through);
+        $claims = $ended ? app(FinancialCollectionPeriodEvidence::class)->inspect($periodId) : null;
         $cashEvidence = $ended ? app(FinancialCashPeriodEvidence::class)->inspect($periodId) : null;
         $outstanding = $ended ? app(FinancialOutstandingPeriodEvidence::class)->inspect($periodId) : null;
         $incident = $this->refundIncidents();
@@ -100,6 +101,7 @@ final class FinancialCloseEvidenceDiagnostic
         if (! $ended) $blockers[] = 'period_not_ended';
         if (! $source['scanned_sources_match']) $blockers[] = 'document_registry_mismatch';
         if (! $movement['recorded_movements_verified']) $blockers[] = 'period_movements_unmatched';
+        if ($claims !== null && ! $claims['recorded_evidence_matched']) $blockers[] = 'collection_cutoff_evidence_unmatched';
         if (! $settlement['scanned_settlements_match']) $blockers[] = 'settlement_sources_unmatched';
         if ($ended && ! $settlement['bank_period_evidence']['all_accounts_matched']) $blockers[] = 'bank_period_balances_unmatched';
         if ($cashEvidence !== null && ! $cashEvidence['all_accounts_matched']) $blockers[] = 'cash_period_balances_unmatched';
@@ -121,11 +123,12 @@ final class FinancialCloseEvidenceDiagnostic
         if ($subscriberCutoff !== null && ! $subscriberCutoff['allocation_policy_verified']) $blockers[] = 'subscriber_allocation_policy_unverified';
         sort($blockers, SORT_STRING);
         $manifest = $ended ? $this->cutoffManifest($period, $cashEvidence,
-            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding) : null;
+            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims) : null;
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
             'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'subscriber_period_evidence' => $subscriberCutoff, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
+            'collection_period_evidence' => $claims,
             'cutoff_evidence_manifest' => $manifest, 'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
     }
@@ -136,7 +139,7 @@ final class FinancialCloseEvidenceDiagnostic
      * in nature; pending payout authority is a subset, not an additional balance.
      * A fingerprint is not a signed close journal or independent opening proof.
      */
-    private function cutoffManifest(object $period, array $cash, array $bank, array $subscriber, array $outstanding): array
+    private function cutoffManifest(object $period, array $cash, array $bank, array $subscriber, array $outstanding, array $claims): array
     {
         $sections = [
             'cash' => [$cash['all_accounts_matched'], $cash],
@@ -146,6 +149,7 @@ final class FinancialCloseEvidenceDiagnostic
             'custody' => [$outstanding['custody']['recorded_rollforward_verified'], $outstanding['custody']],
             'held_liability' => [$outstanding['liability']['recorded_rollforward_verified'], $outstanding['liability']],
             'variance_exposure' => [$outstanding['custody']['recorded_rollforward_verified'], $outstanding['variance_exposure']],
+            'collection_claims' => [$claims['recorded_evidence_matched'], $claims],
         ];
         $sectors = [];
         $matched = true;
@@ -156,7 +160,7 @@ final class FinancialCloseEvidenceDiagnostic
                 'row_count' => $verified ? count($evidence['rows']) : null,
                 'source_hash' => $verified ? hash('sha256', json_encode($evidence, JSON_THROW_ON_ERROR)) : null];
         }
-        $manifest = ['format_version' => 1, 'scope' => 'water', 'period_id' => (int) $period->id,
+        $manifest = ['format_version' => 2, 'scope' => 'water', 'period_id' => (int) $period->id,
             'start_on' => $period->start_on, 'next_on' => $period->next_on,
             'sectors' => $sectors, 'all_listed_sectors_matched' => $matched,
             'independent_opening_verified' => false, 'closure_authorized' => false];

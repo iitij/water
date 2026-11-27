@@ -41,7 +41,7 @@ jobs:
           git diff --exit-code -- composer.lock
       - name: Verify bank evidence range and existing cutoff proofs
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_evidence_database_fence_preserves_prior_source_and_later_decision|test_collection_evidence_gate_rejects_frozen_writes_and_preserves_independent_decisions|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_cutoff_evidence_uses_recorded_submission_and_decision_not_current_status|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -104,4 +104,4 @@ jobs:
 
       - name: Verify bank evidence range and existing cutoff proofs
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_evidence_database_fence_preserves_prior_source_and_later_decision|test_collection_evidence_gate_rejects_frozen_writes_and_preserves_independent_decisions|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_cutoff_evidence_uses_recorded_submission_and_decision_not_current_status|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
