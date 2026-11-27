@@ -25,6 +25,10 @@ final class RuntimeDatabasePrivileges
             $result['accepted'] = false;
             $result['issues'][] = 'runtime_active_roles_unverified';
         }
+        if (! app(FinancialConnectionIntegrity::class)->active()) {
+            $result['accepted'] = false;
+            $result['issues'][] = 'runtime_connection_constraints_disabled';
+        }
         return $result;
     }
 

@@ -45,6 +45,7 @@ final class FinancialPostingRegistry
             throw new DomainException('posting_registry_requires_outer_gate', 0, $error);
         }
         $this->need($context === $active, 'posting_gate_context_mismatch');
+        app(FinancialConnectionIntegrity::class)->requireActive();
 
         $this->need(app(FinancialPostingRegistryProtection::class)->active(), 'posting_registry_protection_missing');
         $canonicalLegs = $this->legs($legs);

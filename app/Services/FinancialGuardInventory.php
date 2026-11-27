@@ -13,6 +13,7 @@ final class FinancialGuardInventory
     {
         $guards = [];
         $checks = [
+            'connection_constraints' => fn () => app(FinancialConnectionIntegrity::class)->active(),
             'live_metadata_routine' => fn () => ! in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)
                 || (config('database.financial_trigger_metadata_routine') === true
                     ? FinancialTriggerMetadata::query()->isNotEmpty()

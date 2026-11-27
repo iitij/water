@@ -54,6 +54,7 @@ final class FinancialWriteGate
             throw new DomainException('invalid_financial_destination');
         }
 
+        app(FinancialConnectionIntegrity::class)->requireActive();
         return DB::transaction(function () use ($scope, $effectiveOn, $asOf, $writer): mixed {
             $gate = DB::table('financial_scopes')->where('scope_key', $scope)->lockForUpdate()->first();
             if (! $gate || $gate->scope_key !== $scope || $gate->mode !== 'ACTIVE'
@@ -89,7 +90,9 @@ final class FinancialWriteGate
             if (self::$current !== null) throw new DomainException('financial_gate_context_conflict');
             self::$current = ['context' => $context, 'pdo' => spl_object_id(DB::connection()->getPdo())];
             try {
-                return $writer($context);
+                $result = $writer($context);
+                app(FinancialConnectionIntegrity::class)->requireActive();
+                return $result;
             } finally {
                 self::$current = null;
             }

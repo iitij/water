@@ -264,6 +264,52 @@ final class FinancialPostingRegistryTest extends TestCase
         $this->assertSame(1, DB::table('financial_posting_events')->count());
     }
 
+    public function test_financial_gate_rejects_disabled_session_constraints(): void
+    {
+        $guard = app(\App\Services\FinancialConnectionIntegrity::class);
+        $this->assertTrue($guard->active());
+        $pairs = DB::getDriverName() === 'sqlite'
+            ? [['PRAGMA foreign_keys = OFF', 'PRAGMA foreign_keys = ON'],
+                ['PRAGMA ignore_check_constraints = ON', 'PRAGMA ignore_check_constraints = OFF']]
+            : [['SET SESSION foreign_key_checks = 0', 'SET SESSION foreign_key_checks = 1'],
+                ['SET SESSION unique_checks = 0', 'SET SESSION unique_checks = 1']];
+        foreach ($pairs as [$disable, $restore]) {
+            DB::statement($disable);
+            try {
+                $this->assertFalse($guard->active());
+                $called = false;
+                try {
+                    $this->gate(function () use (&$called): void { $called = true; });
+                    $this->fail('Gate accepted disabled session constraints.');
+                } catch (DomainException $error) {
+                    $this->assertSame('financial_connection_constraints_disabled', $error->getMessage());
+                }
+                $this->assertFalse($called);
+                $this->assertDatabaseCount('financial_posting_operations', 0);
+                $this->assertDatabaseCount('financial_posting_events', 0);
+            } finally {
+                DB::statement($restore);
+            }
+            $this->assertTrue($guard->active());
+        }
+        // The second switch can be changed inside a transaction on both engines.
+        [$disable, $restore] = $pairs[1];
+        try {
+            $this->gate(function (array $context) use ($disable): void {
+                $this->assertTrue($this->record($context, self::UUID, [$this->leg('10', 'bank', 10)]));
+                DB::statement($disable);
+            });
+            $this->fail('Gate committed after session constraints changed.');
+        } catch (DomainException $error) {
+            $this->assertSame('financial_connection_constraints_disabled', $error->getMessage());
+        } finally {
+            DB::statement($restore);
+        }
+        $this->assertDatabaseCount('financial_posting_operations', 0);
+        $this->assertDatabaseCount('financial_posting_events', 0);
+        $this->assertTrue($this->gate(fn (array $context) => $this->record($context, self::UUID, [$this->leg('10', 'bank', 10)])));
+    }
+
     public function test_registry_requires_live_gate_and_exact_context(): void
     {
         $leg = $this->leg('10', 'bank', 10);

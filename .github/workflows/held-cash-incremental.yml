@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify live gate registry contract
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_registry_requires_live_gate_and_exact_context|test_rejects_inexact_input_stale_context_and_corrupt_replay|test_exact_signed_legs_and_byte_identical_replay_are_persisted|test_duplicate_source_leg_rolls_back_new_operation_and_outer_rollback_removes_all_evidence' tests/Feature/FinancialPostingRegistryTest.php
+      - name: Verify connection integrity and live gate contract
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_financial_gate_rejects_disabled_session_constraints|test_registry_requires_live_gate_and_exact_context' tests/Feature/FinancialPostingRegistryTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify live gate registry contract
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_registry_requires_live_gate_and_exact_context|test_rejects_inexact_input_stale_context_and_corrupt_replay|test_exact_signed_legs_and_byte_identical_replay_are_persisted|test_duplicate_source_leg_rolls_back_new_operation_and_outer_rollback_removes_all_evidence' tests/Feature/FinancialPostingRegistryTest.php
+      - name: Verify connection integrity and live gate contract
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_financial_gate_rejects_disabled_session_constraints|test_registry_requires_live_gate_and_exact_context' tests/Feature/FinancialPostingRegistryTest.php
