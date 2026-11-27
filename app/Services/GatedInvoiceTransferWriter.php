@@ -212,6 +212,7 @@ final class GatedInvoiceTransferWriter
     {
         $date = $now->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
         return $this->gate->withinOpenPeriod('water', $date, $now, function (array $context) use ($actor, $uuid, $action): array {
+            app(SubscriberFinancialWriteProtection::class)->requireActive();
             $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
             DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
             $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_document_issuance_lock');
