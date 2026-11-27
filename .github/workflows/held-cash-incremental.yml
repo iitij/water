@@ -1,4 +1,4 @@
-name: Protected clean financial start
+name: Independent clean-start review
 on:
   pull_request:
     branches: ['main']
@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-clean-start-evidence'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-clean-start-review'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -43,7 +43,7 @@ jobs:
         run: |
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCleanStartTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-clean-start-evidence'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-clean-start-review'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
