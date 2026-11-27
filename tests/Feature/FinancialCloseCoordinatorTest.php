@@ -330,6 +330,39 @@ final class FinancialCloseCoordinatorTest extends TestCase
         $this->assertSame('CLOSED', $this->command('approve', 3, $this->approval($prepared['result']['attempt']['prepared']['hash']))['current_state']);
     }
 
+    public function test_close_rejects_a_same_name_but_ineffective_ledger_trigger(): void
+    {
+        $protection = app(\App\Services\LedgerProtection::class);
+        $this->freeze();
+        $scope = DB::table('financial_scopes')->where('scope_key', 'water')->first();
+        $period = DB::table('financial_periods')->where('month', '2026-11')->first();
+        DB::unprepared('DROP TRIGGER ledger_reject_delete');
+        try {
+            DB::unprepared(DB::getDriverName() === 'sqlite'
+                ? 'CREATE TRIGGER ledger_reject_delete BEFORE DELETE ON transactions FOR EACH ROW BEGIN SELECT 1; END'
+                : 'CREATE TRIGGER ledger_reject_delete BEFORE DELETE ON transactions FOR EACH ROW SET @qa_ledger_noop = 1');
+            $this->assertFalse($protection->active());
+            $this->rejects('close_ledger_protection_missing', fn () => $this->freeze());
+            $this->rejects('close_ledger_protection_missing', fn () => $this->prepare());
+            try {
+                $protection->install();
+                $this->fail('Unexpectedly accepted a conflicting trigger.');
+            } catch (\LogicException $error) {
+                $this->assertSame('Unexpected ledger protection trigger: ledger_reject_delete', $error->getMessage());
+            }
+            $this->assertFalse($protection->active());
+            $this->assertEquals($scope, DB::table('financial_scopes')->where('scope_key', 'water')->first());
+            $this->assertEquals($period, DB::table('financial_periods')->where('month', '2026-11')->first());
+            $this->assertSame(1, DB::table('financial_close_commands')->count());
+            $this->assertSame(0, DB::table('financial_period_closures')->count());
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS ledger_reject_delete');
+            $protection->install();
+        }
+        $this->assertTrue($protection->active());
+        $this->assertTrue($this->freeze()['replayed']);
+    }
+
     public function test_corrupt_journal_blocks_further_commands_and_no_production_proof_is_bound(): void
     {
         $this->assertFalse(app()->bound(FinancialCloseProofSource::class));
