@@ -8316,6 +8316,23 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(),
             ['payments', 'transactions', 'financial_posting_operations', 'financial_posting_events']);
         $before = $snapshot();
+        $this->assertTrue(app(\App\Services\RegistrySourceIdentityProtection::class)->active());
+        $event = array_diff_key((array) DB::table('financial_posting_events')->sole(), ['id' => true]);
+        foreach ([
+            ['source_id' => '99999999'],
+            ['source_id' => '0'.$event['source_id']],
+            ['leg' => 'wrong'],
+            ['source_type' => 'treasury_posting', 'source_id' => '99999999', 'leg' => 'treasury'],
+            ['source_type' => 'treasury_opening', 'source_id' => '99999999', 'leg' => 'opening'],
+        ] as $bad) {
+            try {
+                DB::table('financial_posting_events')->insert(array_replace($event, $bad));
+                $this->fail('Invalid registry source accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial registry source identity is invalid', $error->getMessage());
+            }
+        }
+        $this->assertEquals($before, $snapshot());
         $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
         $reject = function (callable $action): void {
             try {

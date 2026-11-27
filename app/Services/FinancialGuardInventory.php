@@ -30,6 +30,7 @@ final class FinancialGuardInventory
             'bank_range_destinations' => fn () => app(BankRangeDestinationProtection::class)->active(),
             'cash_count_period' => fn () => app(CashCountPeriodProtection::class)->active(),
             'registry' => fn () => app(FinancialPostingRegistryProtection::class)->active(),
+            'registry_source_identity' => fn () => app(RegistrySourceIdentityProtection::class)->active(),
             'close_journal' => fn () => app(FinancialCloseJournalProtection::class)->active(),
             'allocation_history' => fn () => app(AllocationHistoryProtection::class)->active(),
             'held_documents' => fn () => app(HeldCashDocumentProtection::class)->active(),
