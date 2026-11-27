@@ -282,6 +282,21 @@ final class FinancialOutstandingPeriodEvidence
             'recovered_minor' => $leg['amount_minor'], 'posting_hash' => $hash];
     }
 
+    /** For a gated residual loss decision, reconstruct the already posted
+     * recovery independently rather than trusting its stored amount alone. */
+    public function verifiedPriorRecovery(CashSession $session, string $next): ?array
+    {
+        FinancialWriteGate::currentContext();
+        $this->verifiedShortageSource($session, $next);
+        $approval = AuditEvent::query()->where('event', 'cash_session.approved')
+            ->where('entity_type', CashSession::class)->where('entity_id', (string) $session->id)
+            ->lockForUpdate()->sole();
+        $counted = Cash::stored($session->getRawOriginal('counted_amount'),
+            $session->getConnection()->getDriverName(), DecimalDomain::D14);
+        return $this->recoveryDisposition($session, $approval,
+            $this->sessionSources($session, $approval, $counted, $next), $next);
+    }
+
     /** Revalidate the original cash-only till, including funded opening and
      * ordinary pre-close voids. Unsupported settlements remain explicit
      * blockers; an approved count alone is not collection coverage.
