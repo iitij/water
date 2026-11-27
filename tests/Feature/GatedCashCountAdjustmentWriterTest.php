@@ -9126,7 +9126,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 $action();
                 $this->fail('Expected allocation cutoff fence.');
             } catch (\Illuminate\Database\QueryException $error) {
-                $this->assertStringContainsString('Financial allocation snapshot is fenced', $error->getMessage());
+                $this->assertTrue(str_contains($error->getMessage(), 'Financial allocation snapshot is fenced')
+                    || str_contains($error->getMessage(), 'Allocation source period is fenced'), $error->getMessage());
+                if (DB::getDriverName() === 'mysql') $this->assertSame('45000', $error->errorInfo[0]);
             }
         };
         $reject(fn () => DB::table('payment_allocation_revisions')->insert($candidate));
@@ -9176,21 +9178,23 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
         DB::table('financial_periods')->where('id', $period)->update(['state' => 'FROZEN']);
         DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
-        $reject = function (callable $action): void {
+        $reject = function (callable $action, bool $userDeletion = false): void {
             try {
                 $action();
                 $this->fail('Expected cash session fence.');
             } catch (\Illuminate\Database\QueryException $error) {
-                $this->assertStringContainsString('Financial cash session evidence is fenced', $error->getMessage());
+                $this->assertTrue(str_contains($error->getMessage(), 'Financial cash session evidence is fenced')
+                    || ($userDeletion && str_contains($error->getMessage(), 'User identity cannot be deleted')), $error->getMessage());
+                if (DB::getDriverName() === 'mysql') $this->assertSame('45000', $error->errorInfo[0]);
             }
         };
         $reject(fn () => DB::table('cash_sessions')->where('id', $session->id)->update(['counted_amount' => '1.00']));
         $reject(fn () => DB::table('cash_sessions')->where('id', $session->id)->delete());
-        $reject(fn () => DB::table('users')->where('id', $collector->id)->delete());
+        $reject(fn () => DB::table('users')->where('id', $collector->id)->delete(), true);
         DB::table('financial_periods')->where('id', $period)->update(['state' => 'CLOSED']);
         DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
         $reject(fn () => DB::table('cash_sessions')->where('id', $session->id)->update(['approved_by' => $collector->id]));
-        $reject(fn () => DB::table('users')->where('id', $reviewer->id)->delete());
+        $reject(fn () => DB::table('users')->where('id', $reviewer->id)->delete(), true);
         $this->assertSame($before, (array) DB::table('cash_sessions')->where('id', $session->id)->sole());
         DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
             'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);

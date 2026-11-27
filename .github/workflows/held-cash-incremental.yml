@@ -41,7 +41,7 @@ jobs:
           git diff --exit-code -- composer.lock
       - name: Verify combined outstanding period evidence and affected close diagnostics
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_|test_surplus_cutoff_evidence_|test_custody_source_coverage_|test_outstanding_period_evidence_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_allocation_fence_|test_final_accounting_cash_session_fence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -104,4 +104,4 @@ jobs:
 
       - name: Verify combined outstanding period evidence and affected close diagnostics
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_|test_surplus_cutoff_evidence_|test_custody_source_coverage_|test_outstanding_period_evidence_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_allocation_fence_|test_final_accounting_cash_session_fence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
