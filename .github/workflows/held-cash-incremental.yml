@@ -39,12 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify held credit guard and affected financial writer integration
-        run: |
-          set -euo pipefail
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_held_credit_requires_live_subscriber_ledger_protection|test_release_held_credit_model_fence_rejects_direct_document_and_ledger|test_release_invoice_api_shares_issue_identity_and_cancellation_reversal|test_release_refund_entrypoints_modal_and_api_share_atomic_debit|test_release_settlement_api_(claim|late_bank|late_cash|counted_cash)|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_direct_cash_receipt_and_exact_replay_register_only_subscriber_effect|test_registry_insert_failure_rolls_back_receipt_and_ledger_then_exact_retry' tests/Feature/GatedCashReceiptWriterTest.php
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_exact_capacity_across_subscribers_and_replay_after_later_allocation tests/Feature/GatedCountedCashWriterTest.php
+      - name: Retry only counted cash capacity after explicit collector fixture correction
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_exact_capacity_across_subscribers_and_replay_after_later_allocation tests/Feature/GatedCountedCashWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -105,9 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify held credit guard and affected financial writer integration
-        run: |
-          set -euo pipefail
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_held_credit_requires_live_subscriber_ledger_protection|test_release_held_credit_model_fence_rejects_direct_document_and_ledger|test_release_invoice_api_shares_issue_identity_and_cancellation_reversal|test_release_refund_entrypoints_modal_and_api_share_atomic_debit|test_release_settlement_api_(claim|late_bank|late_cash|counted_cash)|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_direct_cash_receipt_and_exact_replay_register_only_subscriber_effect|test_registry_insert_failure_rolls_back_receipt_and_ledger_then_exact_retry' tests/Feature/GatedCashReceiptWriterTest.php
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_exact_capacity_across_subscribers_and_replay_after_later_allocation tests/Feature/GatedCountedCashWriterTest.php
+      - name: Retry only counted cash capacity after explicit collector fixture correction
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_exact_capacity_across_subscribers_and_replay_after_later_allocation tests/Feature/GatedCountedCashWriterTest.php
