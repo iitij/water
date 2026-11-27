@@ -48,7 +48,8 @@ final class CustodyShortageRecoveryProposal
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now,
             function () use ($actor, $sessionId, $accountId, $reference, $evidence, $uuid, $date, $local, $recoveryMinor): array {
                 if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()
-                    || ! app(CustodyShortageRecoveryProposalProtection::class)->active()) {
+                    || ! app(CustodyShortageRecoveryProposalProtection::class)->active()
+                || ! app(CustodyShortagePeriodProtection::class)->active()) {
                     throw new DomainException('shortage_recovery_protection_required');
                 }
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
