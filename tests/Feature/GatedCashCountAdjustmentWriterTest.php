@@ -13809,6 +13809,107 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($snapshot, DB::table('cash_sessions')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all());
     }
 
+    public function test_cash_session_and_bank_evidence_writers_require_live_guards(): void
+    {
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        config(['financial_candidate.cash_session_lifecycle' => false, 'financial_candidate.bank_evidence' => false]);
+        $snapshot = fn () => DB::table('cash_sessions')->orderBy('id')->get()->toArray();
+        $audit = fn () => DB::table('audit_events')->orderBy('id')->get()->toArray();
+        $reject = function (callable $action): void {
+            try {
+                $action();
+                $this->fail('Cash session mutation accepted without live protection.');
+            } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                $this->assertSame('cash_session_write_protection_missing', $error->getMessage());
+            }
+        };
+        $guard = app(\App\Services\SessionTransferDestinationProtection::class);
+        $before = $snapshot();
+        $beforeAudit = $audit();
+        DB::unprepared('DROP TRIGGER fin_session_dest_insert');
+        try {
+            $reject(fn () => $sessions->open($collector));
+            $this->assertEquals($before, $snapshot());
+            $this->assertEquals($beforeAudit, $audit());
+        } finally {
+            $guard->install();
+        }
+        $session = $sessions->open($collector);
+        $before = $snapshot();
+        $beforeAudit = $audit();
+        DB::unprepared('DROP TRIGGER fin_session_dest_insert');
+        try {
+            $reject(fn () => $sessions->close($session, '0.00', null, $collector));
+            $this->assertEquals($before, $snapshot());
+            $this->assertEquals($beforeAudit, $audit());
+        } finally {
+            $guard->install();
+        }
+        $session = $sessions->close($session, '0.00', null, $collector);
+        $before = $snapshot();
+        $beforeAudit = $audit();
+        DB::unprepared('DROP TRIGGER fin_session_dest_insert');
+        try {
+            $reject(fn () => $sessions->decide($session, true, $reviewer));
+            $this->assertEquals($before, $snapshot());
+            $this->assertEquals($beforeAudit, $audit());
+        } finally {
+            $guard->install();
+        }
+        $session = $sessions->decide($session, true, $reviewer);
+        $this->assertTrue($session->isApproved());
+        $account = app(GatedTreasuryOpeningFundingWriter::class)->open($collector, [
+            'code' => 'QA-EVIDENCE-BANK', 'name' => 'Synthetic bank evidence', 'channel' => 'bank',
+            'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-EVIDENCE-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], self::UUID, $this->nowAt())['account'];
+        $cash = app(GatedTreasuryOpeningFundingWriter::class)->open($collector, [
+            'code' => 'QA-EVIDENCE-CASH', 'name' => 'Synthetic cash evidence', 'channel' => 'cash',
+            'opening_on' => '2026-11-25', 'opening_amount' => '0.00',
+            'opening_reference' => 'QA-EVIDENCE-CASH-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], self::OTHER, $this->nowAt())['account'];
+        app(\App\Services\GatedTreasuryTransferWriter::class)->dispatch($collector, [
+            'from_account_id' => $account['id'], 'to_account_id' => $cash['id'], 'amount' => '0.25',
+            'reference' => 'QA-EVIDENCE-TRANSFER', 'dispatched_on' => '2026-11-25', 'evidence' => self::EVIDENCE,
+        ], self::NEXT, $this->nowAt());
+        $posting = DB::table('treasury_postings')->sole();
+        $bank = app(\App\Services\BankReconciliationService::class);
+        $payload = ['reference' => 'QA-EVIDENCE-STMT', 'from_date' => '2026-11-25', 'to_date' => '2026-11-25',
+            'opening_amount' => '100.00', 'closing_amount' => '99.75', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-EVIDENCE-DEBIT', 'booked_on' => '2026-11-25', 'amount' => '-0.25']]];
+        $guard = app(\App\Services\BankRangeDestinationProtection::class);
+        $beforeAudit = $audit();
+        DB::unprepared('DROP TRIGGER fin_bank_range_bank_statements_insert');
+        try {
+            $this->rejects('bank_evidence_write_protection_missing', fn () => $bank->import($collector, (int) $account['id'], $payload));
+            $this->assertDatabaseCount('bank_statements', 0);
+            $this->assertDatabaseCount('bank_statement_lines', 0);
+            $this->assertEquals($beforeAudit, $audit());
+        } finally {
+            $guard->install();
+        }
+        $statement = $bank->import($collector, (int) $account['id'], $payload);
+        $sid = (int) $statement['statement']['id'];
+        $line = DB::table('bank_statement_lines')->sole();
+        $beforeAudit = $audit();
+        DB::unprepared('DROP TRIGGER fin_bank_range_bank_statements_insert');
+        try {
+            $this->rejects('bank_evidence_write_protection_missing', fn () => $bank->matchLine($reviewer, $sid, (int) $line->id, (int) $posting->id, self::EVIDENCE));
+            $this->assertDatabaseCount('bank_statement_matches', 0);
+            $this->assertEquals($beforeAudit, $audit());
+        } finally {
+            $guard->install();
+        }
+        $result = $bank->matchLine($reviewer, $sid, (int) $line->id, (int) $posting->id, self::EVIDENCE);
+        $this->assertTrue($result['fully_matched']);
+        $this->assertDatabaseCount('bank_statement_matches', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('financial_posting_events', 3);
+        $this->assertDatabaseCount('transactions', 0);
+    }
+
     public function test_cash_count_database_fence_preserves_cutoff_evidence(): void
     {
         [$counter, $reviewer, $account, $count] = $this->fixture('100.00');
