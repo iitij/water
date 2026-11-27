@@ -5415,7 +5415,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             \Laravel\Sanctum\Sanctum::actingAs($issuer);
             $this->postJson($url, $data)->assertForbidden();
             \Laravel\Sanctum\Sanctum::actingAs($reviewer);
-            DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+            DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
             $this->postJson($url, $data)->assertConflict();
             DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
             foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -5457,7 +5457,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                     'evidence_reference' => 'QA-R134-COUNTED', 'evidence' => self::EVIDENCE,
                 ]));
             }
-            DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+            DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
             $this->rejects('financial_period_not_open', $act);
             DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
             foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -5487,7 +5487,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']);
         $this->rejects('financial_scope_not_active', $act);
         DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->rejects('financial_period_not_open', $act);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         $condition = "NEW.operation_uuid = '{$uuid}' AND NEW.leg = 'treasury'";
@@ -5527,6 +5527,11 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $committedOps = $ops();
         $committedSeq = $seq();
         $this->assertFalse($act()['registry_created']);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame($committedOps, $ops());
+        $this->assertSame($committedSeq, $seq());
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $act);
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $this->assertSame($committedOps, $ops());
         $this->assertSame($committedSeq, $seq());
