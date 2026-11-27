@@ -10275,6 +10275,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $november = $inspect($nov);
         $this->assertSame(200, $november['variance_exposure']['unresolved_shortage_minor']);
         $this->assertSame(0, $november['variance_exposure']['recovered_minor']);
+        $scan = fn (string $next) => DB::transaction(fn () => app(\App\Services\CustodyShortageSettlementCoverage::class)->inspect($next));
+        $pending = $scan('2026-12-01');
+        $this->assertSame(1, $pending['pending_count']);
+        $this->assertTrue($pending['scanned_documents_match']);
         $writer = app(\App\Services\CustodyShortageRecoveryWriter::class);
         $before = DB::table('treasury_postings')->count();
         $events = DB::table('financial_posting_events')->count();
@@ -10342,6 +10346,12 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(30, $january['variance_exposure']['confirmed_loss_minor']);
         $this->assertSame(0, $january['variance_exposure']['unresolved_shortage_minor']);
         $this->assertTrue($january['custody']['all_count_variances_resolved'], json_encode($january['custody']));
+        $this->assertSame($pending, $scan('2026-12-01'));
+        $settlements = $scan('2027-02-01');
+        $this->assertSame(0, $settlements['pending_count']);
+        $this->assertTrue($settlements['scanned_documents_match'], json_encode($settlements));
+        $this->assertSame(['recovery_posted', 'recovery_posted', 'loss_approved'], array_column($settlements['rows'], 'status'));
+
         $period = $dec;
         $coverage = DB::transaction(fn () => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($period));
         $this->assertTrue($coverage['scanned_sources_match'], json_encode($coverage));
