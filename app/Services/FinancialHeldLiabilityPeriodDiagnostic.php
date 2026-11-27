@@ -62,6 +62,8 @@ final class FinancialHeldLiabilityPeriodDiagnostic
                 $record('assigned', $assignment->effective_on, $assigned);
                 $opening = $assignment->effective_on < $start ? $assigned : 0;
                 $closing = $assigned;
+                $assignedInPeriod = $assignment->effective_on >= $start ? $assigned : 0;
+                $paidInPeriod = $creditedInPeriod = 0;
                 foreach (DB::table('treasury_held_cash_payouts')->where('assignment_uuid', $assignment->operation_uuid)
                     ->orderBy('operation_uuid')->lockForUpdate()->get() as $payout) {
                     if ($payout->effective_on < $next) $this->registeredBeforeCutoff($payout->operation_uuid, $payout->effective_on);
@@ -69,6 +71,7 @@ final class FinancialHeldLiabilityPeriodDiagnostic
                     $record('paid', $payout->effective_on, $minor);
                     if ($payout->effective_on < $start) $opening = SignedMinor::subtract($opening, $minor);
                     if ($payout->effective_on < $next) $closing = SignedMinor::subtract($closing, $minor);
+                    if ($payout->effective_on >= $start && $payout->effective_on < $next) $paidInPeriod = SignedMinor::add($paidInPeriod, $minor);
                 }
                 foreach (TreasuryHeldCashCredit::query()->where('assignment_uuid', $assignment->operation_uuid)
                     ->orderBy('id')->lockForUpdate()->get() as $credit) {
@@ -77,6 +80,7 @@ final class FinancialHeldLiabilityPeriodDiagnostic
                     $record('credited', $credit->effective_on, $minor);
                     if ($credit->effective_on < $start) $opening = SignedMinor::subtract($opening, $minor);
                     if ($credit->effective_on < $next) $closing = SignedMinor::subtract($closing, $minor);
+                    if ($credit->effective_on >= $start && $credit->effective_on < $next) $creditedInPeriod = SignedMinor::add($creditedInPeriod, $minor);
                 }
                 // Coverage above revalidates approval/cancellation documents and
                 // exact payout linkage. Pending authority is a reservation of
@@ -109,6 +113,7 @@ final class FinancialHeldLiabilityPeriodDiagnostic
                 }
                 $owners[] = ['assignment_uuid' => $assignment->operation_uuid, 'subscriber_id' => (int) $assignment->subscriber_id,
                     'recorded_opening_minor' => $opening, 'recorded_closing_minor' => $closing,
+                    'assigned_minor' => $assignedInPeriod, 'paid_minor' => $paidInPeriod, 'credited_minor' => $creditedInPeriod,
                     'recorded_opening_pending_payout_minor' => $pendingOpening,
                     'recorded_closing_pending_payout_minor' => $pendingClosing];
             }
