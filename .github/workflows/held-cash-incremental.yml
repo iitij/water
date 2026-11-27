@@ -1,4 +1,4 @@
-name: Outstanding period evidence
+name: Custody source coverage
 on:
   pull_request:
     branches: ['main']
@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-transit-custody-liability'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-custody-source-coverage'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -41,9 +41,9 @@ jobs:
           git diff --exit-code -- composer.lock
       - name: Verify combined outstanding period evidence and affected close diagnostics
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_outstanding_period_evidence_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_custody_source_coverage_|test_outstanding_period_evidence_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-transit-custody-liability'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-custody-source-coverage'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -104,4 +104,4 @@ jobs:
 
       - name: Verify combined outstanding period evidence and affected close diagnostics
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_outstanding_period_evidence_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_custody_source_coverage_|test_outstanding_period_evidence_|test_close_evidence_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
