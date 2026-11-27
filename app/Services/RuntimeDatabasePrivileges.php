@@ -85,6 +85,9 @@ final class RuntimeDatabasePrivileges
             $privileges = array_map('trim', explode(',', $parts[1]));
             $scope = $parts[2];
             if ($privileges === ['USAGE'] && $scope === '*.*') continue;
+            // MySQL FOR UPDATE requires SELECT plus UPDATE, DELETE or LOCK TABLES.
+            // Exact-schema LOCK TABLES does not grant a right to mutate control rows.
+            if ($privileges === ['LOCK TABLES'] && $scope === chr(96).$escapedSchema.chr(96).'.*') continue;
             if (array_diff($privileges, ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) !== []) {
                 $issues[] = 'runtime_privilege_exceeds_dml';
                 continue;
