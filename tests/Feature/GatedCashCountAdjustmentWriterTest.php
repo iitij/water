@@ -13073,9 +13073,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $tables = ['invoices', 'invoice_items', 'invoice_tariff_lines', 'readings', 'payments', 'transactions',
             'payment_allocation_revisions', 'payment_allocations', 'cash_sessions', 'audit_events', 'treasury_postings',
             'document_sequences', 'financial_posting_operations', 'financial_posting_events'];
-        $snapshot = fn (string $table) => DB::table($table)
-            ->orderBy($table === 'financial_posting_operations' ? 'operation_uuid' : 'id')
-            ->get()->map(fn ($row) => (array) $row)->all();
+        $snapshot = function (string $table): array {
+            $query = DB::table($table);
+            if ($table === 'document_sequences') {
+                $query->orderBy('kind')->orderBy('period');
+            } else {
+                $query->orderBy($table === 'financial_posting_operations' ? 'operation_uuid' : 'id');
+            }
+            return $query->get()->map(fn ($row) => (array) $row)->all();
+        };
         config(['financial_candidate.invoices' => false, 'financial_candidate.cash_receipts' => false,
             'financial_candidate.refunds' => false, 'financial_candidate.void_api' => false]);
         foreach (['OPEN', 'FROZEN', 'CLOSED'] as $state) {
