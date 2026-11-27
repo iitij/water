@@ -122,15 +122,18 @@ final class FinancialCloseEvidenceDiagnostic
         if ($subscriberCutoff !== null && ! $subscriberCutoff['scanned_cutoff_accounts_match']) $blockers[] = 'subscriber_cutoff_sources_unmatched';
         if ($subscriberCutoff !== null && $subscriberCutoff['prior_accounts'] !== []) $blockers[] = 'subscriber_predecessor_openings_unverified';
         if ($subscriberCutoff !== null && ! $subscriberCutoff['allocation_policy_verified']) $blockers[] = 'subscriber_allocation_policy_unverified';
+        $accountMovements = $ended ? app(FinancialCutoffMovementReconciliation::class)->inspect(
+            $cashEvidence, $settlement['bank_period_evidence'], $subscriberCutoff, $movement) : null;
+        if ($accountMovements !== null && ! $accountMovements['matched']) $blockers[] = 'cutoff_account_movements_unmatched';
         sort($blockers, SORT_STRING);
         $manifest = $ended ? $this->cutoffManifest($period, $cashEvidence,
-            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement) : null;
+            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements) : null;
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
             'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'subscriber_period_evidence' => $subscriberCutoff, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
             'collection_period_evidence' => $claims,
-            'cutoff_evidence_manifest' => $manifest, 'blockers' => $blockers, 'source_coverage_verified' => false,
+            'cutoff_account_movements' => $accountMovements, 'cutoff_evidence_manifest' => $manifest, 'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
     }
 
@@ -141,7 +144,7 @@ final class FinancialCloseEvidenceDiagnostic
      * A fingerprint is not a signed close journal or independent opening proof.
      */
     private function cutoffManifest(object $period, array $cash, array $bank, array $subscriber, array $outstanding, array $claims,
-        array $source, array $movement): array
+        array $source, array $movement, array $accountMovements): array
     {
         $sections = [
             'cash' => [$cash['all_accounts_matched'], $cash],
@@ -174,12 +177,13 @@ final class FinancialCloseEvidenceDiagnostic
         $registry = ['recorded_movements_matched' => $registryMatched,
             'registry_events' => $source['registry_events'],
             'movement_hash' => $registryMatched ? $movement['movement_hash'] : null];
-        $manifest = ['format_version' => 3, 'scope' => 'water', 'period_id' => (int) $period->id,
+        $manifest = ['format_version' => 4, 'scope' => 'water', 'period_id' => (int) $period->id,
             'start_on' => $period->start_on, 'next_on' => $period->next_on,
             'sectors' => $sectors, 'all_listed_sectors_matched' => $matched,
             'registry' => $registry,
+            'account_movements_hash' => $accountMovements['matched'] ? hash('sha256', json_encode($accountMovements, JSON_THROW_ON_ERROR)) : null,
             'independent_opening_verified' => false, 'closure_authorized' => false];
-        return $manifest + ['manifest_hash' => $matched && $registryMatched ? hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)) : null];
+        return $manifest + ['manifest_hash' => $matched && $registryMatched && $accountMovements['matched'] ? hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)) : null];
     }
 
     /** Scope-wide, deliberately not netted or restricted to the target month:
