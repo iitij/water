@@ -9118,7 +9118,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertCount(1, $first['rows']);
         $this->assertSame(200, $first['rows'][0]['recorded_balance_minor']);
         $this->assertSame(200, $first['rows'][0]['unallocated_minor']);
-        $this->assertFalse($first['allocation_policy_verified']);
+        $this->assertTrue($first['allocation_policy_verified']);
+        $this->assertTrue($first['rows'][0]['allocation_policy_matched']);
         $this->assertFalse($first['closure_authorized']);
         DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
             'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
@@ -9145,6 +9146,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $first = $inspect();
         $this->assertTrue($first['scanned_cutoff_accounts_match'], json_encode($first));
         $this->assertFalse($first['all_cutoff_accounts_match']);
+        $this->assertFalse($first['allocation_policy_verified']);
         $this->assertSame([(int) $subscriber->id], $first['prior_accounts']);
         $this->assertSame([], $first['rows']);
         $this->assertCount(1, $first['prior_account_movements']);
