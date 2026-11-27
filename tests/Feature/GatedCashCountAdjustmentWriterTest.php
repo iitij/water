@@ -7852,7 +7852,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         \Laravel\Sanctum\Sanctum::actingAs($reviewer);
         $this->postJson($url, array_diff_key($data, ['operation_uuid' => true]))->assertUnprocessable();
         $this->postJson($url, $data + ['amount' => '1.00'])->assertUnprocessable();
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->postJson($url, $data)->assertConflict();
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -7875,6 +7875,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($before['transactions'], $snapshot('transactions'));
         $this->assertSame(9960, app(TreasuryRegisterService::class)->inspect($reviewer, (int) $account['id'])['provisional_recorded_balance_minor']);
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $cash['id'])));
+        config(['financial_candidate.bank_fees' => true]);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->postJson($url, $data)->assertConflict();
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
     }
 
     public function test_round139_bank_fee_is_registered_atomically_without_subscriber_effect(): void
@@ -11357,7 +11361,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $match = ['line_id' => $line->id, 'posting_id' => $posting->id, 'evidence' => self::EVIDENCE];
         $this->postJson($matchUrl, $match)->assertForbidden();
         \Laravel\Sanctum\Sanctum::actingAs($reviewer);
-        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'FROZEN']);
         $this->postJson($matchUrl, $match)->assertConflict();
         $this->assertDatabaseCount('bank_statement_matches', 0);
         DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'OPEN']);
@@ -11369,6 +11373,12 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertDatabaseCount('financial_posting_events', 3);
         $this->assertDatabaseCount('transactions', 0);
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
+        $this->postJson($matchUrl, $match)->assertConflict();
+        \Laravel\Sanctum\Sanctum::actingAs($importer);
+        $this->postJson($url, $payload)->assertConflict();
+        $this->assertDatabaseCount('bank_statement_matches', 1);
+        $this->assertDatabaseCount('bank_statements', 1);
     }
 
     public function test_bank_period_evidence_uses_cutoff_not_later_account_balance(): void
