@@ -119,6 +119,13 @@ class SingleMeterService
     public function replace(Meter $oldMeter, array $newMeterData, string $removedAt, string $reason, ?int $actorId = null): array
     {
         return DB::transaction(function () use ($oldMeter, $newMeterData, $removedAt, $reason, $actorId): array {
+            // Take the scope lock before issuance/account locks: the source
+            // triggers also serialize against a close. No financial posting
+            // is created by a physical replacement.
+            $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
+            if ($scope && $scope->active_freeze_uuid !== null) {
+                throw ValidationException::withMessages(['meter_id' => 'لا يمكن استبدال العداد أثناء تجميد الإغلاق المالي.']);
+            }
             // Retirement may rewrite document provenance. Serialize with the
             // issuance and held-credit writers before locking the subscriber.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
