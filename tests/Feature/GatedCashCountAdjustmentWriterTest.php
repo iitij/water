@@ -12428,6 +12428,23 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_collection_audit_expression_metadata_accepts_only_exact_event_literals(): void
+    {
+        $guard = app(\App\Services\CollectionEvidenceAuditProtection::class);
+        $expression = new \ReflectionMethod($guard, 'expression');
+        $normalize = new \ReflectionMethod($guard, 'normalizeExpression');
+        $canonical = $expression->invoke($guard);
+        $expected = $normalize->invoke($guard, $canonical);
+        $rendered = preg_replace_callback("/'([^']+)'/", fn ($m) => '_utf8mb4'.chr(92)."'".$m[1].chr(92)."'", $canonical);
+        $rendered = '('.str_replace('event IN', '('.chr(96).'event'.chr(96).' IN', $rendered);
+        $rendered = str_replace(') THEN event', ')) THEN '.chr(96).'event'.chr(96), $rendered).')';
+        $this->assertSame($expected, $normalize->invoke($guard, $rendered));
+        $this->assertNotSame($expected, $normalize->invoke($guard, str_replace('noncash_claim.submitted', 'noncash_claim.SUBMITTED', $rendered)));
+        $this->assertNotSame($expected, $normalize->invoke($guard, str_replace('noncash_claim.submitted', 'noncash_claim.submitted ', $rendered)));
+        $this->assertNotSame($expected, $normalize->invoke($guard, str_replace('ELSE NULL', 'ELSE event', $rendered)));
+        $this->assertNotSame($expected, $normalize->invoke($guard, str_replace(' IN ', ' NOT IN ', $rendered)));
+    }
+
     public function test_collection_audit_identity_survives_stale_snapshot_and_unrelated_duplicates(): void
     {
         $issuer = $this->actor();

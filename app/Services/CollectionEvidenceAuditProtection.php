@@ -27,6 +27,15 @@ final class CollectionEvidenceAuditProtection
 
     private function normalizeExpression(string $expression): string
     {
+        // Only recognize escaped delimiters around the seven exact literals.
+        // Do not strip backslashes or alter unknown string contents globally.
+        foreach (explode(', ', self::EVENTS) as $literal) {
+            $name = substr($literal, 1, -1);
+            foreach ([1, 2] as $count) {
+                $quote = str_repeat(chr(92), $count)."'";
+                $expression = str_replace($quote.$name.$quote, $literal, $expression);
+            }
+        }
         // MySQL renders charset introducers and redundant parentheses in
         // information_schema. Preserve every byte inside quoted event names.
         preg_match_all("/(?:_[a-zA-Z0-9]+)?'[^']*'|[a-zA-Z_][a-zA-Z0-9_]*|[^\s\x60()]/", $expression, $matches);
