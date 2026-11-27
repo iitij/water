@@ -401,6 +401,19 @@ final class FinancialSourceInsertProtection
                 : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
             $defs['fin_reading_evidence_'.strtolower($event)] = ['readings', "BEFORE {$event} ON readings FOR EACH ROW {$body}", $body, $event];
         }
+        // Ledger rows have no authoritative financial date of their own:
+        // created_at is not a substitute for the source's effective date.
+        // Serialize direct DML with the same scope lock used by the close
+        // coordinator. Existing document-specific period and ledger guards
+        // remain responsible for the other invariants.
+        $condition = "EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water' AND s.active_freeze_uuid IS NOT NULL{$current})";
+        $msg = 'Financial ledger scope is fenced';
+        foreach (['INSERT', 'UPDATE', 'DELETE'] as $event) {
+            $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$msg}'); END"
+                : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$msg}'; END IF; END";
+            $defs['fin_ledger_scope_'.strtolower($event)] = ['transactions',
+                "BEFORE {$event} ON transactions FOR EACH ROW {$body}", $body, $event];
+        }
         return $defs;
     }
 
