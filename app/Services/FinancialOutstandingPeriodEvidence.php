@@ -59,7 +59,7 @@ final class FinancialOutstandingPeriodEvidence
         // not by itself an enforceable receivable, and a liquidity restriction
         // is not a second liability. Never net a shortage against a surplus.
         $variance = ['opening_unresolved_shortage_minor' => 0, 'new_shortage_minor' => 0,
-            'unresolved_shortage_minor' => 0, 'unallocated_surplus_minor' => 0,
+            'unresolved_shortage_minor' => 0, 'confirmed_loss_minor' => 0, 'unallocated_surplus_minor' => 0,
             'surplus_liquidity_reserve_minor' => 0, 'rows' => [], 'settlement_coverage_verified' => false];
         foreach ($custody['rows'] as $row) {
             $source = $row['source_evidence'];
@@ -68,22 +68,26 @@ final class FinancialOutstandingPeriodEvidence
             $shortage = $source['shortage_minor'];
             $surplus = $disposition['unallocated_minor'] ?? $source['surplus_minor'];
             $reserved = $disposition['liquidity_reserve']['reserved_minor'] ?? 0;
-            // No settlement source is yet certified. Preserve gross shortage
-            // as an unresolved carry, not a receivable or a second cash loss.
-            $shortageOpening = $row['approval_before_period'] ? $shortage : 0;
+            $loss = $source['loss_disposition'] ?? null;
+            $priorLoss = $loss !== null && $loss['approved_on'] < $start;
+            $shortageOpening = $row['approval_before_period'] && ! $priorLoss ? $shortage : 0;
             $shortageNew = $row['approval_before_period'] ? 0 : $shortage;
+            $classified = $loss !== null && ! $priorLoss ? $loss['confirmed_loss_minor'] : 0;
+            $remaining = SignedMinor::subtract(SignedMinor::add($shortageOpening, $shortageNew), $classified);
+            $variance['confirmed_loss_minor'] = SignedMinor::add($variance['confirmed_loss_minor'], $classified);
             $variance['opening_unresolved_shortage_minor'] = SignedMinor::add($variance['opening_unresolved_shortage_minor'], $shortageOpening);
             $variance['new_shortage_minor'] = SignedMinor::add($variance['new_shortage_minor'], $shortageNew);
-            $variance['unresolved_shortage_minor'] = SignedMinor::add($variance['unresolved_shortage_minor'], $shortage);
+            $variance['unresolved_shortage_minor'] = SignedMinor::add($variance['unresolved_shortage_minor'], $remaining);
             $variance['unallocated_surplus_minor'] = SignedMinor::add($variance['unallocated_surplus_minor'], $surplus);
             $variance['surplus_liquidity_reserve_minor'] = SignedMinor::add($variance['surplus_liquidity_reserve_minor'], $reserved);
             $variance['rows'][] = ['session_id' => $row['session_id'], 'collector_id' => $row['collector_id'],
                 'shortage_minor' => $shortage, 'opening_unresolved_shortage_minor' => $shortageOpening,
-                'new_shortage_minor' => $shortageNew, 'unallocated_surplus_minor' => $surplus,
+                'new_shortage_minor' => $shortageNew, 'confirmed_loss_minor' => $classified,
+                'unresolved_shortage_minor' => $remaining, 'unallocated_surplus_minor' => $surplus,
                 'reserved_liquidity_minor' => $reserved, 'recoverable_recognized' => false];
         }
-        if (SignedMinor::add($variance['opening_unresolved_shortage_minor'], $variance['new_shortage_minor'])
-            !== $variance['unresolved_shortage_minor']) {
+        if (SignedMinor::subtract(SignedMinor::add($variance['opening_unresolved_shortage_minor'], $variance['new_shortage_minor']),
+            $variance['confirmed_loss_minor']) !== $variance['unresolved_shortage_minor']) {
             throw new DomainException('custody_shortage_rollforward_mismatch');
         }
         return $base + ['transit' => $transit, 'custody' => $custody, 'liability' => $liability,
@@ -217,6 +221,11 @@ final class FinancialOutstandingPeriodEvidence
                         $handovers, $source['variance_minor'], $target, $next);
                     $source['variance_disposition_verified'] =
                         $source['surplus_disposition']['unallocated_minor'] === 0;
+                }
+                if ($source['variance_minor'] < 0) {
+                    $source['loss_disposition'] = app(CustodyShortageLossDecision::class)
+                        ->verifiedThrough($session, $audits[0], $source['shortage_minor'], $next);
+                    $source['variance_disposition_verified'] = $source['loss_disposition'] !== null;
                 }
                 $rows[] = ['session_id' => $id, 'collector_id' => (int) $session->user_id,
                     'approval_audit_id' => (int) $audits[0]->id, 'approval_before_period' => $approved < $from,
