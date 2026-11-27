@@ -504,6 +504,57 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_period_closures', 0);
     }
 
+    public function test_held_writers_fail_closed_when_live_protection_is_missing(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $assigner = $this->actor();
+        $executor = $this->actor();
+        $authorizer = $this->actor();
+        $creditor = $this->actor();
+        $creditUuid = '55555555-5555-4555-8555-555555555555';
+        $tables = ['treasury_held_cash_assignments', 'treasury_held_cash_payout_authorizations',
+            'treasury_held_cash_payout_cancellations', 'treasury_held_cash_payouts', 'treasury_held_cash_credits',
+            'treasury_postings', 'transactions', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        foreach ([
+            ['held_assignment_reject_update', \App\Services\HeldCashDocumentProtection::class],
+            ['fin_held_dest_treasury_held_cash_assignments_i', \App\Services\HeldCashDestinationProtection::class],
+            ['fin_held_link_registry_first_event', \App\Services\HeldRegistryLinkProtection::class],
+        ] as [$trigger, $protection]) {
+            $before = $snapshot();
+            DB::unprepared('DROP TRIGGER '.$trigger);
+            try {
+                $this->rejects('held_cash_write_protection_missing', fn () => $this->assignHeld($assigner, $lot, $subscriber, 25));
+                $this->assertEquals($before, $snapshot());
+            } finally {
+                app($protection)->install();
+            }
+        }
+        $this->assertTrue($this->assignHeld($assigner, $lot, $subscriber, 25)['created']);
+        $this->assertTrue($this->authorizeHeld($authorizer, $executor, 10)['created']);
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_held_link_registry_first_event');
+        try {
+            foreach ([
+                fn () => $this->assignHeld($assigner, $lot, $subscriber, 25),
+                fn () => $this->authorizeHeld($authorizer, $executor, 10),
+                fn () => $this->payoutHeld($executor, 10, authorize: false),
+                fn () => $this->creditHeld($creditor, 5, $creditUuid),
+            ] as $action) {
+                $this->rejects('held_cash_write_protection_missing', $action);
+                $this->assertEquals($before, $snapshot());
+            }
+        } finally {
+            app(\App\Services\HeldRegistryLinkProtection::class)->install();
+        }
+        $this->assertTrue($this->payoutHeld($executor, 10, authorize: false)['created']);
+        $this->assertTrue($this->creditHeld($creditor, 5, $creditUuid)['created']);
+        $report = $this->gate(fn () => app(\App\Services\TreasuryHeldCashLiabilityService::class)->verifyCoverage());
+        $this->assertSame(10, $report['outstanding_minor']);
+        $this->assertSame(10, $report['paid_minor']);
+        $this->assertSame(5, $report['credited_minor']);
+    }
+
     public function test_held_registry_first_guard_rejects_wrong_identity_or_direction(): void
     {
         [, , , , $lot, $subscriber] = $this->held();
