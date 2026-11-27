@@ -9257,6 +9257,20 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, $report['settlement']['shortage_settlements']['pending_count']);
         $this->assertNotContains('custody_count_variances_unresolved', $report['blockers']);
         $this->assertNotContains('settlement_sources_unmatched', $report['blockers']);
+        $this->assertNull($current['cutoff_evidence_manifest']);
+        $manifest = $report['cutoff_evidence_manifest'];
+        $this->assertTrue($manifest['all_listed_sectors_matched']);
+        $this->assertFalse($manifest['independent_opening_verified']);
+        $this->assertFalse($manifest['closure_authorized']);
+        $this->assertSame($period, $manifest['period_id']);
+        $this->assertSame(['cash', 'bank', 'subscriber', 'transit', 'custody', 'held_liability', 'variance_exposure'], array_keys($manifest['sectors']));
+        foreach ($manifest['sectors'] as $sector) {
+            $this->assertTrue($sector['recorded_evidence_matched']);
+            $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $sector['source_hash']);
+        }
+        $hash = $manifest['manifest_hash'];
+        unset($manifest['manifest_hash']);
+        $this->assertSame(hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)), $hash);
         $this->assertFalse($report['writer_coverage']['complete_writer_coverage_verified']);
         $this->assertFalse($report['closure_authorized']);
         $coordinator = new \App\Services\FinancialCloseCoordinator(new \App\Support\FinancialClosePolicy(),

@@ -120,12 +120,47 @@ final class FinancialCloseEvidenceDiagnostic
         if ($subscriberCutoff !== null && $subscriberCutoff['prior_accounts'] !== []) $blockers[] = 'subscriber_predecessor_openings_unverified';
         if ($subscriberCutoff !== null && ! $subscriberCutoff['allocation_policy_verified']) $blockers[] = 'subscriber_allocation_policy_unverified';
         sort($blockers, SORT_STRING);
+        $manifest = $ended ? $this->cutoffManifest($period, $cashEvidence,
+            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding) : null;
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
             'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'subscriber_period_evidence' => $subscriberCutoff, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
-            'blockers' => $blockers, 'source_coverage_verified' => false,
+            'cutoff_evidence_manifest' => $manifest, 'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
+    }
+
+    /**
+     * Read-only fingerprint of separately reconciled cutoff sectors. No grand
+     * total: cash, transit, custody, liabilities and shortage exposure differ
+     * in nature; pending payout authority is a subset, not an additional balance.
+     * A fingerprint is not a signed close journal or independent opening proof.
+     */
+    private function cutoffManifest(object $period, array $cash, array $bank, array $subscriber, array $outstanding): array
+    {
+        $sections = [
+            'cash' => [$cash['all_accounts_matched'], $cash],
+            'bank' => [$bank['all_accounts_matched'], $bank],
+            'subscriber' => [$subscriber['all_cutoff_accounts_match'] && $subscriber['allocation_policy_verified'], $subscriber],
+            'transit' => [$outstanding['transit']['recorded_rollforward_verified'], $outstanding['transit']],
+            'custody' => [$outstanding['custody']['recorded_rollforward_verified'], $outstanding['custody']],
+            'held_liability' => [$outstanding['liability']['recorded_rollforward_verified'], $outstanding['liability']],
+            'variance_exposure' => [$outstanding['custody']['recorded_rollforward_verified'], $outstanding['variance_exposure']],
+        ];
+        $sectors = [];
+        $matched = true;
+        foreach ($sections as $key => [$verified, $evidence]) {
+            $verified = $verified === true;
+            $matched = $matched && $verified;
+            $sectors[$key] = ['recorded_evidence_matched' => $verified,
+                'row_count' => $verified ? count($evidence['rows']) : null,
+                'source_hash' => $verified ? hash('sha256', json_encode($evidence, JSON_THROW_ON_ERROR)) : null];
+        }
+        $manifest = ['format_version' => 1, 'scope' => 'water', 'period_id' => (int) $period->id,
+            'start_on' => $period->start_on, 'next_on' => $period->next_on,
+            'sectors' => $sectors, 'all_listed_sectors_matched' => $matched,
+            'independent_opening_verified' => false, 'closure_authorized' => false];
+        return $manifest + ['manifest_hash' => $matched ? hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)) : null];
     }
 
     /** Scope-wide, deliberately not netted or restricted to the target month:
