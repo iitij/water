@@ -125,6 +125,38 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    public function test_cash_count_adjustment_filament_shares_gate_and_api_replay(): void
+    {
+        [$counter, $reviewer, , $count] = $this->fixture();
+        $page = \App\Filament\Pages\TreasuryCashAdjustments::class;
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($reviewer, 'web');
+        $this->assertFalse($page::canAccess());
+        config(['financial_candidate.cash_count_adjustments' => true]);
+        $other = User::factory()->create(['role' => 'admin']);
+        $this->actingAs($other, 'web');
+        $this->assertFalse($page::canAccess());
+        $this->actingAs($reviewer, 'web');
+        $this->assertTrue($page::canAccess());
+        $payload = ['reference' => 'QA-ADJUST-01', 'classification' => 'confirmed_cash_loss',
+            'reason' => self::REASON, 'evidence' => self::EVIDENCE, 'operation_uuid' => self::ADJUST];
+        $modal = \Livewire\Livewire::test($page)->mountAction('adjust_cash_count')
+            ->setActionData($payload + ['count_id' => (int) $count['id']]);
+        DB::table('financial_periods')->update(['state' => 'FROZEN']);
+        $modal->callMountedAction()->assertHasActionErrors();
+        $modal->assertActionDataSet(['operation_uuid' => self::ADJUST]);
+        $this->assertDatabaseCount('treasury_cash_adjustments', 0);
+        $this->assertDatabaseCount('treasury_postings', 0);
+        DB::table('financial_periods')->update(['state' => 'OPEN']);
+        $modal->callMountedAction()->assertHasNoActionErrors();
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => self::ADJUST, 'amount_minor' => -25]);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson('/api/treasury/cash-counts/'.$count['id'].'/adjustment', $payload)->assertOk();
+        $this->assertDatabaseCount('treasury_cash_adjustments', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('financial_posting_events', 2);
+    }
+
     public function test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass(): void
     {
         [$counter, $reviewer, , $count] = $this->fixture();
