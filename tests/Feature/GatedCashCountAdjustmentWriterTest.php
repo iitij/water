@@ -10164,6 +10164,39 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
         $coverage = DB::transaction(fn () => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($period));
         $this->assertTrue($coverage['scanned_sources_match'], json_encode($coverage));
+        // The recovered cash is spendable only when both its source and
+        // immutable registry evidence remain valid. The held 25 stays reserved.
+        $accountId = (int) $account['id'];
+        $balance = fn () => DB::transaction(fn () =>
+            app(\App\Services\HeldCashRecordedLiquidityEvidence::class)->balance($accountId, '2026-11-25'));
+        $outflow = fn (int $amount) => DB::transaction(fn () =>
+            app(\App\Services\HeldCashReservation::class)->assertOrdinaryOutflow($accountId, $amount, '2026-11-25'));
+        $this->assertSame(10225, $balance());
+        $outflow(10200);
+        $this->rejects('held_cash_reserved', fn () => $outflow(10201));
+        $eventQuery = DB::table('financial_posting_events')->where('operation_uuid', $uuid);
+        $originalHash = $eventQuery->value('source_hash');
+        $guard = app(\App\Services\FinancialPostingRegistryProtection::class);
+        DB::unprepared('DROP TRIGGER fin_registry_leg_reject_update');
+        try {
+            $this->rejects('held_cash_liquidity_registry_unprotected', fn () => $outflow(1));
+            $eventQuery->update(['source_hash' => str_repeat('0', 64)]);
+        } finally {
+            $guard->install();
+        }
+        try {
+            $this->rejects('held_cash_liquidity_source', fn () => $outflow(1));
+            $this->assertSame($before + 1, DB::table('treasury_postings')->count());
+            $this->assertSame($events + 1, DB::table('financial_posting_events')->count());
+        } finally {
+            DB::unprepared('DROP TRIGGER fin_registry_leg_reject_update');
+            try {
+                $eventQuery->update(['source_hash' => $originalHash]);
+            } finally {
+                $guard->install();
+            }
+        }
+        $this->assertSame(10225, $balance());
         try {
             DB::table('custody_shortage_recoveries')->where('id', $result['recovery_id'])->delete();
             $this->fail('Recovery document deleted.');

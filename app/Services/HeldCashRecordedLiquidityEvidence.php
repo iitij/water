@@ -104,12 +104,16 @@ final class HeldCashRecordedLiquidityEvidence
 
     private function recovery(object $row): array
     {
+        $this->need(app(FinancialPostingRegistryProtection::class)->active(), 'held_cash_liquidity_registry_unprotected');
         $proof = app(CustodyShortageRecoveryWriter::class)->leg((int) $row->id);
         $recovery = DB::table('custody_shortage_recoveries')
             ->where('treasury_posting_id', $row->id)->lockForUpdate()->first();
         $registered = DB::table('financial_posting_events as e')
             ->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
-            ->where('e.scope_key', 'water')->where('e.source_type', 'treasury_posting')
+            ->join('financial_periods as p', 'p.id', '=', 'o.period_id')
+            ->where('e.scope_key', 'water')->where('o.scope_key', 'water')->where('p.scope_key', 'water')
+            ->whereColumn('o.effective_on', '>=', 'p.start_on')->whereColumn('o.effective_on', '<', 'p.next_on')
+            ->where('e.source_type', 'treasury_posting')
             ->where('e.source_id', $proof['source_id'])->where('e.leg', 'treasury')
             ->select('e.*', 'o.effective_on')->lockForUpdate()->get();
         $this->need($recovery !== null && $registered->count() === 1, 'held_cash_liquidity_source');
