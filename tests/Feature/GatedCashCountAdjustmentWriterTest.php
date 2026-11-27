@@ -9252,6 +9252,54 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($before, $snapshot());
     }
 
+    public function test_close_evidence_custody_inventory_does_not_import_later_approval(): void
+    {
+        [, $reviewer] = $this->fixture('95.00', funded: true);
+        $session = \App\Models\CashSession::query()->sole();
+        $collector = User::query()->findOrFail($session->user_id);
+        \Laravel\Sanctum\Sanctum::actingAs($collector);
+        $service = app(CashSessionService::class);
+        $closed = $service->close($session, '5.00');
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $before = $diagnostic->inspect($reviewer, $periodId, now()->toDateTimeImmutable());
+        $this->assertSame('2026-11-30T21:00:00Z', $before['custody_session_inventory']['cutoff_utc']);
+        $this->assertSame([(string) $session->id], $before['custody_session_inventory']['pending_at_cutoff_session_ids']);
+        $this->assertSame([], $before['custody_session_inventory']['approved_before_cutoff_candidate_ids']);
+        $service->decide($closed, true, $reviewer);
+        $snapshot = DB::table('cash_sessions')->orderBy('id')->get()->toArray();
+        $after = $diagnostic->inspect($reviewer, $periodId, now()->toDateTimeImmutable());
+        $this->assertSame($before['custody_session_inventory'], $after['custody_session_inventory']);
+        $this->assertSame([], $after['custody_session_inventory']['unverified_session_ids']);
+        $this->assertNull($after['custody_session_inventory']['totals']);
+        $this->assertFalse($after['custody_session_inventory']['physical_balances_verified']);
+        $this->assertFalse($after['closure_authorized']);
+        $this->assertEquals($snapshot, DB::table('cash_sessions')->orderBy('id')->get()->toArray());
+    }
+
+    public function test_close_evidence_custody_inventory_identifies_earlier_approval_without_certifying_cash(): void
+    {
+        [, $reviewer] = $this->fixture('95.00', funded: true);
+        $session = \App\Models\CashSession::query()->sole();
+        \Laravel\Sanctum\Sanctum::actingAs(User::query()->findOrFail($session->user_id));
+        $service = app(CashSessionService::class);
+        $closed = $service->close($session, '5.00');
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $service->decide($closed, true, $reviewer);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $result = app(\App\Services\FinancialCloseEvidenceDiagnostic::class)
+            ->inspect($reviewer, $periodId, now()->toDateTimeImmutable());
+        $this->assertSame([(string) $session->id], $result['custody_session_inventory']['approved_before_cutoff_candidate_ids']);
+        $this->assertSame([], $result['custody_session_inventory']['pending_at_cutoff_session_ids']);
+        $this->assertSame([], $result['custody_session_inventory']['unverified_session_ids']);
+        $this->assertFalse($result['custody_session_inventory']['physical_balances_verified']);
+        $this->assertNull($result['custody_session_inventory']['totals']);
+        $this->assertFalse($result['closure_authorized']);
+    }
+
     public function test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure(): void
     {
         $actor = $this->actor();
