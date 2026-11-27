@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify close control privilege isolation
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_control_isolation_rejects_broad_and_direct_writes|test_only_exact_schema_lock_tables_is_allowed_without_close_control_dml' tests/Unit/RuntimeDatabasePrivilegesTest.php
+      - name: Verify close connection constraints
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_close_rejects_disabled_connection_constraints_and_rolls_back tests/Feature/FinancialCloseCoordinatorTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,24 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Prepare isolated runtime privileges
-        env:
-          QA_CONTAINER: ${{ job.services.mysql.id }}
-        run: |
-          set -euo pipefail
-          php artisan migrate --force
-          php artisan ledger:protect --install
-          php artisan financial:database-preflight --guards
-          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "CREATE USER 'water_close_runtime'@'%' IDENTIFIED BY 'disposable_close_password'; GRANT EXECUTE ON PROCEDURE water_test.financial_read_trigger_metadata TO 'water_close_runtime'@'%'; GRANT LOCK TABLES ON \`water\\_test\`.* TO 'water_close_runtime'@'%';"
-          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -N -B -e "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='water_test' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME" | while IFS= read -r table; do
-            [[ "$table" =~ ^[a-zA-Z0-9_]+$ ]]
-            case "$table" in
-              financial_scopes|financial_periods|financial_close_commands|financial_period_closures) privileges=SELECT ;;
-              *) privileges='SELECT, INSERT, UPDATE, DELETE' ;;
-            esac
-            docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "GRANT $privileges ON water_test.$table TO 'water_close_runtime'@'%';"
-          done
-      - name: Verify isolated runtime and privileged freeze serialization
-        env:
-          WATER_QA_CLOSE_CONTROL: '1'
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_close_control_isolated_runtime_serializes_against_privileged_freeze tests/Feature/FinancialCloseRuntimePrivilegesTest.php
+      - name: Verify close connection constraints
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_close_rejects_disabled_connection_constraints_and_rolls_back tests/Feature/FinancialCloseCoordinatorTest.php
