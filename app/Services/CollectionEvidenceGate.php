@@ -17,8 +17,14 @@ final class CollectionEvidenceGate
 {
     public function run(User $actor, callable $authorize, callable $work): array
     {
-        if (config('financial_candidate.collection_evidence') !== true) {
-            return DB::transaction(fn () => $work($actor), 3);
+        $candidate = config('financial_candidate.collection_evidence') === true;
+        if (! $candidate && ! DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
+            return DB::transaction(function () use ($actor, $work): array {
+                if (DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                    throw new ConflictHttpException('financial_scope_configured_retry');
+                }
+                return $work($actor);
+            }, 3);
         }
         abort_unless(app()->environment(['testing', 'staging']), 503);
         $now = now()->toDateTimeImmutable();

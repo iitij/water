@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify mandatory cash session lifecycle and integrated compatibility
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_session_lifecycle_gate_requires_open_period_and_authorized_independent_actor|test_final_accounting_cash_session_fence_preserves_closed_evidence|test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate|test_release_refund_service_fence_protects_both_legs_and_handover_reserve' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify mandatory collection evidence gate and cross-period compatibility
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_evidence_gate_rejects_frozen_writes_and_preserves_independent_decisions|test_collection_cutoff_evidence_uses_recorded_submission_and_decision_not_current_status|test_collection_cutoff_registered_bank_claim_proof|test_collection_cutoff_registered_late_cash_proof' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify mandatory cash session lifecycle and integrated compatibility
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_session_lifecycle_gate_requires_open_period_and_authorized_independent_actor|test_final_accounting_cash_session_fence_preserves_closed_evidence|test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate|test_release_refund_service_fence_protects_both_legs_and_handover_reserve' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify mandatory collection evidence gate and cross-period compatibility
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_evidence_gate_rejects_frozen_writes_and_preserves_independent_decisions|test_collection_cutoff_evidence_uses_recorded_submission_and_decision_not_current_status|test_collection_cutoff_registered_bank_claim_proof|test_collection_cutoff_registered_late_cash_proof' tests/Feature/GatedCashCountAdjustmentWriterTest.php

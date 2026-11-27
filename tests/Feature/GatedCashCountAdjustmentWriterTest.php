@@ -12928,7 +12928,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
-    public function test_collection_evidence_gate_rejects_frozen_writes_and_preserves_independent_decisions(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_collection_evidence_gate_rejects_frozen_writes_and_preserves_independent_decisions(bool $enabled): void
     {
         $issuer = $this->actor();
         $reviewer = $this->actor();
@@ -12936,7 +12937,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'square_id' => Square::create(['name' => 'Synthetic evidence square'])->id, 'status' => 'active']);
         $session = app(CashSessionService::class)->open($issuer);
         app(CashSessionService::class)->close($session, '0.00', null, $session->user);
-        config(['financial_candidate.collection_evidence' => true]);
+        config(['financial_candidate.collection_evidence' => $enabled]);
         $claims = app(\App\Services\NonCashClaimService::class);
         $reviews = app(\App\Services\LateReceiptReviewService::class);
         $noncash = ['sync_uuid' => self::UUID, 'subscriber_id' => $subscriber->id,
@@ -12990,17 +12991,24 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($after, $snapshot());
         $this->assertDatabaseHas('noncash_collection_claims', ['id' => $claimId, 'decided_by' => $reviewer->id, 'instrument_on' => '2026-10-31']);
         $this->assertDatabaseHas('late_receipt_reviews', ['id' => $reviewId, 'decided_by' => $reviewer->id]);
+        DB::table('financial_periods')->update(['state' => 'CLOSED']);
+        $this->postJson('/api/noncash-claims/'.$claimId.'/reject', ['evidence' => self::EVIDENCE])->assertConflict();
+        $this->postJson('/api/late-receipt-reviews/'.$reviewId.'/decide', $reject)->assertConflict();
+        \Laravel\Sanctum\Sanctum::actingAs($issuer);
+        $this->postJson('/api/noncash-claims', $noncash)->assertConflict();
+        $this->postJson('/api/late-receipt-reviews', $late)->assertConflict();
+        $this->assertSame($after, $snapshot());
         foreach (['payments', 'transactions', 'treasury_postings', 'financial_posting_events'] as $table) {
             $this->assertDatabaseCount($table, 0);
         }
     }
 
-    public static function cashSessionLifecycleSwitches(): array
+    public static function candidateSwitchStates(): array
     {
         return ['enabled' => [true], 'disabled' => [false]];
     }
 
-    #[\PHPUnit\Framework\Attributes\DataProvider('cashSessionLifecycleSwitches')]
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
     public function test_cash_session_lifecycle_gate_requires_open_period_and_authorized_independent_actor(bool $enabled): void
     {
         $collector = $this->actor();
