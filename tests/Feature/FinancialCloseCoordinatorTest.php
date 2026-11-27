@@ -36,6 +36,7 @@ final class FinancialCloseCoordinatorTest extends TestCase
         }
         RefreshDatabaseState::$migrated = false;
         $this->artisan('migrate:fresh', ['--force' => true])->assertExitCode(0);
+        app(\App\Services\LedgerProtection::class)->install();
         DB::table('financial_scopes')->insert([
             'scope_key' => 'water', 'currency' => 'YER', 'timezone' => 'Asia/Aden',
             'mode' => 'ACTIVE', 'calendar_version' => 1, 'fence_epoch' => 10,
