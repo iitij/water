@@ -7,6 +7,8 @@ namespace App\Services;
 use App\Models\AuditEvent;
 use App\Models\CashHandover;
 use App\Models\CashSession;
+use App\Models\Payment;
+use App\Models\Transaction;
 use App\Support\CashCustodyAmounts as Cash;
 use App\Support\DecimalDomain;
 use App\Support\SignedMinor;
@@ -58,12 +60,17 @@ final class FinancialOutstandingPeriodEvidence
 
     private function registered(object $posting, array $leg): string
     {
+        return $this->registeredLeg($posting->effective_on, $leg);
+    }
+
+    private function registeredLeg(string $date, array $leg): string
+    {
         $event = DB::table('financial_posting_events as e')
             ->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
             ->where('e.scope_key', 'water')->where('e.source_type', $leg['source_type'])
             ->where('e.source_id', $leg['source_id'])->where('e.leg', $leg['leg'])
             ->select('e.*', 'o.period_id', 'o.effective_on')->lockForUpdate()->first();
-        if (! $event || $event->effective_on !== $posting->effective_on
+        if (! $event || $event->effective_on !== $date
             || SignedMinor::parse($event->amount_minor) !== $leg['amount_minor']
             || $event->currency !== $leg['currency'] || ! hash_equals($leg['source_hash'], $event->source_hash)) {
             throw new DomainException('outstanding_source_unregistered');
@@ -138,7 +145,8 @@ final class FinancialOutstandingPeriodEvidence
                     throw new DomainException('custody_period_independent_count_missing');
                 }
                 $target = Cash::stored($session->getRawOriginal('counted_amount'), $driver, DecimalDomain::D14);
-                if ($approved < $from && $priorReceived === $target) continue;
+                if ($approved < $from && $priorReceived === $target
+                    && Cash::stored($session->getRawOriginal('variance_amount'), $driver, signed: true) === 0) continue;
                 $audits = AuditEvent::query()->where('event', 'cash_session.approved')->where('entity_type', CashSession::class)
                     ->where('entity_id', (string) $id)->lockForUpdate()->get();
                 if ($audits->count() !== 1 || (int) $audits[0]->actor_user_id !== (int) $session->approved_by
@@ -147,6 +155,7 @@ final class FinancialOutstandingPeriodEvidence
                     || $audits[0]->getRawOriginal('occurred_at') >= $until) {
                     throw new DomainException('custody_period_approval_unverified');
                 }
+                $source = $this->sessionSources($session, $audits[0], $target, $next);
                 $received = 0;
                 $hashes = [];
                 foreach ($handovers as $handover) {
@@ -167,12 +176,90 @@ final class FinancialOutstandingPeriodEvidence
                     'approval_audit_id' => (int) $audits[0]->id, 'opening_minor' => $opening,
                     'recognized_counted_minor' => $recognized, 'received_minor' => $received,
                     'closing_minor' => $closing, 'handover_hashes' => $hashes,
-                    'collection_coverage_verified' => false];
+                    'collection_coverage_verified' => true, 'source_evidence' => $source];
             } catch (DomainException $error) {
                 $issues[] = ['code' => $error->getMessage(), 'session_id' => $id];
             }
         }
         return $this->section($rows, $issues);
+    }
+
+
+    /** Revalidate the original cash-only till, including funded opening and
+     * ordinary pre-close voids. Unsupported settlements remain explicit
+     * blockers; an approved count alone is not collection coverage.
+     */
+    private function sessionSources(CashSession $session, AuditEvent $approval, int $counted, string $next): array
+    {
+        $id = (int) $session->id;
+        $driver = $session->getConnection()->getDriverName();
+        $expected = Cash::stored($session->getRawOriginal('expected_amount'), $driver, nullable: true);
+        $variance = Cash::stored($session->getRawOriginal('variance_amount'), $driver, signed: true, nullable: true);
+        $opening = Cash::stored($session->getRawOriginal('opening_amount'), $driver);
+        if (! Cash::consistent($counted, $expected, $variance)
+            || ($approval->after['expected_amount'] ?? null) !== SignedMinor::decimal($expected)
+            || ($approval->after['variance_amount'] ?? null) !== SignedMinor::decimal($variance)) {
+            throw new DomainException('custody_period_count_sources_mismatch');
+        }
+        if (DB::table('closed_cash_corrections')->where('cash_session_id', $id)->lockForUpdate()->first()
+            || DB::table('late_receipt_reviews')->where('cash_session_id', $id)->lockForUpdate()->first()) {
+            throw new DomainException('custody_period_special_settlement_requires_proof');
+        }
+        $fundings = DB::table('cash_session_fundings')->where('cash_session_id', $id)->lockForUpdate()->get();
+        if ($fundings->count() !== ($opening > 0 ? 1 : 0)) {
+            throw new DomainException('custody_period_funding_unverified');
+        }
+        $fundingHash = null;
+        if ($opening > 0) {
+            $fund = $fundings->first();
+            $posting = DB::table('treasury_postings')->where('cash_session_funding_id', $fund->id)->lockForUpdate()->first();
+            if (! $posting || $fund->issued_on >= $next) throw new DomainException('custody_period_funding_unverified');
+            $leg = app(TreasuryOpeningFundingEvidence::class)->funding((int) $posting->id, $fund->issued_on);
+            if ($leg['amount_minor'] !== -$opening) throw new DomainException('custody_period_funding_unverified');
+            $fundingHash = $this->registered($posting, $leg);
+        }
+        $total = $opening;
+        $collections = $voids = 0;
+        $hashes = [];
+        $zone = new DateTimeZone('Asia/Aden');
+        $utc = new DateTimeZone('UTC');
+        $closed = new DateTimeImmutable($session->getRawOriginal('closed_at'), $utc);
+        foreach (Payment::withTrashed()->where('cash_session_id', $id)->orderBy('id')->lockForUpdate()->get() as $payment) {
+            $date = $payment->payment_date->toDateString();
+            if ($payment->trashed() || $payment->hasPendingVoidRequest() || $payment->payment_method !== 'cash'
+                || (int) $payment->user_id !== (int) $session->user_id
+                || $date < $session->session_date->toDateString() || $date > $closed->setTimezone($zone)->format('Y-m-d')
+                || $date >= $next) {
+                throw new DomainException('custody_period_collection_unverified');
+            }
+            $entries = Transaction::withTrashed()->where('reference_type', Payment::class)
+                ->where('reference_id', $payment->id)->where('type', 'payment')->lockForUpdate()->get();
+            if ($entries->count() !== 1) throw new DomainException('custody_period_collection_unverified');
+            $leg = app(FinancialLedgerEvidence::class)->leg((int) $entries[0]->id);
+            $hashes[] = $this->registeredLeg($date, $leg);
+            $collections = SignedMinor::add($collections, $leg['amount_minor']);
+            if ($payment->isVoided()) {
+                $void = new DateTimeImmutable($payment->getRawOriginal('voided_at'), $utc);
+                if (! in_array($payment->voided_via, ['gated', 'approval'], true) || $void > $closed
+                    || $void->setTimezone($zone)->format('Y-m-d') < $date) {
+                    throw new DomainException('custody_period_void_unverified');
+                }
+                $reversals = Transaction::withTrashed()->where('reference_type', Payment::class)
+                    ->where('reference_id', $payment->id)->where('type', 'payment_reversal')->lockForUpdate()->get();
+                if ($reversals->count() !== 1) throw new DomainException('custody_period_void_unverified');
+                $reverse = app(FinancialLedgerEvidence::class)->leg((int) $reversals[0]->id);
+                if ($reverse['amount_minor'] !== -$leg['amount_minor']) throw new DomainException('custody_period_void_unverified');
+                $hashes[] = $this->registeredLeg($void->setTimezone($zone)->format('Y-m-d'), $reverse);
+                $voids = SignedMinor::add($voids, $leg['amount_minor']);
+            }
+        }
+        $total = SignedMinor::add($total, SignedMinor::subtract($collections, $voids));
+        if ($total !== $expected) throw new DomainException('custody_period_count_sources_mismatch');
+        return ['funding_minor' => $opening, 'gross_collections_minor' => $collections, 'voided_minor' => $voids,
+            'expected_minor' => $expected, 'variance_minor' => $variance,
+            'shortage_minor' => $variance < 0 ? SignedMinor::negate($variance) : 0,
+            'surplus_minor' => max(0, $variance), 'funding_hash' => $fundingHash, 'collection_hashes' => $hashes,
+            'variance_disposition_verified' => $variance === 0];
     }
 
     private function section(array $rows, array $issues): array
