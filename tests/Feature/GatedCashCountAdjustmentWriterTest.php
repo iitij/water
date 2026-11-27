@@ -9358,6 +9358,65 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['closure_authorized']);
     }
 
+    public function test_cash_period_evidence_requires_final_independent_count_and_ignores_next_period_funding(): void
+    {
+        [$counter, $reviewer, $account] = $this->fixture('95.00', funded: true);
+        $id = (int) $account['id'];
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialCashPeriodEvidence::class)->inspect($periodId));
+        $this->assertFalse($inspect()['period_ended']);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $missing = $inspect();
+        $this->assertFalse($missing['all_accounts_matched']);
+        $this->assertContains(['code' => 'cash_period_final_count_missing', 'account_id' => $id], $missing['issues']);
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-30T15:00:00+03:00'));
+        $counts = app(TreasuryCashCountService::class);
+        $count = $counts->record($counter, $id, '95.00', 'QA-FINAL-CASH', self::EVIDENCE)['count'];
+        $counts->review($reviewer, (int) $count['id'], true, self::EVIDENCE);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $proof = $inspect();
+        $this->assertTrue($proof['all_accounts_matched'], json_encode($proof));
+        $this->assertCount(1, $proof['rows']);
+        $row = $proof['rows'][0];
+        $this->assertSame($id, $row['account_id']);
+        $this->assertSame((int) $count['id'], $row['count_id']);
+        $this->assertSame(0, $row['opening_minor']);
+        $this->assertSame(10000, $row['registered_opening_document_minor']);
+        $this->assertSame(-500, $row['registered_movement_minor']);
+        $this->assertSame(9500, $row['movement_minor']);
+        $this->assertSame(9500, $row['closing_minor']);
+        $this->assertFalse($row['predecessor_verified']);
+        $this->assertFalse($proof['closure_authorized']);
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        app(GatedTreasuryOpeningFundingWriter::class)->fund($this->actor(), $counter, $id,
+            '2.50', 'QA-NEXT-FUND', self::EVIDENCE, self::NEXT, $later);
+        $this->assertSame(9250, app(TreasuryRegisterService::class)->inspect($reviewer, $id)['provisional_recorded_balance_minor']);
+        $this->assertSame($proof, $inspect());
+    }
+
+    public function test_cash_period_evidence_rejects_movement_after_final_count(): void
+    {
+        [$counter, $reviewer, $account] = $this->fixture('100.00');
+        $id = (int) $account['id'];
+        $last = new DateTimeImmutable('2026-11-30T12:00:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($last));
+        $counts = app(TreasuryCashCountService::class);
+        $count = $counts->record($counter, $id, '100.00', 'QA-FINAL-CASH-STALE', self::EVIDENCE)['count'];
+        $counts->review($reviewer, (int) $count['id'], true, self::EVIDENCE);
+        app(GatedTreasuryOpeningFundingWriter::class)->fund($this->actor(), $counter, $id,
+            '2.50', 'QA-LAST-FUND', self::EVIDENCE, self::NEXT, $last);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $result = DB::transaction(fn () => app(\App\Services\FinancialCashPeriodEvidence::class)->inspect($periodId));
+        $this->assertFalse($result['all_accounts_matched']);
+        $this->assertSame([], $result['rows']);
+        $this->assertContains(['code' => 'cash_period_count_not_equal_at_cutoff', 'account_id' => $id], $result['issues']);
+        $this->assertFalse($result['closure_authorized']);
+    }
+
     public function test_bank_period_evidence_uses_cutoff_not_later_account_balance(): void
     {
         $importer = $this->actor();
