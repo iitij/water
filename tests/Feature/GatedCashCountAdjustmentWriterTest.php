@@ -10978,6 +10978,65 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($proof, $inspect());
     }
 
+    public function test_cash_period_prior_account_requires_independent_adjacent_observation(): void
+    {
+        [$counter, $reviewer, $account] = $this->fixture('95.00', funded: true);
+        $id = (int) $account['id'];
+        $counts = app(TreasuryCashCountService::class);
+        $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $dec = (int) DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-30T15:00:00+03:00'));
+        $first = $counts->record($counter, $id, '95.00', 'QA-PRIOR-CASH', self::EVIDENCE)['count'];
+        $counts->review($reviewer, (int) $first['id'], true, self::EVIDENCE);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        app(GatedTreasuryOpeningFundingWriter::class)->fund($this->actor(), $counter, $id,
+            '2.50', 'QA-PRIOR-NEXT-FUND', self::EVIDENCE, self::NEXT, $later);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-31T15:00:00+03:00'));
+        $last = $counts->record($counter, $id, '92.50', 'QA-PRIOR-NEXT-CASH', self::EVIDENCE)['count'];
+        $counts->review($reviewer, (int) $last['id'], true, self::EVIDENCE);
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialCashPeriodEvidence::class)->inspect($dec));
+        $proof = $inspect();
+        $this->assertTrue($proof['all_accounts_matched'], json_encode($proof));
+        $row = $proof['rows'][0];
+        $this->assertSame(9500, $row['opening_minor']);
+        $this->assertSame(-250, $row['movement_minor']);
+        $this->assertSame(9250, $row['closing_minor']);
+        $this->assertSame((int) $first['id'], $row['prior_observation']['count_id']);
+        $this->assertSame($nov, $row['prior_observation']['period_id']);
+        $this->assertTrue($row['prior_observation_verified']);
+        $this->assertFalse($row['predecessor_verified']);
+        $this->assertFalse($proof['closure_authorized']);
+        $guard = app(\App\Services\FinancialPostingRegistryProtection::class);
+        $op = DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)->sole();
+        DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
+        try {
+            DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)
+                ->update(['recorded_at_utc' => '2026-11-30T21:00:00.000000Z']);
+        } finally {
+            $guard->install();
+        }
+        try {
+            $rejected = $inspect();
+            $this->assertFalse($rejected['all_accounts_matched']);
+            $this->assertSame([], $rejected['rows']);
+            $this->assertContains(['code' => 'cash_period_prior_movements_unverified', 'account_id' => $id], $rejected['issues']);
+        } finally {
+            DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
+            try {
+                DB::table('financial_posting_operations')->where('operation_uuid', self::OTHER)
+                    ->update(['recorded_at_utc' => $op->recorded_at_utc]);
+            } finally {
+                $guard->install();
+            }
+        }
+        $this->assertSame($proof, $inspect());
+    }
+
     public function test_cash_period_evidence_rejects_movement_after_final_count(): void
     {
         [$counter, $reviewer, $account] = $this->fixture('100.00');

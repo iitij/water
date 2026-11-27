@@ -36,6 +36,8 @@ final class FinancialCashPeriodEvidence
         foreach ($movement['rows'] as $row) {
             if ($row['sector'] === 'cash') $byAccount[$row['key']] = $row;
         }
+        $priorPeriod = null;
+        $priorMovement = null;
         foreach ($accounts as $account) {
             $id = (int) $account->id;
             try {
@@ -45,17 +47,46 @@ final class FinancialCashPeriodEvidence
                 $birth = $account->opening_on >= $period->start_on;
                 $openingDocument = $recorded['recorded_opening_document_minor'] ?? 0;
                 $net = $recorded['net_movement_minor'] ?? 0;
-                // A prior account requires separate opening continuity. Do not
-                // infer it by subtracting movements from observed closing cash.
+                // Never infer opening by subtracting movements from closing cash.
+                // An existing account needs a separately reviewed observation
+                // at the previous cutoff and verified prior registered movements.
                 if ($birth && ($recorded === null || $openingDocument !== SignedMinor::parse($account->opening_minor)
                     || SignedMinor::add($openingDocument, $net) !== $observation['closing_minor'])) {
                     throw new DomainException('cash_period_new_account_conservation');
                 }
                 if (! $birth && $openingDocument !== 0) throw new DomainException('cash_period_opening_date_mismatch');
-                $row = $observation + ['opening_minor' => $birth ? 0 : null,
+                $opening = 0;
+                $priorProof = null;
+                if (! $birth) {
+                    if ($priorPeriod === null) {
+                        $previous = DB::table('financial_periods')->where('scope_key', 'water')
+                            ->where('next_on', $period->start_on)->lockForUpdate()->get();
+                        if ($previous->count() !== 1) {
+                            throw new DomainException('cash_period_prior_period_missing');
+                        }
+                        $priorPeriod = $previous->first();
+                        $priorMovement = $this->movements->inspect((int) $priorPeriod->id);
+                    }
+                    if (! $priorMovement['recorded_movements_verified']) {
+                        throw new DomainException('cash_period_prior_movements_unverified');
+                    }
+                    $priorProof = $this->counts->periodEndObservation($id, $priorPeriod->start_on, $priorPeriod->next_on);
+                    $opening = $priorProof['closing_minor'];
+                    if (SignedMinor::add($opening, $net) !== $observation['closing_minor']) {
+                        throw new DomainException('cash_period_prior_observation_conservation');
+                    }
+                    $priorProof['period_id'] = (int) $priorPeriod->id;
+                    $priorProof['movement_hash'] = $priorMovement['movement_hash'];
+                }
+                $row = $observation + ['opening_minor' => $opening,
                     'registered_opening_document_minor' => $openingDocument, 'registered_movement_minor' => $net,
                     'movement_minor' => SignedMinor::add($openingDocument, $net),
                     'movement_hash' => $movement['movement_hash'], 'predecessor_verified' => false];
+                if ($priorProof !== null) {
+                    $row['prior_observation'] = $priorProof;
+                    $row['prior_observation_verified'] = true;
+                }
+                // The prior observation is not a certified predecessor journal.
                 $row['source_hash'] = hash('sha256', json_encode($row, JSON_THROW_ON_ERROR));
                 $rows[] = $row;
             } catch (DomainException $error) {
