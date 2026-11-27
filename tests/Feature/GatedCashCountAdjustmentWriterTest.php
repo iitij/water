@@ -504,6 +504,54 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_period_closures', 0);
     }
 
+    public function test_held_recognition_and_cancellation_fail_closed_and_retry(): void
+    {
+        [, $reviewer, , $count] = $this->fixture('100.25');
+        $tables = ['treasury_cash_adjustments', 'treasury_held_cash_liabilities',
+            'treasury_held_cash_assignments', 'treasury_held_cash_payout_authorizations',
+            'treasury_held_cash_payout_cancellations', 'treasury_held_cash_payouts',
+            'treasury_postings', 'transactions', 'financial_posting_operations',
+            'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_held_link_registry_first_event');
+        try {
+            $this->rejects('held_cash_write_protection_missing', fn () =>
+                $this->postAdjustment($reviewer, $count, 'unattributed_cash_held'));
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            app(\App\Services\HeldRegistryLinkProtection::class)->install();
+        }
+        $result = $this->postAdjustment($reviewer, $count, 'unattributed_cash_held');
+        $this->assertTrue($result['registry_created']);
+        $lot = $result['held_liability_id'];
+        $subscriber = Subscriber::create(['name' => 'Synthetic cancellation owner',
+            'square_id' => Square::create(['name' => 'Synthetic cancellation square'])->id, 'status' => 'active']);
+        $this->assertTrue($this->assignHeld($this->actor(), $lot, $subscriber, 25)['created']);
+        $authorizer = $this->actor();
+        $executor = $this->actor();
+        $this->assertTrue($this->authorizeHeld($authorizer, $executor, 10)['created']);
+        $service = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $cancel = fn () => $service->cancelPayoutAuthorization($authorizer, self::OTHER, self::EVIDENCE,
+            '2026-11-25', $this->nowAt());
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_held_link_registry_first_event');
+        try {
+            $this->rejects('held_cash_write_protection_missing', $cancel);
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            app(\App\Services\HeldRegistryLinkProtection::class)->install();
+        }
+        $this->assertTrue($cancel()['created']);
+        $this->assertFalse($cancel()['created']);
+        $report = $this->gate(fn () => $service->verifyCoverage());
+        $this->assertSame(25, $report['outstanding_minor']);
+        $this->assertSame(0, $report['pending_authorized_minor']);
+        $this->assertSame(0, $report['paid_minor']);
+        $this->assertDatabaseCount('treasury_held_cash_payouts', 0);
+        $this->assertDatabaseCount('treasury_held_cash_payout_cancellations', 1);
+    }
+
     public function test_held_writers_fail_closed_when_live_protection_is_missing(): void
     {
         [, , , , $lot, $subscriber] = $this->held();
