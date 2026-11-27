@@ -198,13 +198,14 @@ class Payment extends Model
                 return parent::save($options);
             }
             return DB::transaction(function () use ($options, $voidWriter, $immutable, $voidFields) {
+                $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
                 if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Payment issuance lock is missing.');
                 }
                 $persisted = self::withTrashed()->lockForUpdate()->findOrFail($this->getRawOriginal($this->getKeyName()));
                 $gatedRequest = DB::table('audit_events')->where('entity_type', self::class)
                     ->where('entity_id', (string) $persisted->id)->where('event', 'financial.void_request_gated')->exists();
-                $protected = Transaction::receiptReversalFenceEnabled() || $persisted->hasRegisteredReceipt()
+                $protected = $scope !== null || Transaction::receiptReversalFenceEnabled() || $persisted->hasRegisteredReceipt()
                     || $gatedRequest || $voidWriter !== null;
                 if ($protected && ($this->isDirty($immutable)
                     || ! ($voidWriter instanceof GatedReceiptVoidWriter
@@ -218,10 +219,11 @@ class Payment extends Model
             throw new \DomainException('gated_receipt_document_mutation_required');
         }
         return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $service) {
+            $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
             if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Payment issuance lock is missing.');
             }
-            if (($service !== null || self::receiptFenceEnabled() || $this->hasRegisteredReceipt())
+            if (($scope !== null || $service !== null || self::receiptFenceEnabled() || $this->hasRegisteredReceipt())
                 && ! ($service instanceof PaymentService && $service->allowsReceiptCreation($this))) {
                 throw new \DomainException('gated_receipt_model_writer_required');
             }

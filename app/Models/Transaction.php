@@ -41,7 +41,8 @@ class Transaction extends Model
 
     public static function assertReceiptPostingService(Payment $payment, mixed $service): void
     {
-        if ($service === null && ! Payment::receiptFenceEnabled() && ! $payment->hasRegisteredReceipt()) return;
+        if ($service === null && ! Payment::receiptFenceEnabled() && ! $payment->hasRegisteredReceipt()
+            && ! \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->exists()) return;
         if (! ($service instanceof \App\Services\PaymentService && $service->allowsReceiptPosting($payment))) {
             throw new \DomainException('gated_receipt_ledger_writer_required');
         }
@@ -55,7 +56,8 @@ class Transaction extends Model
 
     public static function assertReceiptReversalWriter(Payment $payment, mixed $writer): void
     {
-        if ($writer === null && ! self::receiptReversalFenceEnabled() && ! $payment->hasRegisteredReceipt()) return;
+        if ($writer === null && ! self::receiptReversalFenceEnabled() && ! $payment->hasRegisteredReceipt()
+            && ! \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->exists()) return;
         $allowed = ($writer instanceof \App\Services\GatedReceiptVoidWriter
                 && $writer->allowsReversal($payment))
             || ($writer instanceof \App\Services\GatedInvoiceTransferWriter
@@ -97,6 +99,7 @@ class Transaction extends Model
                 || $this->getOriginal('reference_type') === TreasuryHeldCashCredit::class));
         if ($heldCreditRelated || $heldCreditWriter !== null) {
             return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $writer, $receiptService, $reversalWriter, $correctionWriter, $heldCreditWriter) {
+                $scope = \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
                 if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Financial issuance lock is missing.');
                 }
@@ -118,6 +121,7 @@ class Transaction extends Model
                 || in_array($this->getOriginal('reference_type'), $correctionClasses, true)));
         if ($correctionRelated || $correctionWriter !== null) {
             return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $writer, $receiptService, $reversalWriter, $correctionWriter, $correctionClasses) {
+                $scope = \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
                 if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Financial issuance lock is missing.');
                 }
@@ -137,11 +141,12 @@ class Transaction extends Model
             || ($this->exists && $this->getOriginal('type') === 'payment_reversal');
         if ($reversalRelated || $reversalWriter !== null) {
             return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $writer, $receiptService, $reversalWriter) {
+                $scope = \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
                 if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Financial issuance lock is missing.');
                 }
                 $payment = Payment::withTrashed()->find($this->exists ? $this->getOriginal('reference_id') : $this->reference_id);
-                $protected = self::receiptReversalFenceEnabled() || $payment?->hasRegisteredReceipt() || $reversalWriter !== null;
+                $protected = $scope !== null || self::receiptReversalFenceEnabled() || $payment?->hasRegisteredReceipt() || $reversalWriter !== null;
                 if ($writer !== null || $receiptService !== null || ($this->exists && $protected)) {
                     throw new \DomainException('gated_receipt_reversal_writer_required');
                 }
@@ -156,17 +161,18 @@ class Transaction extends Model
         $receiptRelated = $this->type === 'payment' || ($this->exists && $this->getOriginal('type') === 'payment');
         if ($receiptRelated || $receiptService !== null) {
             return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $writer, $receiptService) {
+                $scope = \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
                 if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                     throw new \LogicException('Financial issuance lock is missing.');
                 }
                 $payment = Payment::withTrashed()->find($this->exists ? $this->getOriginal('reference_id') : $this->reference_id);
-                if ($writer !== null || ($this->exists && (Payment::receiptFenceEnabled()
+                if ($writer !== null || ($this->exists && ($scope !== null || Payment::receiptFenceEnabled()
                     || $payment?->hasRegisteredReceipt() || $receiptService !== null))) {
                     throw new \DomainException('gated_receipt_ledger_writer_required');
                 }
                 if (! $this->exists && $payment && $this->reference_type === Payment::class && $this->type === 'payment') {
                     self::assertReceiptPostingService($payment, $receiptService);
-                } elseif (Payment::receiptFenceEnabled() || $receiptService !== null) {
+                } elseif ($scope !== null || Payment::receiptFenceEnabled() || $receiptService !== null) {
                     throw new \DomainException('gated_receipt_ledger_writer_required');
                 }
                 return parent::save($options);
@@ -176,7 +182,14 @@ class Transaction extends Model
             || in_array($this->type, ['invoice', 'invoice_reversal'], true)
             || ($this->exists && ($this->getOriginal('reference_type') === Invoice::class
                 || in_array($this->getOriginal('type'), ['invoice', 'invoice_reversal'], true)));
-        if (! $invoiceRelated && $writer === null) return parent::save($options);
+        if (! $invoiceRelated && $writer === null) {
+            return \Illuminate\Support\Facades\DB::transaction(function () use ($options) {
+                if (\Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                    throw new \DomainException('unsupported_financial_ledger_document');
+                }
+                return parent::save($options);
+            });
+        }
         return \Illuminate\Support\Facades\DB::transaction(function () use ($options, $writer) {
             $scope = \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
             if (! \Illuminate\Support\Facades\DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {

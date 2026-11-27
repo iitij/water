@@ -6741,12 +6741,20 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
-        config(['financial_candidate.cash_receipts' => true]);
+        config(['financial_candidate.cash_receipts' => false, 'financial_candidate.late_cash_settlements' => false,
+            'financial_candidate.noncash_settlements' => false, 'financial_candidate.void_api' => false,
+            'financial_candidate.subscriber_transfers' => false]);
         $this->rejects('gated_receipt_model_writer_required', fn () => Payment::create($data));
         $this->rejects('gated_receipt_model_writer_required', fn () =>
             (new Payment($data))->saveQuietly(['financial_receipt_service' => $service]));
         $this->rejects('gated_receipt_ledger_writer_required', fn () => \App\Models\Transaction::create([
             'subscriber_id' => $subscriber->id, 'type' => 'payment', 'amount' => '10.00']));
+        foreach (['adjustment', 'opening_balance'] as $type) {
+            $raw = ['subscriber_id' => $subscriber->id, 'type' => $type, 'amount' => '10.00'];
+            $this->rejects('unsupported_financial_ledger_document', fn () => \App\Models\Transaction::create($raw));
+            $this->rejects('unsupported_financial_ledger_document', fn () => (new \App\Models\Transaction($raw))->saveQuietly());
+            $this->rejects('unsupported_financial_ledger_document', fn () => $ledger->recordTransaction($subscriber, $type, '10.00'));
+        }
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $writer = app(GatedCashReceiptWriter::class);
         $payment = $writer->collect($actor, (int) $subscriber->id, '10.00', $uuid, $this->nowAt(), (int) $session->id)['payment'];
