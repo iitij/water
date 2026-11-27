@@ -6,7 +6,7 @@ namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
 
-/** Verify the recovery document guards installed by migration 000144. */
+/** Verify the recovery document guards installed by migrations 000144 and 000146. */
 final class CustodyShortageRecoveryProtection
 {
     public function active(): bool
@@ -25,7 +25,7 @@ final class CustodyShortageRecoveryProtection
         if ($sqlite) {
             $definitions['fin_shortage_recovery_replace'] = ['INSERT',
                 "WHEN EXISTS (SELECT 1 FROM custody_shortage_recoveries r WHERE r.id = NEW.id
-                    OR r.cash_session_id = NEW.cash_session_id OR r.treasury_posting_id = NEW.treasury_posting_id
+                    OR r.treasury_posting_id = NEW.treasury_posting_id
                     OR r.proposal_id = NEW.proposal_id OR r.reference = NEW.reference OR r.operation_uuid = NEW.operation_uuid)
                 BEGIN SELECT RAISE(ABORT, '{$message}'); END"];
         }
