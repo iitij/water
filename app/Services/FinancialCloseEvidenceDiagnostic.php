@@ -131,7 +131,7 @@ final class FinancialCloseEvidenceDiagnostic
         if ($physicalMovements !== null && ! $physicalMovements['matched']) $blockers[] = 'cutoff_physical_movements_unmatched';
         sort($blockers, SORT_STRING);
         $manifest = $ended ? $this->cutoffManifest($period, $cashEvidence,
-            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements, $physicalMovements) : null;
+            $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements, $physicalMovements, $settlement) : null;
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
@@ -148,7 +148,7 @@ final class FinancialCloseEvidenceDiagnostic
      * A fingerprint is not a signed close journal or independent opening proof.
      */
     private function cutoffManifest(object $period, array $cash, array $bank, array $subscriber, array $outstanding, array $claims,
-        array $source, array $movement, array $accountMovements, array $heldMovements, array $physicalMovements): array
+        array $source, array $movement, array $accountMovements, array $heldMovements, array $physicalMovements, array $settlement): array
     {
         $sections = [
             'cash' => [$cash['all_accounts_matched'], $cash],
@@ -181,15 +181,22 @@ final class FinancialCloseEvidenceDiagnostic
         $registry = ['recorded_movements_matched' => $registryMatched,
             'registry_events' => $source['registry_events'],
             'movement_hash' => $registryMatched ? $movement['movement_hash'] : null];
-        $manifest = ['format_version' => 6, 'scope' => 'water', 'period_id' => (int) $period->id,
+        // Settlement documents are independent of balance and movement totals.
+        // Pending or unmatched settlement evidence must not yield a complete fingerprint.
+        $settlementMatched = $settlement['scanned_settlements_match'] === true
+            && $settlement['shortage_settlements']['scanned_documents_match'] === true
+            && $settlement['shortage_settlements']['pending_count'] === 0;
+        $manifest = ['format_version' => 7, 'scope' => 'water', 'period_id' => (int) $period->id,
             'start_on' => $period->start_on, 'next_on' => $period->next_on,
             'sectors' => $sectors, 'all_listed_sectors_matched' => $matched,
             'registry' => $registry,
+            'settlement_evidence_matched' => $settlementMatched,
+            'settlement_evidence_hash' => $settlementMatched ? hash('sha256', json_encode($settlement, JSON_THROW_ON_ERROR)) : null,
             'physical_movements_hash' => $physicalMovements['matched'] ? hash('sha256', json_encode($physicalMovements, JSON_THROW_ON_ERROR)) : null,
             'held_movements_hash' => $heldMovements['matched'] ? hash('sha256', json_encode($heldMovements, JSON_THROW_ON_ERROR)) : null,
             'account_movements_hash' => $accountMovements['matched'] ? hash('sha256', json_encode($accountMovements, JSON_THROW_ON_ERROR)) : null,
             'independent_opening_verified' => false, 'closure_authorized' => false];
-        return $manifest + ['manifest_hash' => $matched && $registryMatched && $accountMovements['matched'] && $heldMovements['matched'] && $physicalMovements['matched'] ? hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)) : null];
+        return $manifest + ['manifest_hash' => $matched && $registryMatched && $settlementMatched && $accountMovements['matched'] && $heldMovements['matched'] && $physicalMovements['matched'] ? hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)) : null];
     }
 
     /** Scope-wide, deliberately not netted or restricted to the target month:
