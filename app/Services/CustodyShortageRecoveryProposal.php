@@ -7,15 +7,29 @@ namespace App\Services;
 use App\Models\AuditEvent;
 use App\Models\CashSession;
 use App\Models\User;
+use App\Support\SignedMinor;
 use DateTimeImmutable;
 use DateTimeZone;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
-/** Proposal of one factual cash recovery (full or partial). Not a receipt or cash posting. */
+/** Proposal of a factual cash recovery (full or partial). Not a receipt or cash posting. */
 final class CustodyShortageRecoveryProposal
 {
     public const EVENT = 'financial.custody_shortage_recovery_proposed';
+
+    /** Legacy first proposals retain their numeric identity; later installments
+     * have a distinct session:UUID identity protected by the same audit guards. */
+    public static function forSession(int $sessionId): \Illuminate\Database\Eloquent\Builder
+    {
+        return AuditEvent::query()->where('event', self::EVENT)->where('entity_type', 'custody_shortage_recovery')
+            ->where(fn ($q) => $q->where('entity_id', (string) $sessionId)->orWhere('entity_id', 'like', $sessionId.':%'));
+    }
+
+    public static function matchesIdentity(AuditEvent $row, int $sessionId, string $uuid): bool
+    {
+        return $row->entity_id === (string) $sessionId || $row->entity_id === $sessionId.':'.$uuid;
+    }
 
     public function propose(User $actor, int $sessionId, int $accountId, string $reference, string $evidence,
         string $uuid, DateTimeImmutable $now, ?int $recoveryMinor = null): array
@@ -55,34 +69,39 @@ final class CustodyShortageRecoveryProposal
                     ->lockForUpdate()->first()) {
                     throw new DomainException('shortage_recovery_loss_conflict');
                 }
-                $amount = $recoveryMinor ?? $source['shortage_minor'];
-                if ($amount <= 0 || $amount > $source['shortage_minor']) {
-                    throw new DomainException('shortage_recovery_amount_invalid');
-                }
+                $prior = app(FinancialOutstandingPeriodEvidence::class)->verifiedPriorRecovery($session, $local->modify('+1 day')->format('Y-m-d'));
+                $remaining = SignedMinor::subtract($source['shortage_minor'], $prior['recovered_minor'] ?? 0);
+                // An explicit replay retains its original amount, even after posting.
+                $amount = $recoveryMinor ?? $remaining;
                 $intent = $source + ['recovery_minor' => $amount, 'account_id' => $accountId, 'reference' => $reference,
                     'evidence' => $evidence, 'operation_uuid' => $uuid, 'proposed_on' => $date,
                     'proposed_by' => (int) $actor->id];
                 foreach (AuditEvent::query()->where('event', self::EVENT)->orderBy('id')->lockForUpdate()->get() as $row) {
                     $p = $row->after;
                     if (! is_array($p)) throw new DomainException('shortage_recovery_proposal_conflict');
-                    if ($row->entity_id === (string) $sessionId) {
+                    if (($p['operation_uuid'] ?? null) === $uuid) {
+                        if ($recoveryMinor === null) $intent['recovery_minor'] = $p['recovery_minor'] ?? $p['shortage_minor'];
                         if ($p != $intent || (int) $row->actor_user_id !== (int) $actor->id
-                            || $row->entity_type !== 'custody_shortage_recovery') {
+                            || $row->entity_type !== 'custody_shortage_recovery' || ! self::matchesIdentity($row, $sessionId, $uuid)) {
                             throw new DomainException('shortage_recovery_proposal_conflict');
                         }
-                        return ['created' => false, 'proposal_id' => (int) $row->id, 'cash_posted' => false];
+                        return ['created' => false, 'proposal_id' => (int) $row->id,
+                            'cash_posted' => DB::table('custody_shortage_recoveries')->where('proposal_id', $row->id)->exists()];
                     }
-                    if (($p['reference'] ?? null) === $reference || ($p['operation_uuid'] ?? null) === $uuid) {
-                        throw new DomainException('shortage_recovery_proposal_conflict');
+                    if (($p['reference'] ?? null) === $reference) throw new DomainException('shortage_recovery_proposal_conflict');
+                    if (($p['session_id'] ?? null) === $sessionId
+                        && ! DB::table('custody_shortage_recoveries')->where('proposal_id', $row->id)->exists()) {
+                        throw new DomainException('shortage_recovery_pending_proposal');
                     }
                 }
+                if ($amount <= 0 || $amount > $remaining) throw new DomainException('shortage_recovery_amount_invalid');
                 if (DB::table('treasury_accounts')->where('opening_reference', $reference)->exists()
                     || DB::table('treasury_postings')->where('evidence_reference', $reference)->exists()
                     || DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->exists()) {
                     throw new DomainException('shortage_recovery_proposal_conflict');
                 }
                 $row = app(AuditLogger::class)->recordRequired(self::EVENT, [
-                    'entity_type' => 'custody_shortage_recovery', 'entity_id' => $sessionId,
+                    'entity_type' => 'custody_shortage_recovery', 'entity_id' => self::forSession($sessionId)->exists() ? $sessionId.':'.$uuid : $sessionId,
                     'actor_user_id' => (int) $actor->id, 'after' => $intent, 'source' => 'internal']);
                 return ['created' => true, 'proposal_id' => (int) $row->id, 'cash_posted' => false];
             });
