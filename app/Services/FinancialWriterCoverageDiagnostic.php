@@ -16,6 +16,7 @@ final class FinancialWriterCoverageDiagnostic
     private const FLAGS = [
         'invoices' => 'invoice_and_reading_approval',
         'cash_receipts' => 'cash_receipt',
+        'collection_evidence' => 'collection_claim_submission_and_rejection',
         'cash_session_lifecycle' => 'cash_session_open_close_decision',
         'void_api' => 'receipt_void',
         'subscriber_transfers' => 'subscriber_transfer',

@@ -45,7 +45,7 @@ final class NonCashClaimService
             'submitted_by' => $actor->id, 'amount_minor' => $minor, 'payment_method' => $data['payment_method'],
             'instrument_reference' => $reference, 'instrument_on' => $date, 'notes' => $data['notes'] ?? null,
         ];
-        return DB::transaction(function () use ($record, $actor): array {
+        return app(CollectionEvidenceGate::class)->run($actor, fn (User $current) => $this->authorize($current), function (User $actor) use ($record): array {
             $this->lock();
             Subscriber::query()->lockForUpdate()->findOrFail($record['subscriber_id']);
             $existing = DB::table('noncash_collection_claims')->where('sync_uuid', $record['sync_uuid'])->lockForUpdate()->first();
@@ -73,7 +73,7 @@ final class NonCashClaimService
                 'after' => $record,
             ]);
             return (array) DB::table('noncash_collection_claims')->find($id);
-        }, 3);
+        });
     }
 
     public function index(User $actor): array
@@ -91,7 +91,7 @@ final class NonCashClaimService
         if (mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000) {
             throw ValidationException::withMessages(['evidence' => 'يلزم إثبات سبب الرفض.']);
         }
-        return DB::transaction(function () use ($actor, $id, $evidence): array {
+        return app(CollectionEvidenceGate::class)->run($actor, fn (User $current) => app(TreasuryRegisterService::class)->authorize($current), function (User $actor) use ($id, $evidence): array {
             $this->lock();
             $claim = DB::table('noncash_collection_claims')->where('id', $id)->lockForUpdate()->first();
             abort_unless($claim, 404);
@@ -108,6 +108,6 @@ final class NonCashClaimService
                 'entity_type' => 'noncash_collection_claim', 'entity_id' => $id, 'actor_user_id' => $actor->id, 'after' => $decision,
             ]);
             return (array) DB::table('noncash_collection_claims')->find($id);
-        }, 3);
+        });
     }
 }

@@ -9231,7 +9231,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
         $this->assertCount(29, $before['guards']);
-        $this->assertCount(16, $before['writers']);
+        $this->assertCount(17, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
         $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
         $this->assertArrayHasKey('held_release_journal', $before['guards']);
@@ -12419,6 +12419,73 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
         $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_collection_evidence_gate_rejects_frozen_writes_and_preserves_independent_decisions(): void
+    {
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic evidence account',
+            'square_id' => Square::create(['name' => 'Synthetic evidence square'])->id, 'status' => 'active']);
+        $session = app(CashSessionService::class)->open($issuer);
+        app(CashSessionService::class)->close($session, '0.00');
+        config(['financial_candidate.collection_evidence' => true]);
+        $claims = app(\App\Services\NonCashClaimService::class);
+        $reviews = app(\App\Services\LateReceiptReviewService::class);
+        $noncash = ['sync_uuid' => self::UUID, 'subscriber_id' => $subscriber->id,
+            'amount' => '0.25', 'payment_method' => 'check',
+            'instrument_reference' => 'QA-EVIDENCE-01', 'instrument_on' => '2026-10-31'];
+        $late = ['sync_uuid' => self::OTHER, 'subscriber_id' => $subscriber->id,
+            'cash_session_id' => $session->id, 'amount' => '0.35', 'payment_method' => 'cash',
+            'payment_date' => '2026-11-25'];
+        $reject = ['approve' => false, 'evidence' => self::EVIDENCE];
+        $snapshot = fn () => collect(['noncash_collection_claims', 'late_receipt_reviews', 'audit_events',
+            'payments', 'transactions', 'treasury_postings', 'financial_posting_events'])
+            ->mapWithKeys(fn ($table) => [$table => DB::table($table)->orderBy('id')->get()->map(fn ($row) => (array) $row)->all()])->all();
+        \Laravel\Sanctum\Sanctum::actingAs($issuer);
+        DB::table('financial_periods')->update(['state' => 'FROZEN']);
+        $before = $snapshot();
+        $this->postJson('/api/noncash-claims', $noncash)->assertConflict();
+        $this->postJson('/api/late-receipt-reviews', $late)->assertConflict();
+        $this->assertSame($before, $snapshot());
+        DB::table('financial_periods')->update(['state' => 'OPEN']);
+        $claimId = $this->postJson('/api/noncash-claims', $noncash)->assertCreated()->json('claim.id');
+        $reviewId = $this->postJson('/api/late-receipt-reviews', $late)->assertOk()->json('review.id');
+        $this->postJson('/api/noncash-claims', $noncash)->assertCreated()->assertJsonPath('claim.id', $claimId);
+        $this->postJson('/api/late-receipt-reviews', $late)->assertOk()->assertJsonPath('review.id', $reviewId);
+        $this->postJson('/api/noncash-claims/'.$claimId.'/reject', ['evidence' => self::EVIDENCE])->assertForbidden();
+        $this->postJson('/api/late-receipt-reviews/'.$reviewId.'/decide', $reject)->assertForbidden();
+        $before = $snapshot();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        DB::table('financial_periods')->update(['state' => 'FROZEN']);
+        $this->postJson('/api/noncash-claims/'.$claimId.'/reject', ['evidence' => self::EVIDENCE])->assertConflict();
+        $this->postJson('/api/late-receipt-reviews/'.$reviewId.'/decide', $reject)->assertConflict();
+        $this->assertSame($before, $snapshot());
+        DB::table('financial_periods')->update(['state' => 'OPEN']);
+        $this->postJson('/api/noncash-claims/'.$claimId.'/reject', ['evidence' => self::EVIDENCE])->assertOk()->assertJsonPath('claim.status', 'rejected');
+        $this->postJson('/api/late-receipt-reviews/'.$reviewId.'/decide', $reject)->assertOk()->assertJsonPath('review.status', 'rejected');
+        $after = $snapshot();
+        $this->postJson('/api/noncash-claims/'.$claimId.'/reject', ['evidence' => self::EVIDENCE])->assertOk();
+        $this->postJson('/api/late-receipt-reviews/'.$reviewId.'/decide', $reject)->assertOk();
+        $this->assertSame($after, $snapshot());
+        $disabled = $this->actor();
+        DB::table('users')->where('id', $disabled->id)->update(['disabled_at' => now()]);
+        foreach ([fn () => $claims->submit($disabled, $noncash), fn () => $reviews->submit($disabled, $late),
+            fn () => $claims->reject($disabled, $claimId, self::EVIDENCE),
+            fn () => $reviews->decide($reviewId, $disabled, $reject)] as $action) {
+            try {
+                $action();
+                $this->fail('Disabled stale actor accepted.');
+            } catch (\Symfony\Component\HttpKernel\Exception\HttpException $error) {
+                $this->assertSame(403, $error->getStatusCode());
+            }
+        }
+        $this->assertSame($after, $snapshot());
+        $this->assertDatabaseHas('noncash_collection_claims', ['id' => $claimId, 'decided_by' => $reviewer->id, 'instrument_on' => '2026-10-31']);
+        $this->assertDatabaseHas('late_receipt_reviews', ['id' => $reviewId, 'decided_by' => $reviewer->id]);
+        foreach (['payments', 'transactions', 'treasury_postings', 'financial_posting_events'] as $table) {
+            $this->assertDatabaseCount($table, 0);
+        }
     }
 
     public function test_cash_session_lifecycle_gate_requires_open_period_and_authorized_independent_actor(): void
