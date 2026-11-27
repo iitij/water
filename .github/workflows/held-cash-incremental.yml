@@ -109,6 +109,9 @@ jobs:
         run: |
           set -euo pipefail
           php artisan migrate:fresh --force
+          php artisan ledger:protect --install
+          php artisan ledger:protect --check
+          php artisan financial:database-preflight --guards
           docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password <<'SQL'
           CREATE USER 'water_runtime'@'%' IDENTIFIED BY 'disposable_runtime_password';
           GRANT SELECT, INSERT, UPDATE, DELETE ON `water\_test`.* TO 'water_runtime'@'%';

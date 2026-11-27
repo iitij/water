@@ -31,6 +31,7 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
         }
         $this->assertSame(0, DB::table('financial_scopes')->count());
         $this->assertTrue(app(FinancialTriggerMetadata::class)->deploymentVerified());
+        $this->assertTrue(app(\App\Services\LedgerProtection::class)->active(), 'Migration identity must explicitly install ledger protection.');
         $admin = DB::getDefaultConnection();
         $originalConfig = config('database.financial_trigger_metadata_routine');
         $config = config('database.connections.'.$admin);
@@ -117,6 +118,7 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             }
             $this->assertEquals($audit, DB::table('audit_events')->where('id', $audit->id)->sole());
             foreach ([
+                'DROP TRIGGER ledger_reject_update',
                 'DROP TRIGGER fin_source_invoices_insert',
                 'DROP TRIGGER fin_collection_audit_insert',
                 'DROP INDEX fin_collection_audit_identity ON audit_events',
@@ -132,6 +134,16 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
                 }
             }
             $this->assertEquals($before, $metadata());
+            $ledger = DB::table('transactions')->orderBy('id')->first();
+            $this->assertNotNull($ledger);
+            try {
+                DB::table('transactions')->where('id', $ledger->id)->update(['amount' => '9.99']);
+                $this->fail('Restricted runtime changed immutable ledger amount.');
+            } catch (QueryException $error) {
+                $this->assertSame('45000', $error->errorInfo[0]);
+                $this->assertStringContainsString('Ledger posting is immutable', $error->getMessage());
+            }
+            $this->assertEquals($ledger, DB::table('transactions')->where('id', $ledger->id)->sole());
             $useAdmin();
             DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
             $useRuntime();
@@ -174,6 +186,21 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             } finally {
                 $useAdmin();
                 app(\App\Services\CustodyShortageDecisionProtection::class)->install();
+            }
+            $useAdmin();
+            DB::unprepared('DROP TRIGGER ledger_reject_update');
+            try {
+                $useRuntime();
+                $damaged = $inventory();
+                $this->assertFalse($damaged['guards']['ledger']);
+                $this->assertFalse($damaged['listed_guards_active']);
+                $this->assertFalse($damaged['closure_authorized']);
+                $this->artisan('ledger:protect', ['--check' => true])->assertExitCode(1);
+                $this->artisan('ledger:protect', ['--install' => true])->assertExitCode(1);
+                $this->assertFalse(app(\App\Services\LedgerProtection::class)->active());
+            } finally {
+                $useAdmin();
+                app(\App\Services\LedgerProtection::class)->install();
             }
             $useAdmin();
             DB::unprepared('DROP INDEX fin_collection_audit_identity ON audit_events');
