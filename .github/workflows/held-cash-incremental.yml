@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify same-name trigger tampering
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_held_document_guard_detects_same_name_wrong_body_and_refuses_install tests/Feature/FinancialPostingRegistryTest.php
+      - name: Verify invalid financial registry source legs
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_registry_rejects_nonexistent_financial_source_legs tests/Feature/FinancialPostingRegistryTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
