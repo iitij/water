@@ -137,7 +137,7 @@ final class FinancialOutstandingPeriodEvidence
                     || (int) $session->approved_by <= 0 || (int) $session->approved_by === (int) $session->user_id) {
                     throw new DomainException('custody_period_independent_count_missing');
                 }
-                $target = Cash::positiveStored($session->getRawOriginal('counted_amount'), $driver, DecimalDomain::D14, 0);
+                $target = Cash::stored($session->getRawOriginal('counted_amount'), $driver, DecimalDomain::D14);
                 if ($approved < $from && $priorReceived === $target) continue;
                 $audits = AuditEvent::query()->where('event', 'cash_session.approved')->where('entity_type', CashSession::class)
                     ->where('entity_id', (string) $id)->lockForUpdate()->get();
