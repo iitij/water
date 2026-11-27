@@ -55,6 +55,14 @@ final class FinancialOutstandingPeriodEvidence
                 $totals['recorded_closing_unidentified_minor']),
             'recorded_rollforward_verified' => $held['registered_held_subledger_rollforward_verified'],
             'all_liabilities_verified' => false];
+        $variance = $this->varianceExposure($custody, $start);
+        return $base + ['transit' => $transit, 'custody' => $custody, 'liability' => $liability,
+            'variance_exposure' => $variance,
+            'adjacent_carry' => $this->adjacentCarry($period, $transit, $custody, $held, $variance)];
+    }
+
+    private function varianceExposure(array $custody, string $start): array
+    {
         // Expose gross unresolved variances separately. A count shortage is
         // not by itself an enforceable receivable, and a liquidity restriction
         // is not a second liability. Never net a shortage against a surplus.
@@ -85,6 +93,9 @@ final class FinancialOutstandingPeriodEvidence
             $shortageNew = $row['approval_before_period'] ? 0 : $shortage;
             $classified = $loss !== null && ! $priorLoss ? $loss['confirmed_loss_minor'] : 0;
             $remaining = SignedMinor::subtract(SignedMinor::subtract(SignedMinor::add($shortageOpening, $shortageNew), $classified), $recovered);
+            if (min($shortageOpening, $shortageNew, $classified, $recovered, $remaining) < 0) {
+                throw new DomainException('custody_shortage_rollforward_mismatch');
+            }
             $variance['recovered_minor'] = SignedMinor::add($variance['recovered_minor'], $recovered);
             $variance['confirmed_loss_minor'] = SignedMinor::add($variance['confirmed_loss_minor'], $classified);
             $variance['opening_unresolved_shortage_minor'] = SignedMinor::add($variance['opening_unresolved_shortage_minor'], $shortageOpening);
@@ -102,19 +113,17 @@ final class FinancialOutstandingPeriodEvidence
             SignedMinor::add($variance['confirmed_loss_minor'], $variance['recovered_minor'])) !== $variance['unresolved_shortage_minor']) {
             throw new DomainException('custody_shortage_rollforward_mismatch');
         }
-        return $base + ['transit' => $transit, 'custody' => $custody, 'liability' => $liability,
-            'variance_exposure' => $variance,
-            'adjacent_carry' => $this->adjacentCarry($period, $transit, $custody, $held)];
+        return $variance;
     }
 
     /** Compare independently reconstructed cutoffs, by source and owner.
      * This is not proof of legal due dates, a root opening, or a close journal. */
-    private function adjacentCarry(object $period, array $transit, array $custody, array $held): array
+    private function adjacentCarry(object $period, array $transit, array $custody, array $held, array $variance): array
     {
         $prior = DB::table('financial_periods')->where('scope_key', 'water')
             ->where('next_on', $period->start_on)->lockForUpdate()->get();
         $base = ['predecessor_period_id' => null, 'recorded_adjacent_rollforward_verified' => false,
-            'matched_sources' => 0, 'prior_source_hash' => null, 'closure_authorized' => false];
+            'matched_sources' => 0, 'matched_shortage_sources' => 0, 'prior_source_hash' => null, 'closure_authorized' => false];
         if ($prior->count() !== 1) {
             return $base + ['issues' => [['code' => 'outstanding_adjacent_period_missing_or_ambiguous']]];
         }
@@ -123,6 +132,7 @@ final class FinancialOutstandingPeriodEvidence
         $oldTransit = $this->transit($p->start_on, $p->next_on);
         $oldCustody = $this->custody($p->start_on, $p->next_on);
         $oldHeld = $this->held->inspect((int) $p->id);
+        $oldVariance = $this->varianceExposure($oldCustody, $p->start_on);
         $issues = [];
         foreach (['transit' => [$oldTransit, $transit], 'custody' => [$oldCustody, $custody]] as $sector => [$before, $after]) {
             if (! $before['recorded_rollforward_verified'] || ! $after['recorded_rollforward_verified']) {
@@ -168,11 +178,37 @@ final class FinancialOutstandingPeriodEvidence
                 $base['matched_sources']++;
             }
         }
+        // Unresolved count shortages are tracked as exposure, not booked
+        // receivables or physical cash. Compare each session independently.
+        $shortages = static function (array $variance, bool $opening): array {
+            $result = [];
+            foreach ($variance['rows'] as $r) {
+                if ($r['shortage_minor'] === 0) continue;
+                $result[$r['session_id']] = [
+                    'minor' => $r[$opening ? 'opening_unresolved_shortage_minor' : 'unresolved_shortage_minor'],
+                    'collector_id' => $r['collector_id'], 'original_minor' => $r['shortage_minor']];
+            }
+            ksort($result, SORT_NUMERIC);
+            return $result;
+        };
+        $oldShortages = $shortages($oldVariance, false);
+        $newShortages = $shortages($variance, true);
+        foreach (array_unique(array_merge(array_keys($oldShortages), array_keys($newShortages))) as $id) {
+            $old = $oldShortages[$id] ?? null;
+            $new = $newShortages[$id] ?? null;
+            if (($old['minor'] ?? 0) !== ($new['minor'] ?? 0)
+                || ($old !== null && $new !== null
+                    && ($old['collector_id'] !== $new['collector_id'] || $old['original_minor'] !== $new['original_minor']))) {
+                $issues[] = ['code' => 'outstanding_adjacent_shortage_mismatch', 'session_id' => $id];
+            } elseif (($old['minor'] ?? 0) > 0) {
+                $base['matched_shortage_sources']++;
+            }
+        }
         if ($issues === []) {
             $base['recorded_adjacent_rollforward_verified'] = true;
             $base['prior_source_hash'] = hash('sha256', json_encode([
                 'period_id' => (int) $p->id, 'transit' => $oldTransit, 'custody' => $oldCustody,
-                'held' => $oldHeld], JSON_THROW_ON_ERROR));
+                'held' => $oldHeld, 'variance_exposure' => $oldVariance], JSON_THROW_ON_ERROR));
         }
         return $base + ['issues' => $issues];
     }

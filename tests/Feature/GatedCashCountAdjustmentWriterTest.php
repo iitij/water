@@ -10413,6 +10413,11 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(200, $december['variance_exposure']['recovered_minor']);
         $this->assertSame(0, $december['variance_exposure']['confirmed_loss_minor']);
         $this->assertSame(0, $december['variance_exposure']['unresolved_shortage_minor']);
+        $this->assertTrue($december['adjacent_carry']['recorded_adjacent_rollforward_verified'],
+            json_encode($december['adjacent_carry']));
+        $this->assertSame(1, $december['adjacent_carry']['matched_shortage_sources']);
+        $this->assertSame([], $december['adjacent_carry']['issues']);
+        $this->assertFalse($december['variance_exposure']['rows'][0]['recoverable_recognized']);
         $this->assertSame(0, $december['custody']['recorded_closing_minor']);
         $this->assertTrue($december['custody']['all_count_variances_resolved'], json_encode($december['custody']));
         $this->assertFalse($december['closure_authorized']);
