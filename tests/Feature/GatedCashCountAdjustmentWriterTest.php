@@ -11959,7 +11959,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         \Laravel\Sanctum\Sanctum::actingAs($issuer);
         $this->postJson($url, $data)->assertForbidden();
         \Laravel\Sanctum\Sanctum::actingAs($reviewer);
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->postJson($url, $data)->assertConflict();
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -11978,6 +11978,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         config(['financial_candidate.late_cash_settlements' => false]);
         $this->postJson($url, $data)->assertConflict();
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $period = (int) DB::table('financial_periods')->value('id');
+        $proof = DB::transaction(fn () => app(\App\Services\FinancialCollectionPeriodEvidence::class)->inspect($period));
+        $this->assertTrue($proof['recorded_evidence_matched'], json_encode($proof));
+        $this->assertSame('approved', $proof['rows'][0]['status_at_cutoff']);
+        $this->assertCount(1, $proof['rows'][0]['decision']['posting']['legs']);
+        $this->assertSame(412, $proof['rows'][0]['decision']['posting']['amount_minor']);
     }
 
     public function test_release_counted_cash_fence_preserves_capacity_and_single_ledger_effect(): void
@@ -12423,6 +12430,11 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_collection_cutoff_audit_is_immutable_and_rejects_forged_identity(): void
     {
+        // A raw unrelated audit must remain writable on both engines; if not,
+        // let the database exception surface instead of AuditLogger masking it.
+        DB::table('audit_events')->insert(['event' => 'qa.unrelated.audit', 'source' => 'internal',
+            'occurred_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+        $this->assertDatabaseHas('audit_events', ['event' => 'qa.unrelated.audit']);
         $issuer = $this->actor();
         $reviewer = $this->actor();
         $subscriber = Subscriber::create(['name' => 'Synthetic protected collection audit',
@@ -12470,6 +12482,29 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $proof = DB::transaction(fn () => app(\App\Services\FinancialCollectionPeriodEvidence::class)->inspect($period));
         $this->assertTrue($proof['recorded_evidence_matched'], json_encode($proof));
         $this->assertSame('cleared', $proof['rows'][0]['status_at_cutoff']);
+        $this->assertCount(2, $proof['rows'][0]['decision']['posting']['legs']);
+        $this->assertSame(30, $proof['rows'][0]['decision']['posting']['amount_minor']);
+    }
+
+    public function test_collection_cutoff_registered_late_bank_proof(): void
+    {
+        $this->round134Collection('late_bank');
+        $this->assertLateCollectionCutoff();
+    }
+
+    public function test_collection_cutoff_registered_late_cash_proof(): void
+    {
+        $this->round134Collection('late_cash');
+        $this->assertLateCollectionCutoff();
+    }
+
+    private function assertLateCollectionCutoff(): void
+    {
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $period = (int) DB::table('financial_periods')->value('id');
+        $proof = DB::transaction(fn () => app(\App\Services\FinancialCollectionPeriodEvidence::class)->inspect($period));
+        $this->assertTrue($proof['recorded_evidence_matched'], json_encode($proof));
+        $this->assertSame('approved', $proof['rows'][0]['status_at_cutoff']);
         $this->assertCount(2, $proof['rows'][0]['decision']['posting']['legs']);
         $this->assertSame(30, $proof['rows'][0]['decision']['posting']['amount_minor']);
     }

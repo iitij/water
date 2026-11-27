@@ -44,19 +44,21 @@ final class CollectionEvidenceAuditProtection
         }
         $valid = '('.implode(' OR ', $identity).') AND NEW.actor_user_id IS NOT NULL AND NEW.entity_id IS NOT NULL
             AND NEW.occurred_at IS NOT NULL';
-        $duplicate = "EXISTS (SELECT 1 FROM audit_events a WHERE a.event = NEW.event AND a.entity_id = NEW.entity_id{$current})";
+        // MySQL cannot take a locking read on the table invoking its own trigger.
+        $duplicate = "EXISTS (SELECT 1 FROM audit_events a WHERE a.event = NEW.event AND a.entity_id = NEW.entity_id)";
         $fenced = "EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water' AND s.active_freeze_uuid IS NOT NULL{$current})
             OR EXISTS (SELECT 1 FROM financial_periods p WHERE p.scope_key = 'water'
                 AND {$local} >= p.start_on AND {$local} < p.next_on AND (p.state <> 'OPEN'
                 OR EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id{$current})
                 OR EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve'{$current})){$current})";
         $defs = [];
-        $add = static function (string $name, string $table, string $event, string $condition, bool $lock = false) use (&$defs, $sqlite): void {
+        $add = static function (string $name, string $table, string $event, string $condition, bool $lock = false) use (&$defs, $sqlite, $events): void {
             $condition = preg_replace('/\s+/', ' ', trim($condition));
             $message = 'Collection evidence audit is immutable or invalid';
-            $prefix = $lock ? "DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; " : '';
             $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$message}'); END"
-                : "BEGIN {$prefix}IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END";
+                : ($lock
+                    ? "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; IF NEW.event IN ({$events}) THEN SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END IF; END"
+                    : "BEGIN IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END");
             $defs[$name] = [$table, $event, "BEFORE {$event} ON {$table} FOR EACH ROW {$body}", $body];
         };
         $add('fin_collection_audit_update', 'audit_events', 'UPDATE', "({$scope('OLD')}) OR ({$scope('NEW')})");
