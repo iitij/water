@@ -55,6 +55,7 @@ final class FinancialWriterCoverageDiagnostic
             'custody_shortage_decisions' => fn () => app(CustodyShortageDecisionProtection::class)->active(),
             'custody_shortage_recovery_proposals' => fn () => app(CustodyShortageRecoveryProposalProtection::class)->active(),
             'custody_shortage_recoveries' => fn () => app(CustodyShortageRecoveryProtection::class)->active(),
+            'custody_shortage_period' => fn () => app(CustodyShortagePeriodProtection::class)->active(),
             'completed_refund_request' => fn () => app(CompletedCashRefundRequestProtection::class)->active(),
             'completed_refund_decision' => fn () => app(CompletedCashRefundDecisionProtection::class)->active(),
             'completed_refund_resolution_proposal' => fn () => app(CompletedCashRefundResolutionProposalProtection::class)->active(),
