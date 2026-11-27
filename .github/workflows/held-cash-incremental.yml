@@ -109,10 +109,14 @@ jobs:
           php artisan migrate --force
           php artisan ledger:protect --install
           php artisan financial:database-preflight --guards
-          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "CREATE USER 'water_close_runtime'@'%' IDENTIFIED BY 'disposable_close_password'; GRANT SELECT ON water\\_test.* TO 'water_close_runtime'@'%'; GRANT EXECUTE ON PROCEDURE water_test.financial_read_trigger_metadata TO 'water_close_runtime'@'%';"
-          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -N -B -e "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='water_test' AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('financial_scopes','financial_periods','financial_close_commands','financial_period_closures') ORDER BY TABLE_NAME" | while IFS= read -r table; do
+          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "CREATE USER 'water_close_runtime'@'%' IDENTIFIED BY 'disposable_close_password'; GRANT EXECUTE ON PROCEDURE water_test.financial_read_trigger_metadata TO 'water_close_runtime'@'%';"
+          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -N -B -e "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='water_test' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME" | while IFS= read -r table; do
             [[ "$table" =~ ^[a-zA-Z0-9_]+$ ]]
-            docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "GRANT INSERT, UPDATE, DELETE ON water_test.$table TO 'water_close_runtime'@'%';"
+            case "$table" in
+              financial_scopes|financial_periods|financial_close_commands|financial_period_closures) privileges=SELECT ;;
+              *) privileges='SELECT, INSERT, UPDATE, DELETE' ;;
+            esac
+            docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "GRANT $privileges ON water_test.$table TO 'water_close_runtime'@'%';"
           done
       - name: Verify actual isolated close control identity
         env:
