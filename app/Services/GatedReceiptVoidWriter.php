@@ -194,6 +194,15 @@ final class GatedReceiptVoidWriter
     {
         $date = $now->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
         return $this->gate->withinOpenPeriod('water', $date, $now, function (array $context) use ($actor, $id, $action): array {
+            app(SubscriberFinancialWriteProtection::class)->requireActive();
+            try {
+                $active = app(ReceiptVoidProtection::class)->active()
+                    && app(ReceiptVoidRequestProtection::class)->active()
+                    && app(DatedFinancialSourcePeriodProtection::class)->active();
+            } catch (\LogicException $error) {
+                throw new DomainException('receipt_void_write_protection_missing', 0, $error);
+            }
+            $this->need($active, 'receipt_void_write_protection_missing');
             DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
             $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_void_issuance_lock');
             $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
