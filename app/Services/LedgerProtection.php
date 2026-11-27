@@ -18,7 +18,7 @@ final class LedgerProtection
         }
         $row = FinancialTriggerMetadata::query()->where('TRIGGER_NAME', $name)->first();
         if ($row === null) return null;
-        if (! preg_match('/\ABEFORE (INSERT|UPDATE|DELETE) ON (\w+) FOR EACH ROW (.+)\z/s', $definition, $parts)) {
+        if (! preg_match('/\ABEFORE (INSERT|UPDATE|DELETE) ON (\w+) FOR EACH ROW\s+(.+)\z/s', $definition, $parts)) {
             throw new \LogicException('Invalid expected ledger trigger definition.');
         }
         return $row->EVENT_OBJECT_TABLE === $parts[2]
