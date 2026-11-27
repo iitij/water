@@ -85,6 +85,7 @@ final class FinancialCloseEvidenceDiagnostic
         $transit = $ended ? ($movement['recorded_movements_verified']
             ? $this->transit->inspect($period->start_on, $period->next_on)
             : ['matched' => false, 'issues' => [['code' => 'transit_period_movements_unverified']], 'totals' => null, 'rows' => []]) : null;
+        $custody = $ended ? $this->custodySessionInventory($period->next_on) : null;
         $incident = $this->refundIncidents();
         $batchCoverage = $this->refunds->verifyBatchAuditCoverage();
         $subscriber = $ended ? null : $this->subscribers->inspect($periodId);
@@ -105,6 +106,7 @@ final class FinancialCloseEvidenceDiagnostic
         if ($bankBalances !== null && ! $bankBalances['matched']) $blockers[] = 'bank_period_balances_unmatched';
         if ($cashObservations !== null && ! $cashObservations['matched']) $blockers[] = 'cash_period_observations_unmatched';
         if ($transit !== null && ! $transit['matched']) $blockers[] = 'transit_period_unmatched';
+        if ($custody !== null && $custody['unverified_session_ids'] !== []) $blockers[] = 'custody_session_cutoff_unverified';
         if ($incident['count'] !== 0 || $incident['orphan_accounts'] !== []) $blockers[] = 'unresolved_refund_incidents';
         if ($incident['unposted_cash_refund_minor'] !== 0) $blockers[] = 'unposted_cash_refunds';
         if ($subscriber !== null && ! $subscriber['scanned_accounts_match']) $blockers[] = 'subscriber_accounts_unmatched';
@@ -120,7 +122,7 @@ final class FinancialCloseEvidenceDiagnostic
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
             'bank_period_balances' => $bankBalances, 'cash_period_observations' => $cashObservations,
-            'transit_period' => $transit,
+            'transit_period' => $transit, 'custody_session_inventory' => $custody,
             'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
             'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
@@ -182,6 +184,52 @@ final class FinancialCloseEvidenceDiagnostic
 
         return ['matched' => $unverified === [], 'rows' => $unverified === [] ? $rows : [],
             'unverified_accounts' => $unverified];
+    }
+
+    /**
+     * Inventory only: a current approved state is not evidence of approval
+     * before the boundary. Do not certify any physical cash balance here.
+     */
+    private function custodySessionInventory(string $nextOn): array
+    {
+        $utc = new DateTimeZone('UTC');
+        $cutoff = (new DateTimeImmutable($nextOn, new DateTimeZone('Asia/Aden')))->setTimezone($utc);
+        $rows = DB::table('cash_sessions')->where(function ($q) use ($nextOn, $cutoff) {
+            $q->where('session_date', '<', $nextOn)
+                ->orWhere('opened_at', '<', $cutoff->format('Y-m-d H:i:s'));
+        })->orderBy('id')->lockForUpdate()->get();
+        $pending = $approvedCandidates = $unverified = [];
+        foreach ($rows as $row) {
+            $id = (string) $row->id;
+            $opened = $row->opened_at === null ? null : new DateTimeImmutable($row->opened_at, $utc);
+            $closed = $row->closed_at === null ? null : new DateTimeImmutable($row->closed_at, $utc);
+            $approved = $row->approved_at === null ? null : new DateTimeImmutable($row->approved_at, $utc);
+            if ($opened === null || $opened >= $cutoff || $row->session_date >= $nextOn
+                || ($closed !== null && $closed < $opened)
+                || ($approved !== null && ($closed === null || $approved < $closed))
+                || ! in_array($row->state, ['open', 'closed', 'approved', 'rejected'], true)
+                || (($row->state === 'approved') !== ($approved !== null))
+                || (($row->state === 'open') !== ($closed === null))) {
+                $unverified[] = $id;
+                continue;
+            }
+            if ($approved === null || $approved >= $cutoff) {
+                $pending[] = $id;
+                continue;
+            }
+            if ($row->settlement_basis !== 'physical_cash' || (int) $row->approved_by <= 0
+                || (int) $row->approved_by === (int) $row->user_id) {
+                $unverified[] = $id;
+                continue;
+            }
+            $approvedCandidates[] = $id;
+        }
+
+        return ['cutoff_utc' => $cutoff->format('Y-m-d\TH:i:s\Z'),
+            'pending_at_cutoff_session_ids' => $pending,
+            'approved_before_cutoff_candidate_ids' => $approvedCandidates,
+            'unverified_session_ids' => $unverified,
+            'physical_balances_verified' => false, 'totals' => null];
     }
 
     /** Scope-wide, deliberately not netted or restricted to the target month:
