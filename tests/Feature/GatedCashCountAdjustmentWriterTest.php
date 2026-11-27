@@ -9295,6 +9295,48 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $writer->collect($actor, (int) $subscriber->id, '1.00', self::NEXT, $later);
         $this->assertSame(300, $subscriber->fresh()->getAccountBalanceMinor());
         $this->assertSame($first, $inspect());
+        $dec = (int) DB::table('financial_periods')->where('month', '2026-12')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $inspectDec = fn () => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($dec));
+        $proof = $inspectDec();
+        $this->assertTrue($proof['all_cutoff_accounts_match'], json_encode($proof));
+        $this->assertTrue($proof['allocation_policy_verified']);
+        $this->assertSame([], $proof['prior_accounts']);
+        $row = $proof['rows'][0];
+        $this->assertSame(200, $row['opening_minor']);
+        $this->assertSame(100, $row['net_movement_minor']);
+        $this->assertSame(300, $row['closing_minor']);
+        $this->assertSame(300, $row['unallocated_minor']);
+        $this->assertSame($first['rows'][0]['source_hash'], $row['prior_source_hash']);
+        $this->assertSame($first['rows'][0]['revision_hash'], $row['prior_revision_hash']);
+        $this->assertTrue($row['prospective_chain_verified']);
+        $this->assertFalse($row['predecessor_verified']);
+        $this->assertFalse($proof['closure_authorized']);
+        $guard = app(\App\Services\FinancialPostingRegistryProtection::class);
+        $op = DB::table('financial_posting_operations')->where('operation_uuid', self::UUID)->sole();
+        DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
+        try {
+            DB::table('financial_posting_operations')->where('operation_uuid', self::UUID)
+                ->update(['recorded_at_utc' => '2026-11-30T21:00:00.000000Z']);
+        } finally {
+            $guard->install();
+        }
+        try {
+            $late = $inspectDec();
+            $this->assertFalse($late['all_cutoff_accounts_match']);
+            $this->assertFalse($late['allocation_policy_verified']);
+            $this->assertSame([], $late['rows']);
+            $this->assertContains(['code' => 'subscriber_cutoff_recorded_outside_period', 'subscriber_id' => (int) $subscriber->id], $late['issues']);
+        } finally {
+            DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
+            try {
+                DB::table('financial_posting_operations')->where('operation_uuid', self::UUID)
+                    ->update(['recorded_at_utc' => $op->recorded_at_utc]);
+            } finally {
+                $guard->install();
+            }
+        }
+        $this->assertSame($proof, $inspectDec());
     }
 
     public function test_final_accounting_subscriber_cutoff_reports_prior_movements_without_inventing_opening(): void
