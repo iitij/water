@@ -133,6 +133,20 @@ final class FinancialPostingRegistryTest extends TestCase
         }
     }
 
+    public function test_unknown_registry_source_is_reported_without_certifying_coverage(): void
+    {
+        $this->gate(fn (array $context) => $this->record($context, self::UUID, [$this->leg('10', 'bank', 10)]));
+        $periodId = (int) DB::table('financial_periods')->sole()->id;
+        $report = DB::transaction(fn () => app(\App\Services\FinancialLedgerRegistryVerifier::class)->verifyPeriod('water', $periodId));
+        $this->assertSame(1, $report['events']);
+        $this->assertSame(1, $report['other_registered_legs_unverified']);
+        $this->assertSame([
+            ['source_type' => 'payment', 'source_id' => '10', 'leg' => 'bank', 'reason' => 'unsupported_source_type'],
+        ], $report['unverified_registered_sources']);
+        $this->assertFalse($report['source_coverage_verified']);
+        $this->assertDatabaseCount('financial_posting_events', 1);
+    }
+
     public function test_registry_rejects_nonexistent_financial_source_legs(): void
     {
         $this->gate(fn (array $context) => $this->record($context, self::UUID, [$this->leg('10', 'bank', 10)]));
