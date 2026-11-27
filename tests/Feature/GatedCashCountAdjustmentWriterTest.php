@@ -9623,6 +9623,33 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['closure_authorized']);
     }
 
+    public function test_final_accounting_outstanding_rejects_late_recorded_prior_month_transfer(): void
+    {
+        [, , $account] = $this->fixture('100.00', funded: true);
+        $sender = $this->actor();
+        $receiver = $this->actor();
+        $destination = app(GatedTreasuryOpeningFundingWriter::class)->open($receiver, [
+            'code' => 'QA-LATE-CUTOFF-DEST', 'name' => 'Synthetic destination', 'channel' => 'cash',
+            'opening_on' => '2026-11-25', 'opening_amount' => '0.00',
+            'opening_reference' => 'QA-LATE-CUTOFF-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '55555555-5555-4555-8555-555555555555', $this->nowAt())['account'];
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $transfer = app(\App\Services\GatedTreasuryTransferWriter::class)->dispatch($sender, [
+            'from_account_id' => (int) $account['id'], 'to_account_id' => (int) $destination['id'],
+            'amount' => '4.00', 'reference' => 'QA-LATE-CUTOFF-SENT', 'dispatched_on' => '2026-11-30',
+            'evidence' => self::EVIDENCE,
+        ], '66666666-6666-4666-8666-666666666666', $later)['transfer'];
+        $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $result = DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($nov));
+        $this->assertFalse($result['transit']['recorded_rollforward_verified']);
+        $this->assertContains(['code' => 'outstanding_source_recorded_after_cutoff', 'transfer_id' => (int) $transfer['id']],
+            $result['transit']['issues']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseCount('treasury_transfers', 1);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+    }
+
     public function test_outstanding_period_evidence_conserves_three_sectors_across_cutoff(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();
