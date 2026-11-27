@@ -54,6 +54,7 @@ final class FinancialDatabasePreflight extends Command
                 'held_reinstatement' => fn () => app(HeldCashReleaseDocumentProtection::class)->reinstatementActive(),
                 'held_active_release' => fn () => app(\App\Services\ActiveHeldCashRelease::class)->protectionActive(),
                 'financial_approval_audit' => fn () => app(\App\Services\FinancialApprovalAuditProtection::class)->active(),
+                'custody_shortage_decisions' => fn () => app(\App\Services\CustodyShortageDecisionProtection::class)->active(),
                 'completed_refund_request' => fn () => app(\App\Services\CompletedCashRefundRequestProtection::class)->active(),
                 'completed_refund_decision' => fn () => app(\App\Services\CompletedCashRefundDecisionProtection::class)->active(),
                 'completed_refund_resolution_proposal' => fn () => app(\App\Services\CompletedCashRefundResolutionProposalProtection::class)->active(),
