@@ -168,9 +168,10 @@ final class FinancialSubscriberPeriodEvidence
             if ($previous !== null && SignedMinor::add($previous['recorded_balance_minor'], $net) !== $row['recorded_balance_minor']) {
                 throw new DomainException('subscriber_cutoff_chain_conservation');
             }
-            if ($pid === $periodId) {
-                if ($previous === null) throw new DomainException('subscriber_cutoff_period_chain_gap');
-                $saved = $predecessor['rows']['subscriber:'.$id] ?? null;
+            if ($previous !== null) {
+                $priorJournal = $pid === $periodId ? $predecessor
+                    : app(FinancialOpeningContinuityDiagnostic::class)->predecessor($pid);
+                $saved = $priorJournal['rows']['subscriber:'.$id] ?? null;
                 if ($saved !== null && $saved['closing'] !== $previous['recorded_balance_minor']) {
                     throw new DomainException('subscriber_cutoff_predecessor_mismatch');
                 }
@@ -180,10 +181,13 @@ final class FinancialSubscriberPeriodEvidence
                 $row['prior_source_hash'] = $previous['source_hash'];
                 $row['prior_revision_hash'] = $previous['revision_hash'];
                 $row['prospective_chain_verified'] = true;
-                $row['predecessor_journal_hash'] = $predecessor['predecessor_hash'];
+                $row['predecessor_journal_hash'] = $priorJournal['predecessor_hash'];
                 $row['predecessor_verified'] = false;
                 unset($row['source_hash']);
                 $row['source_hash'] = hash('sha256', json_encode($row, JSON_THROW_ON_ERROR));
+            }
+            if ($pid === $periodId) {
+                if ($previous === null) throw new DomainException('subscriber_cutoff_period_chain_gap');
                 return $row;
             }
             $previous = $row;

@@ -9339,6 +9339,73 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($proof, $inspectDec());
     }
 
+    public function test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods(): void
+    {
+        $actor = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic three month subscriber',
+            'square_id' => Square::create(['name' => 'Three month square'])->id, 'status' => 'active']);
+        \App\Models\Tariff::create(['name' => 'Synthetic cutoff tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-THREE-CUTOFFS']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoices = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $receipts = app(GatedCashReceiptWriter::class);
+        $invoice = $invoices->issue($actor, (int) $subscriber->id, (int) $meter->id, self::UUID, $this->nowAt())['invoice'];
+        $this->assertSame('1.00', $invoice->total_amount);
+        $receipts->collect($actor, (int) $subscriber->id, '0.40', self::OTHER, $this->nowAt(), invoiceId: (int) $invoice->id);
+        $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $dec = (int) DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $jan = (int) DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2027-01', 'start_on' => '2027-01-01',
+            'next_on' => '2027-02-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $inspect = fn (int $id) => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($id));
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $first = $inspect($nov);
+        $this->assertTrue($first['all_cutoff_accounts_match'], json_encode($first));
+        $this->assertSame(-60, $first['rows'][0]['recorded_balance_minor']);
+        $this->assertSame(40, $first['rows'][0]['allocated_minor']);
+        $this->assertSame(0, $first['rows'][0]['unallocated_minor']);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $receipts->collect($actor, (int) $subscriber->id, '0.80', self::NEXT, $later, invoiceId: (int) $invoice->id);
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $second = $inspect($dec);
+        $this->assertTrue($second['all_cutoff_accounts_match'], json_encode($second));
+        $row = $second['rows'][0];
+        $this->assertSame(-60, $row['opening_minor']);
+        $this->assertSame(80, $row['net_movement_minor']);
+        $this->assertSame(20, $row['closing_minor']);
+        $this->assertSame(100, $row['allocated_minor']);
+        $this->assertSame(20, $row['unallocated_minor']);
+        $this->assertSame($first['rows'][0]['source_hash'], $row['prior_source_hash']);
+        $this->assertSame($first, $inspect($nov));
+        $later = new DateTimeImmutable('2027-01-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $this->assertTrue($invoices->cancel($actor, (int) $invoice->id,
+            'Independent documented prospective cancellation', self::ADJUST, $later)['registry_created']);
+        $this->assertSame(120, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->travelTo(\Carbon\Carbon::parse('2027-02-01T00:00:00+03:00'));
+        $third = $inspect($jan);
+        $this->assertTrue($third['all_cutoff_accounts_match'], json_encode($third));
+        $last = $third['rows'][0];
+        $this->assertSame(20, $last['opening_minor']);
+        $this->assertSame(100, $last['net_movement_minor']);
+        $this->assertSame(120, $last['closing_minor']);
+        $this->assertSame(0, $last['billed_minor']);
+        $this->assertSame(0, $last['allocated_minor']);
+        $this->assertSame(120, $last['unallocated_minor']);
+        $this->assertSame($row['source_hash'], $last['prior_source_hash']);
+        $this->assertSame($row['revision_hash'], $last['prior_revision_hash']);
+        $this->assertSame($first, $inspect($nov));
+        $this->assertSame($second, $inspect($dec));
+        $this->assertFalse($third['closure_authorized']);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+    }
+
     public function test_final_accounting_subscriber_cutoff_reports_prior_movements_without_inventing_opening(): void
     {
         $actor = $this->actor();
