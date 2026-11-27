@@ -54,6 +54,8 @@ final class FinancialWriterCoverageDiagnostic
             'listed_guards_active' => ! in_array(false, $guards, true),
             'runtime_grant_allowlist_accepted' => $grantReport['accepted'],
             'runtime_grant_issues' => $grantReport['issues'],
+            'runtime_close_control_write_isolated' => $grantReport['close_control_write_isolated'] ?? false,
+            'runtime_close_control_issues' => $grantReport['close_control_issues'] ?? ['runtime_grants_unverifiable'],
             'exclusive_entrypoints_verified' => false, 'runtime_privileges_verified' => false,
             'complete_writer_coverage_verified' => false, 'closure_authorized' => false];
     }
