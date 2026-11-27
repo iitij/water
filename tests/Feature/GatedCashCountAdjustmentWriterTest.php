@@ -9155,10 +9155,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $shortCollector = $this->actor();
         $shortSession = $sessions->open($shortCollector);
         app(GatedCashReceiptWriter::class)->collect($shortCollector, (int) $subscriber->id, '2.00',
-            '11111111-1111-4111-8111-111111111111', $this->nowAt(), (int) $shortSession->id);
+            'b7ca5801-8840-48df-9cd5-9fc67d47f016', $this->nowAt(), (int) $shortSession->id);
         $shortSession = $sessions->decide($sessions->close($shortSession, '0.00'), true, $reviewer);
         \Laravel\Sanctum\Sanctum::actingAs($sender);
-        $recoveryUuid = '22222222-2222-4222-8222-222222222222';
+        $recoveryUuid = 'b7ca5802-8840-48df-9cd5-9fc67d47f016';
         app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($sender, (int) $shortSession->id,
             $cashId, 'QA-FINAL-CYCLE-RECOVERY', self::EVIDENCE, $recoveryUuid, $this->nowAt(), 120);
         \Laravel\Sanctum\Sanctum::actingAs($reviewer);
