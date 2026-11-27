@@ -113,6 +113,48 @@ final class FinancialCleanStartTest extends TestCase
         $this->assertTrue($guard->active());
     }
 
+    public function test_independent_review_confirms_empty_start_without_activating_writers(): void
+    {
+        $initializer = $this->actor();
+        $service = app(FinancialCleanStart::class);
+        $initial = $service->initialize($initializer, '2026-12');
+        $this->rejects('clean_start_review_requires_independent_actor', fn () => $service->review($initializer));
+        $reviewer = $this->actor();
+        $result = $service->review($reviewer);
+        $this->assertSame($initial['period_id'], $result['period_id']);
+        $this->assertSame($initializer->id, $result['initialized_by']);
+        $this->assertSame($reviewer->id, $result['reviewed_by']);
+        $this->assertTrue($result['empty_start_reviewed']);
+        $this->assertFalse($result['root_opening_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseHas('financial_scopes', ['scope_key' => 'water', 'mode' => 'LEGACY_DISABLED']);
+        $this->assertDatabaseHas('audit_events', ['event' => 'financial.clean_start_reviewed', 'actor_user_id' => $reviewer->id]);
+        $this->rejects('clean_start_review_audit_count', fn () => $service->review($reviewer));
+        $this->assertDatabaseCount('audit_events', 2);
+        $row = (array) DB::table('audit_events')->where('event', 'financial.clean_start_reviewed')->sole();
+        try {
+            DB::table('audit_events')->where('id', $row['id'])->delete();
+            $this->fail('Expected immutable review.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('Financial clean-start audit is immutable or invalid', $error->getMessage());
+        }
+        $this->assertEquals($row, (array) DB::table('audit_events')->where('id', $row['id'])->sole());
+    }
+
+    public function test_review_rejects_new_records_after_initialization(): void
+    {
+        $initializer = $this->actor();
+        $service = app(FinancialCleanStart::class);
+        $service->initialize($initializer, '2026-12');
+        $reviewer = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic late subscriber',
+            'square_id' => Square::create(['name' => 'QA square'])->id, 'status' => 'active']);
+        $this->rejects('clean_start_nonempty:subscribers', fn () => $service->review($reviewer));
+        $this->assertDatabaseCount('audit_events', 1);
+        $this->assertDatabaseHas('subscribers', ['id' => $subscriber->id]);
+        $this->assertDatabaseHas('financial_scopes', ['scope_key' => 'water', 'mode' => 'LEGACY_DISABLED']);
+    }
+
     public function test_clean_start_refuses_existing_records_without_deleting_them(): void
     {
         $actor = $this->actor();
