@@ -41,6 +41,7 @@ final class FinancialCloseCoordinator
             'action' => $action, 'actor' => $actorId, 'command' => $command]);
         $hash = hash('sha256', $bytes);
 
+        app(FinancialConnectionIntegrity::class)->requireActive();
         return DB::transaction(function () use ($scope, $month, $action, $actorId, $command, $now, $bytes, $hash): array {
             $gate = DB::table('financial_scopes')->where('scope_key', $scope)->lockForUpdate()->first();
             $this->need($gate && $gate->scope_key === $scope && $gate->mode === 'ACTIVE'
@@ -75,6 +76,7 @@ final class FinancialCloseCoordinator
                     $this->need(($evidence['facts']['persisted_effects_verified'] ?? null) === true
                         && $state['state'] === 'CLOSED', 'close_replay_effects_unverified');
                 }
+                app(FinancialConnectionIntegrity::class)->requireActive();
                 return ['replayed' => true, 'result' => $history[$command['uuid']], 'current_state' => $state['state']];
             }
 
@@ -126,6 +128,7 @@ final class FinancialCloseCoordinator
                         'active_freeze_uuid' => $action === 'freeze' ? $next['attempt']['uuid'] : null,
                     ]) === 1, 'close_scope_update');
             }
+            app(FinancialConnectionIntegrity::class)->requireActive();
             return ['replayed' => false, 'result' => $next, 'current_state' => $next['state']];
         }, 1);
     }
