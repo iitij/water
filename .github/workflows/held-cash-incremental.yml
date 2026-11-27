@@ -1,13 +1,13 @@
-name: Prospective refund signed API transport
+name: Financial ledger trigger attestation
 on:
   pull_request:
-    branches: ['release/prospective-refund-signed-settlement']
+    branches: ['main']
     types: [opened, synchronize, reopened]
 permissions:
   contents: read
 jobs:
   sqlite:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/prospective-refund-signed-api'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/close-resume-176-ledger-attestation'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -39,10 +39,11 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify signed API transport and renewal
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_signed_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify coordinator protection and replay
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_rejects_a_same_name_but_ineffective_ledger_trigger|test_close_refuses_commands_and_replays_without_ledger_protection' tests/Feature/FinancialCloseCoordinatorTest.php
   mysql:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/prospective-refund-signed-api'
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/close-resume-176-ledger-attestation'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     services:
@@ -101,5 +102,6 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify signed API transport and renewal
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_signed_api_' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify coordinator protection and replay
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_rejects_a_same_name_but_ineffective_ledger_trigger|test_close_refuses_commands_and_replays_without_ledger_protection' tests/Feature/FinancialCloseCoordinatorTest.php
