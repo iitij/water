@@ -86,6 +86,10 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             $this->assertSame([], $verified['runtime_grant_issues']);
             $this->assertTrue($verified['listed_guards_active'], json_encode($verified['guards']));
             $this->assertTrue($verified['guards']['custody_shortage_decisions']);
+            $this->assertTrue($verified['guards']['cash_count_period']);
+            $this->assertTrue($verified['guards']['refund_release_period']);
+            $this->assertTrue($verified['guards']['live_metadata_routine']);
+            $this->assertSame($verified['guards'], app(\App\Services\FinancialGuardInventory::class)->inspect());
             $this->assertFalse($verified['complete_writer_coverage_verified']);
             $this->assertFalse($verified['closure_authorized']);
             $this->artisan('financial:database-preflight', ['--runtime' => true])->assertExitCode(0);
@@ -121,6 +125,8 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
                 'DROP TRIGGER ledger_reject_update',
                 'DROP TRIGGER fin_source_invoices_insert',
                 'DROP TRIGGER fin_collection_audit_insert',
+                'DROP TRIGGER fin_count_treasury_cash_counts_insert',
+                'DROP TRIGGER fin_refund_release_audit_period',
                 'DROP INDEX fin_collection_audit_identity ON audit_events',
                 'ALTER TABLE invoices ADD COLUMN qa_forbidden INT NULL',
                 'TRUNCATE TABLE financial_posting_events',
@@ -186,6 +192,25 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             } finally {
                 $useAdmin();
                 app(\App\Services\CustodyShortageDecisionProtection::class)->install();
+            }
+            foreach ([
+                ['fin_count_treasury_cash_counts_insert', 'cash_count_period', \App\Services\CashCountPeriodProtection::class],
+                ['fin_refund_release_audit_period', 'refund_release_period', \App\Services\RefundReleasePeriodProtection::class],
+            ] as [$trigger, $key, $protection]) {
+                $useAdmin();
+                DB::unprepared('DROP TRIGGER '.$trigger);
+                try {
+                    $useRuntime();
+                    $damaged = $inventory();
+                    $this->assertFalse($damaged['guards'][$key]);
+                    $this->assertFalse($damaged['listed_guards_active']);
+                    $this->assertFalse($damaged['closure_authorized']);
+                    $this->artisan('financial:database-preflight', ['--guards' => true])
+                        ->expectsOutput($key.': missing or unverifiable')->assertExitCode(1);
+                } finally {
+                    $useAdmin();
+                    app($protection)->install();
+                }
             }
             $useAdmin();
             DB::unprepared('DROP TRIGGER ledger_reject_update');

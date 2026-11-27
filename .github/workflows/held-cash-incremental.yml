@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify corrected refund and release audit fence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_release_audit_fence_requires_actual_open_period' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify grant allowlist parser
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,21 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify corrected refund and release audit fence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_refund_release_audit_fence_requires_actual_open_period' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Prepare isolated migration and runtime users
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          test "$DB_DATABASE" = water_test
+          php artisan migrate --force
+          php artisan ledger:protect --install
+          php -r 'require "vendor/autoload.php"; $app = require "bootstrap/app.php"; $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); $app->make(App\Services\FinancialTriggerMetadata::class)->install();'
+          docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password <<'SQL'
+          CREATE USER 'water_runtime'@'%' IDENTIFIED BY 'disposable_runtime_password';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON `water\_test`.* TO 'water_runtime'@'%';
+          GRANT EXECUTE ON PROCEDURE `water_test`.`financial_read_trigger_metadata` TO 'water_runtime'@'%';
+          SQL
+      - name: Verify restricted runtime and shared guard inventory
+        env:
+          WATER_QA_RUNTIME: '1'
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseRuntimePrivilegesTest.php
