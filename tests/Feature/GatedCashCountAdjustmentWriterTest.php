@@ -9230,7 +9230,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     {
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
-        $this->assertCount(29, $before['guards']);
+        $this->assertCount(30, $before['guards']);
         $this->assertCount(17, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
         $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
@@ -12419,6 +12419,80 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
         $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+    }
+
+    public function test_collection_evidence_database_fence_preserves_prior_source_and_later_decision(): void
+    {
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic fenced claim account',
+            'square_id' => Square::create(['name' => 'Synthetic fenced claim square'])->id, 'status' => 'active']);
+        $session = app(CashSessionService::class)->open($issuer);
+        app(CashSessionService::class)->close($session, '0.00');
+        config(['financial_candidate.collection_evidence' => true]);
+        $claim = app(\App\Services\NonCashClaimService::class)->submit($issuer, [
+            'sync_uuid' => self::UUID, 'subscriber_id' => $subscriber->id, 'amount' => '0.25',
+            'payment_method' => 'check', 'instrument_reference' => 'QA-CLAIM-FENCE', 'instrument_on' => '2026-11-25']);
+        $review = app(\App\Services\LateReceiptReviewService::class)->submit($issuer, [
+            'sync_uuid' => self::OTHER, 'subscriber_id' => $subscriber->id, 'cash_session_id' => $session->id,
+            'amount' => '0.35', 'payment_method' => 'cash', 'payment_date' => '2026-11-25']);
+        $this->assertTrue(app(\App\Services\CollectionEvidencePeriodProtection::class)->active());
+        $snapshots = ['noncash_collection_claims' => $claim, 'late_receipt_reviews' => $review];
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-02T08:30:00Z'));
+        $reject = function (callable $action): void {
+            try {
+                $action();
+                $this->fail('Collection evidence mutation unexpectedly succeeded.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Collection evidence period is fenced', $error->getMessage());
+                if (DB::getDriverName() === 'mysql') $this->assertSame('45000', $error->errorInfo[0]);
+            }
+        };
+        foreach ($snapshots as $table => $row) {
+            $source = $table === 'noncash_collection_claims' ? 'amount_minor' : 'amount';
+            $insert = $row;
+            unset($insert['id']);
+            $insert['sync_uuid'] = $table === 'noncash_collection_claims' ? self::ADJUST : self::NEXT;
+            if ($table === 'noncash_collection_claims') $insert['instrument_reference'] = 'QA-RAW-CLAIM';
+            $reject(fn () => DB::table($table)->insert($insert));
+            $reject(fn () => DB::table($table)->where('id', $row['id'])->update([$source => 99]));
+            $reject(fn () => DB::table($table)->where('id', $row['id'])->delete());
+            $reject(fn () => DB::table($table)->where('id', $row['id'])->update([
+                'status' => 'rejected', 'decided_by' => $reviewer->id, 'decided_at' => '2026-11-30 20:59:59']));
+            if (DB::getDriverName() === 'sqlite') {
+                $replacement = array_replace($row, ['created_at' => '2026-12-02 08:30:00', 'updated_at' => '2026-12-02 08:30:00']);
+                $reject(fn () => DB::statement('INSERT OR REPLACE INTO '.$table.' ('.implode(',', array_keys($replacement)).') VALUES ('
+                    .implode(',', array_fill(0, count($replacement), '?')).')', array_values($replacement)));
+            }
+            $this->assertSame($row, (array) DB::table($table)->sole());
+        }
+        DB::table('financial_scopes')->update(['active_freeze_uuid' => self::ADJUST]);
+        foreach ($snapshots as $table => $row) {
+            $reject(fn () => DB::table($table)->where('id', $row['id'])->update(['updated_at' => now()]));
+            $this->assertSame($row, (array) DB::table($table)->sole());
+        }
+        DB::table('financial_scopes')->update(['active_freeze_uuid' => null]);
+        $claimAfter = app(\App\Services\NonCashClaimService::class)->reject($reviewer, $claim['id'], self::EVIDENCE);
+        $reviewAfter = app(\App\Services\LateReceiptReviewService::class)->decide($review['id'], $reviewer,
+            ['approve' => false, 'evidence' => self::EVIDENCE]);
+        foreach (['noncash_collection_claims' => $claimAfter, 'late_receipt_reviews' => $reviewAfter] as $table => $row) {
+            $this->assertSame('rejected', $row['status']);
+            $this->assertSame($snapshots[$table]['created_at'], $row['created_at']);
+            $this->assertSame((int) $reviewer->id, (int) $row['decided_by']);
+            $this->assertSame('2026-12-02', substr($row['decided_at'], 0, 10));
+        }
+        DB::table('financial_periods')->where('month', '2026-12')->update(['state' => 'CLOSED']);
+        foreach (['noncash_collection_claims' => $claimAfter, 'late_receipt_reviews' => $reviewAfter] as $table => $row) {
+            $reject(fn () => DB::table($table)->where('id', $row['id'])->update(['decided_at' => null]));
+            $reject(fn () => DB::table($table)->where('id', $row['id'])->delete());
+            $this->assertSame($row, (array) DB::table($table)->sole());
+        }
+        foreach (['payments', 'transactions', 'treasury_postings', 'financial_posting_events'] as $table) {
+            $this->assertDatabaseCount($table, 0);
+        }
     }
 
     public function test_collection_evidence_gate_rejects_frozen_writes_and_preserves_independent_decisions(): void
