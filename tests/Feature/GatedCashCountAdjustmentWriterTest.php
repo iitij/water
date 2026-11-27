@@ -8905,6 +8905,29 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertTrue($this->payoutHeld($executor, 5, '55555555-5555-4555-8555-555555555555')['created']);
         $this->assertTrue($this->creditHeld($this->actor(), 10, '66666666-6666-4666-8666-666666666666')['created']);
         $this->assertTrue(app(\App\Services\HeldCashDestinationProtection::class)->active());
+        $this->assertTrue(app(\App\Services\HeldRegistryLinkProtection::class)->active());
+        foreach (['treasury_held_cash_assignments', 'treasury_held_cash_payouts'] as $table) {
+            $row = (array) DB::table($table)->sole();
+            $candidate = array_replace($row, ['operation_uuid' => 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+                'reference' => 'QA-HELD-MISSING-REGISTRY']);
+            try {
+                DB::table($table)->insert($candidate);
+                $this->fail('Held source without registry accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Held cash source period is fenced', $error->getMessage());
+            }
+            $this->assertSame($row, (array) DB::table($table)->sole());
+        }
+        $event = array_diff_key((array) DB::table('financial_posting_events')->where('source_type', 'held_cash_credit')->sole(), ['id' => true]);
+        foreach ([['source_id' => '99999999'], ['leg' => 'wrong']] as $bad) {
+            try {
+                DB::table('financial_posting_events')->insert(array_replace($event, $bad));
+                $this->fail('Invalid held credit registry source accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Financial registry source identity is invalid', $error->getMessage());
+            }
+        }
+
         foreach (['treasury_held_cash_assignments', 'treasury_held_cash_payout_authorizations',
             'treasury_held_cash_payout_cancellations', 'treasury_held_cash_payouts',
             'treasury_held_cash_credits', 'treasury_held_cash_liabilities'] as $table) {
