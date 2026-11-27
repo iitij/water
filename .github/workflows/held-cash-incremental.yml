@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify complete close evidence guard inventory
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_close_evidence_guard_loss_blocks_progress_but_preserves_abort tests/Feature/FinancialCloseCoordinatorTest.php
+      - name: Verify registry-bound cutoff evidence on integrated cycle
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify complete close evidence guard inventory
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_close_evidence_guard_loss_blocks_progress_but_preserves_abort tests/Feature/FinancialCloseCoordinatorTest.php
+      - name: Verify registry-bound cutoff evidence on integrated cycle
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss tests/Feature/GatedCashCountAdjustmentWriterTest.php
