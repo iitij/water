@@ -10586,6 +10586,18 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $before = DB::table('treasury_postings')->count();
         $events = DB::table('financial_posting_events')->count();
         \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $guard = app(\App\Services\FinancialPostingRegistryProtection::class);
+        $auditCount = DB::table('audit_events')->count();
+        DB::unprepared('DROP TRIGGER fin_registry_leg_reject_update');
+        try {
+            $this->rejects('posting_registry_protection_missing', fn () =>
+                $service->propose($proposer, (int) $session->id, 'Independent documented count loss', self::EVIDENCE, $this->nowAt()));
+            $this->assertSame($auditCount, DB::table('audit_events')->count());
+            $this->assertSame($before, DB::table('treasury_postings')->count());
+            $this->assertSame($events, DB::table('financial_posting_events')->count());
+        } finally {
+            $guard->install();
+        }
         $proposed = $service->propose($proposer, (int) $session->id, 'Independent documented count loss', self::EVIDENCE, $this->nowAt());
         $this->assertTrue($proposed['created']);
         $this->assertFalse($service->propose($proposer, (int) $session->id, 'Independent documented count loss', self::EVIDENCE, $this->nowAt())['created']);
@@ -10599,6 +10611,17 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $inspect = fn (int $period) => DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($period));
         $november = $inspect($nov);
         $this->assertSame(200, $november['variance_exposure']['unresolved_shortage_minor']);
+        $auditCount = DB::table('audit_events')->count();
+        DB::unprepared('DROP TRIGGER fin_registry_leg_reject_update');
+        try {
+            $this->rejects('posting_registry_protection_missing', fn () =>
+                $service->approve($reviewer, (int) $session->id, $later));
+            $this->assertSame($auditCount, DB::table('audit_events')->count());
+            $this->assertSame($before, DB::table('treasury_postings')->count());
+            $this->assertSame($events, DB::table('financial_posting_events')->count());
+        } finally {
+            $guard->install();
+        }
         $result = $service->approve($reviewer, (int) $session->id, $later);
         $this->assertTrue($result['created']);
         $this->assertSame(200, $result['confirmed_loss_minor']);

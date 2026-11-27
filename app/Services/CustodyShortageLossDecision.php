@@ -182,8 +182,19 @@ final class CustodyShortageLossDecision
             }
             $shortage = SignedMinor::negate($variance);
             if (($recovery['recovered_minor'] ?? 0) >= $shortage) throw new DomainException('shortage_loss_recovery_conflict');
-            return $action($actor, ['session_id' => $sessionId, 'collector_id' => (int) $session->user_id,
-                'count_approval_id' => (int) $approval->id, 'shortage_minor' => $shortage], $date, $recovery);
+            // An approved count is not sufficient evidence of a real shortage.
+            // Revalidate registered funding, collections and reversals before
+            // recording either a proposal or an independent loss approval.
+            $source = ['session_id' => $sessionId, 'collector_id' => (int) $session->user_id,
+                'count_approval_id' => (int) $approval->id, 'shortage_minor' => $shortage];
+            $next = (new DateTimeImmutable($date, new DateTimeZone('Asia/Aden')))->modify('+1 day')->format('Y-m-d');
+            $verified = app(FinancialOutstandingPeriodEvidence::class)->verifiedShortageSource($session, $next);
+            foreach ($source as $key => $value) {
+                if (($verified[$key] ?? null) !== $value) {
+                    throw new DomainException('shortage_loss_original_source_unverified');
+                }
+            }
+            return $action($actor, $source, $date, $recovery);
         });
     }
 
