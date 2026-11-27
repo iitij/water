@@ -49,6 +49,18 @@ final class HeldRegistryLinkProtection
                 "EXISTS (SELECT 1 FROM financial_scopes s WHERE s.scope_key = 'water'{$lock}) AND NOT COALESCE(({$valid}), 0)",
                 "'water'", 'Held cash source period is fenced');
         }
+        // Assignment and payout writers register both legs before inserting
+        // the source document. Enforce identity and direction at that first
+        // step, without requiring the not-yet-persisted document.
+        $assignmentLeg = "((NEW.leg = 'identified_liability' AND NEW.amount_minor > 0)
+            OR (NEW.leg = 'unidentified_liability' AND NEW.amount_minor < 0))";
+        $payoutLeg = "(NEW.leg IN ('identified_liability', 'treasury') AND NEW.amount_minor < 0)";
+        $validLeg = "HEX(NEW.source_id) = HEX(NEW.operation_uuid) AND NEW.scope_key = 'water'
+            AND NEW.currency = 'YER' AND ((NEW.source_type = 'held_cash_assignment' AND {$assignmentLeg})
+                OR (NEW.source_type = 'held_cash_payout' AND {$payoutLeg}))";
+        $add('fin_held_link_registry_first_event', 'financial_posting_events',
+            "NEW.source_type IN ('held_cash_assignment', 'held_cash_payout') AND NOT COALESCE(({$validLeg}), 0)",
+            'NEW.scope_key', 'Financial registry source identity is invalid');
         $amount = $sqlite ? 'd.amount = -NEW.amount_minor / 100.0' : 'd.amount * 100 = -NEW.amount_minor';
         $credit = "NEW.leg = 'identified_liability' AND NEW.amount_minor < 0
             AND EXISTS (SELECT 1 FROM treasury_held_cash_credits d
