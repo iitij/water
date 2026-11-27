@@ -47,6 +47,7 @@ final class FinancialDatabasePreflight extends Command
                 'close_journal' => fn () => app(\App\Services\FinancialCloseJournalProtection::class)->active(),
                 'posting_registry' => fn () => app(\App\Services\FinancialPostingRegistryProtection::class)->active(),
                 'financial_source_fences' => fn () => app(\App\Services\FinancialSourceInsertProtection::class)->active(),
+                'observation_graph_freeze' => fn () => app(\App\Services\ObservationGraphFreezeProtection::class)->active(),
                 'collection_evidence_audit' => fn () => app(\App\Services\CollectionEvidenceAuditProtection::class)->active(),
                 'collection_evidence_period' => fn () => app(\App\Services\CollectionEvidencePeriodProtection::class)->active(),
                 'bank_evidence_period' => fn () => app(\App\Services\BankEvidencePeriodProtection::class)->active(),

@@ -5719,6 +5719,62 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('payments', 0);
     }
 
+    public function test_raw_observation_graph_freeze_blocks_all_mutations_and_detects_missing_guard(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-RAW-FREEZE',
+            'installed_at' => '2026-11-01', 'initial_reading' => '0.00']);
+        $reading = $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $tables = ['squares', 'subscribers', 'meters', 'readings'];
+        $ids = [$subscriber->square_id, $subscriber->id, $meter->id, $reading->id];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->orderBy('id')->get()->toArray(), $tables);
+        $before = $snapshot();
+        $guard = app(\App\Services\ObservationGraphFreezeProtection::class);
+        $this->assertTrue($guard->active());
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
+        $reject = function (callable $write) use ($before, $snapshot): void {
+            try {
+                $write();
+                $this->fail('Raw observation graph mutation accepted during freeze.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Observation graph is frozen', $error->getMessage());
+                if (DB::getDriverName() === 'mysql') $this->assertSame('45000', $error->errorInfo[0]);
+            }
+            $this->assertEquals($before, $snapshot());
+        };
+        foreach ($tables as $i => $table) {
+            $id = $ids[$i];
+            $row = (array) DB::table($table)->where('id', $id)->sole();
+            $reject(fn () => DB::table($table)->where('id', $id)->update(['id' => $id]));
+            $reject(fn () => DB::table($table)->where('id', $id)->delete());
+            $copy = array_replace($row, ['id' => (int) $id + 10000]);
+            $reject(fn () => DB::table($table)->insert($copy));
+            if (DB::getDriverName() === 'sqlite') {
+                $columns = implode(', ', array_keys($row));
+                $params = implode(', ', array_fill(0, count($row), '?'));
+                $reject(fn () => DB::statement("INSERT OR REPLACE INTO {$table} ({$columns}) VALUES ({$params})", array_values($row)));
+            }
+        }
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
+        DB::table('meters')->where('id', $meter->id)->update(['status' => 'inactive']);
+        $this->assertDatabaseHas('meters', ['id' => $meter->id, 'status' => 'inactive']);
+        DB::unprepared('DROP TRIGGER fin_obs_readings_update');
+        try {
+            $this->assertFalse($guard->active());
+            $report = DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
+            $this->assertFalse($report['guards']['observation_graph_freeze']);
+            $this->assertFalse($report['listed_guards_active']);
+            $this->assertFalse($report['closure_authorized']);
+            $this->artisan('financial:database-preflight', ['--guards' => true])
+                ->expectsOutput('observation_graph_freeze: missing or unverifiable')->assertExitCode(1);
+        } finally {
+            $guard->install();
+        }
+        $this->assertTrue($guard->active());
+    }
+
     public function test_meter_metadata_scope_fence_preserves_live_balance_and_rejects_frozen_mutations(): void
     {
         [, , , , , $subscriber] = $this->held();
@@ -9358,7 +9414,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     {
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
-        $this->assertCount(31, $before['guards']);
+        $this->assertCount(32, $before['guards']);
         $this->assertCount(17, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
         $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
