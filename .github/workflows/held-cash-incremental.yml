@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify readiness fingerprint binds adjacent carry and predecessor evidence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify subscriber birth identity and live guard inventory
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_subscriber_birth_identity_cannot_shift_across_cutoff|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime|test_final_accounting_subscriber_cutoff_preserves_prior_revision' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify readiness fingerprint binds adjacent carry and predecessor evidence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify subscriber birth identity and live guard inventory
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_subscriber_birth_identity_cannot_shift_across_cutoff|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime|test_final_accounting_subscriber_cutoff_preserves_prior_revision' tests/Feature/GatedCashCountAdjustmentWriterTest.php

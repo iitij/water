@@ -10065,7 +10065,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     {
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
-        $this->assertCount(33, $before['guards']);
+        $this->assertCount(45, $before['guards']);
+        $this->assertTrue($before['guards']['subscriber_birth_identity']);
         $this->assertTrue($before['guards']['cash_count_period']);
         $this->assertCount(17, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
@@ -10382,6 +10383,42 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_close_commands', 0);
         $this->assertDatabaseCount('financial_period_closures', 0);
         $this->assertSame($report, $diagnostic->inspect($reviewer, $period, $now));
+    }
+
+    public function test_subscriber_birth_identity_cannot_shift_across_cutoff(): void
+    {
+        $actor = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic identity',
+            'square_id' => Square::create(['name' => 'Synthetic identity square'])->id, 'status' => 'active']);
+        app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '2.00', self::UUID, $this->nowAt());
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($period));
+        $before = $inspect();
+        $this->assertTrue($before['all_cutoff_accounts_match'], json_encode($before));
+        $row = DB::table('subscribers')->where('id', $subscriber->id)->sole();
+        foreach (['2026-10-31 00:00:00', '2026-12-02 00:00:00', null] as $date) {
+            try {
+                DB::table('subscribers')->where('id', $subscriber->id)->update(['created_at' => $date]);
+                $this->fail('Subscriber birth identity changed.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Subscriber birth identity is immutable', $error->getMessage());
+            }
+            $this->assertEquals($row, DB::table('subscribers')->where('id', $subscriber->id)->sole());
+        }
+        $subscriber->update(['name' => 'Updated synthetic identity']);
+        $this->assertSame('Updated synthetic identity', $subscriber->fresh()->name);
+        $this->assertSame($before, $inspect());
+        DB::unprepared('DROP TRIGGER fin_subscriber_birth_update');
+        try {
+            $blocked = $inspect();
+            $this->assertFalse($blocked['all_cutoff_accounts_match']);
+            $this->assertSame([], $blocked['rows']);
+            $this->assertFalse($blocked['closure_authorized']);
+        } finally {
+            app(\App\Services\SubscriberBirthIdentityProtection::class)->install();
+        }
+        $this->assertSame($before, $inspect());
     }
 
     public function test_final_accounting_subscriber_cutoff_preserves_prior_revision(): void

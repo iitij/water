@@ -24,6 +24,7 @@ final class FinancialGuardInventory
             'dated_source_destinations' => fn () => app(DatedFinancialSourcePeriodProtection::class)->active(),
             'financial_evidence_destinations' => fn () => app(FinancialEvidenceDestinationProtection::class)->active(),
             'observation_graph_freeze' => fn () => app(ObservationGraphFreezeProtection::class)->active(),
+            'subscriber_birth_identity' => fn () => app(SubscriberBirthIdentityProtection::class)->active(),
             'collection_evidence_audit' => fn () => app(CollectionEvidenceAuditProtection::class)->active(),
             'collection_evidence_period' => fn () => app(CollectionEvidencePeriodProtection::class)->active(),
             'bank_evidence_period' => fn () => app(BankEvidencePeriodProtection::class)->active(),

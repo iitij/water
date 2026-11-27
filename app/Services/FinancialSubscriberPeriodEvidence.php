@@ -38,7 +38,8 @@ final class FinancialSubscriberPeriodEvidence
         $source = $this->sources->inspect($periodId);
         $issues = $rows = $prior = $priorMovements = $byAccount = [];
         if (! $source['scanned_sources_match'] || ! app(AllocationHistoryProtection::class)->active()
-            || ! app(FinancialSourceInsertProtection::class)->active()) {
+            || ! app(FinancialSourceInsertProtection::class)->active()
+            || ! app(SubscriberBirthIdentityProtection::class)->active()) {
             return $base + ['scanned_cutoff_accounts_match' => false, 'rows' => [], 'prior_accounts' => [], 'prior_account_movements' => [], 'all_cutoff_accounts_match' => false,
                 'issues' => [['code' => 'subscriber_cutoff_source_or_guard_unverified']]];
         }
