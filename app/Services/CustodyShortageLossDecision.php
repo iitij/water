@@ -1,0 +1,129 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Services;
+
+use App\Models\AuditEvent;
+use App\Models\CashSession;
+use App\Models\User;
+use App\Support\CashCustodyAmounts as Cash;
+use App\Support\CustodyShortageSettlementPolicy;
+use App\Support\SignedMinor;
+use DateTimeImmutable;
+use DateTimeZone;
+use DomainException;
+use Illuminate\Support\Facades\DB;
+
+/** Staging-only full-loss classification documents. No cash posting, debt
+ * recognition or final close authority. Recovery needs its own treasury source.
+ */
+final class CustodyShortageLossDecision
+{
+    public const PROPOSED = 'financial.custody_shortage_loss_proposed';
+    public const APPROVED = 'financial.custody_shortage_loss_approved';
+
+    public function propose(User $actor, int $sessionId, string $reason, string $evidence, DateTimeImmutable $now): array
+    {
+        $reason = trim($reason);
+        $evidence = trim($evidence);
+        if (mb_strlen($reason) < 10 || mb_strlen($reason) > 1000
+            || mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000) {
+            throw new DomainException('shortage_loss_input');
+        }
+        return $this->execute($actor, $sessionId, $now, function ($actor, $source, $date) use ($sessionId, $reason, $evidence): array {
+            $intent = $source + ['proposed_by' => (int) $actor->id, 'proposed_on' => $date,
+                'reason' => $reason, 'evidence' => $evidence];
+            $existing = $this->find(self::PROPOSED, $sessionId);
+            if ($existing) {
+                if ($existing->after != $intent || (int) $existing->actor_user_id !== (int) $actor->id) {
+                    throw new DomainException('shortage_loss_proposal_conflict');
+                }
+                return ['created' => false, 'proposal_id' => (int) $existing->id, 'closure_authorized' => false];
+            }
+            $row = $this->record(self::PROPOSED, $sessionId, $actor, $intent);
+            return ['created' => true, 'proposal_id' => (int) $row->id, 'closure_authorized' => false];
+        });
+    }
+
+    public function approve(User $actor, int $sessionId, DateTimeImmutable $now): array
+    {
+        return $this->execute($actor, $sessionId, $now, function ($actor, $source, $date) use ($sessionId): array {
+            $proposal = $this->find(self::PROPOSED, $sessionId);
+            if (! $proposal || ! is_array($proposal->after)) throw new DomainException('shortage_loss_proposal_missing');
+            $p = $proposal->after;
+            foreach ($source as $key => $value) {
+                if (($p[$key] ?? null) !== $value) throw new DomainException('shortage_loss_source_changed');
+            }
+            if (($p['proposed_by'] ?? null) !== (int) $proposal->actor_user_id
+                || ($p['proposed_on'] ?? '') > $date
+                || (int) $proposal->actor_user_id === (int) $actor->id) {
+                throw new DomainException('shortage_loss_independence');
+            }
+            $hash = hash('sha256', json_encode([$source, $p['proposed_by'], $p['proposed_on'],
+                $p['reason'], $p['evidence']], JSON_THROW_ON_ERROR));
+            $event = ['source' => 'loss:'.$sessionId, 'minor' => $source['shortage_minor'],
+                'kind' => 'confirmed_loss', 'treasury_minor' => 0, 'proposed_by' => $p['proposed_by'],
+                'approved_by' => (int) $actor->id, 'collector_id' => $source['collector_id'], 'evidence_hash' => $hash];
+            $result = app(CustodyShortageSettlementPolicy::class)->reconcile($source['shortage_minor'], [$event]);
+            $decision = $event + ['proposal_id' => (int) $proposal->id, 'approved_on' => $date];
+            $existing = $this->find(self::APPROVED, $sessionId);
+            if ($existing && ($existing->after != $decision || (int) $existing->actor_user_id !== (int) $actor->id)) {
+                throw new DomainException('shortage_loss_decision_conflict');
+            }
+            $row = $existing ?? $this->record(self::APPROVED, $sessionId, $actor, $decision);
+            return ['created' => $existing === null, 'decision_id' => (int) $row->id,
+                'source_coverage_verified' => false] + $result;
+        });
+    }
+
+    private function execute(User $actor, int $sessionId, DateTimeImmutable $now, callable $action): array
+    {
+        CompletedCashRefundRequest::authenticated($actor);
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        $date = $now->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
+        return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now, function () use ($actor, $sessionId, $date, $action): array {
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()
+                || ! app(CustodyShortageDecisionProtection::class)->active()) {
+                throw new DomainException('shortage_loss_protection_required');
+            }
+            $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+            CompletedCashRefundRequest::authenticated($actor);
+            $actor->setRelation('roles', $actor->roles()->lockForUpdate()->get());
+            app(TreasuryRegisterService::class)->authorize($actor);
+            $session = CashSession::query()->lockForUpdate()->findOrFail($sessionId);
+            abort_if((int) $session->user_id === (int) $actor->id, 403);
+            $driver = $session->getConnection()->getDriverName();
+            $expected = Cash::stored($session->getRawOriginal('expected_amount'), $driver, nullable: true);
+            $counted = Cash::stored($session->getRawOriginal('counted_amount'), $driver, nullable: true);
+            $variance = Cash::stored($session->getRawOriginal('variance_amount'), $driver, signed: true, nullable: true);
+            $approval = AuditEvent::query()->where('event', 'cash_session.approved')->where('entity_type', CashSession::class)
+                ->where('entity_id', (string) $sessionId)->lockForUpdate()->first();
+            if (! $session->isApproved() || $session->settlement_basis !== 'physical_cash'
+                || $expected === null || $counted === null || $variance === null || $variance >= 0
+                || ! Cash::consistent($counted, $expected, $variance) || ! $approval
+                || ! $session->approved_at || $session->approved_at->toDateString() > $date
+                || (int) $session->approved_by <= 0 || (int) $session->approved_by === (int) $session->user_id
+                || (int) $approval->actor_user_id !== (int) $session->approved_by
+                || ($approval->after['expected_amount'] ?? null) !== SignedMinor::decimal($expected)
+                || ($approval->after['counted_amount'] ?? null) !== SignedMinor::decimal($counted)
+                || ($approval->after['variance_amount'] ?? null) !== SignedMinor::decimal($variance)) {
+                throw new DomainException('shortage_loss_original_count_unverified');
+            }
+            return $action($actor, ['session_id' => $sessionId, 'collector_id' => (int) $session->user_id,
+                'count_approval_id' => (int) $approval->id, 'shortage_minor' => SignedMinor::negate($variance)], $date);
+        });
+    }
+
+    private function find(string $event, int $id): ?AuditEvent
+    {
+        return AuditEvent::query()->where('event', $event)->where('entity_type', 'custody_shortage_loss')
+            ->where('entity_id', (string) $id)->lockForUpdate()->first();
+    }
+
+    private function record(string $event, int $id, User $actor, array $payload): AuditEvent
+    {
+        return app(AuditLogger::class)->recordRequired($event, ['entity_type' => 'custody_shortage_loss',
+            'entity_id' => $id, 'actor_user_id' => (int) $actor->id, 'after' => $payload, 'source' => 'internal']);
+    }
+}
