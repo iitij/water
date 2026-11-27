@@ -112,6 +112,8 @@ final class FinancialCloseEvidenceDiagnostic
         if ($outstanding !== null && ! $outstanding['custody']['recorded_rollforward_verified']) $blockers[] = 'custody_period_unmatched';
         if ($outstanding !== null && ! $outstanding['custody']['all_count_variances_resolved']) $blockers[] = 'custody_count_variances_unresolved';
         if ($subscriberCutoff !== null && ! $subscriberCutoff['scanned_cutoff_accounts_match']) $blockers[] = 'subscriber_cutoff_sources_unmatched';
+        if ($subscriberCutoff !== null && $subscriberCutoff['prior_accounts'] !== []) $blockers[] = 'subscriber_predecessor_openings_unverified';
+        if ($subscriberCutoff !== null && ! $subscriberCutoff['allocation_policy_verified']) $blockers[] = 'subscriber_allocation_policy_unverified';
         sort($blockers, SORT_STRING);
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
