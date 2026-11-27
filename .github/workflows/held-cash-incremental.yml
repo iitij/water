@@ -39,9 +39,9 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify three-period subscriber allocation and reversal
+      - name: Verify adjacent outstanding balances per source
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods|test_final_accounting_subscriber_cutoff_preserves_prior_revision|test_final_accounting_subscriber_cutoff_reports_prior_movements_without_inventing_opening' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_final_accounting_outstanding_rejects_late_recorded_prior_month_transfer|test_outstanding_period_evidence_refuses_unapproved_session|test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -102,6 +102,6 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify three-period subscriber allocation and reversal
+      - name: Verify adjacent outstanding balances per source
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods|test_final_accounting_subscriber_cutoff_preserves_prior_revision|test_final_accounting_subscriber_cutoff_reports_prior_movements_without_inventing_opening' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_final_accounting_outstanding_rejects_late_recorded_prior_month_transfer|test_outstanding_period_evidence_refuses_unapproved_session|test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate' tests/Feature/GatedCashCountAdjustmentWriterTest.php

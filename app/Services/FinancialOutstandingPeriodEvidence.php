@@ -103,7 +103,78 @@ final class FinancialOutstandingPeriodEvidence
             throw new DomainException('custody_shortage_rollforward_mismatch');
         }
         return $base + ['transit' => $transit, 'custody' => $custody, 'liability' => $liability,
-            'variance_exposure' => $variance];
+            'variance_exposure' => $variance,
+            'adjacent_carry' => $this->adjacentCarry($period, $transit, $custody, $held)];
+    }
+
+    /** Compare independently reconstructed cutoffs, by source and owner.
+     * This is not proof of legal due dates, a root opening, or a close journal. */
+    private function adjacentCarry(object $period, array $transit, array $custody, array $held): array
+    {
+        $prior = DB::table('financial_periods')->where('scope_key', 'water')
+            ->where('next_on', $period->start_on)->lockForUpdate()->get();
+        $base = ['predecessor_period_id' => null, 'recorded_adjacent_rollforward_verified' => false,
+            'matched_sources' => 0, 'prior_source_hash' => null, 'closure_authorized' => false];
+        if ($prior->count() !== 1) {
+            return $base + ['issues' => [['code' => 'outstanding_adjacent_period_missing_or_ambiguous']]];
+        }
+        $p = $prior->first();
+        $base['predecessor_period_id'] = (int) $p->id;
+        $oldTransit = $this->transit($p->start_on, $p->next_on);
+        $oldCustody = $this->custody($p->start_on, $p->next_on);
+        $oldHeld = $this->held->inspect((int) $p->id);
+        $issues = [];
+        foreach (['transit' => [$oldTransit, $transit], 'custody' => [$oldCustody, $custody]] as $sector => [$before, $after]) {
+            if (! $before['recorded_rollforward_verified'] || ! $after['recorded_rollforward_verified']) {
+                $issues[] = ['code' => 'outstanding_adjacent_sector_unverified', 'sector' => $sector];
+            }
+        }
+        // Flatten only distinct financial balances. Pending payout authority
+        // is checked separately as a subset, never added to liability totals.
+        $flatten = static function (array $transit, array $custody, array $held, bool $opening): array {
+            $rows = [];
+            $field = $opening ? 'opening_minor' : 'closing_minor';
+            foreach ($transit['rows'] as $r) {
+                $rows['transit:'.$r['transfer_id']] = [
+                    'minor' => $r[$field], 'owner' => [$r['sender_id'], $r['from_account_id'], $r['to_account_id']]];
+            }
+            foreach ($custody['rows'] as $r) {
+                $rows['custody:'.$r['session_id']] = ['minor' => $r[$field], 'owner' => [$r['collector_id']]];
+            }
+            $prefix = $opening ? 'recorded_opening_' : 'recorded_closing_';
+            foreach ($held['rows'] as $r) {
+                $rows['liability:lot-'.$r['liability_id']] = [
+                    'minor' => $r[$prefix.'unidentified_minor'], 'owner' => [$r['account_id']]];
+                foreach ($r['owners'] as $owner) {
+                    $key = $owner['assignment_uuid'];
+                    $identity = [$r['liability_id'], $r['account_id'], $owner['subscriber_id']];
+                    $rows['liability:assignment-'.$key] = ['minor' => $owner[$prefix.'minor'], 'owner' => $identity];
+                    $rows['payout_subset:'.$key] = [
+                        'minor' => $owner[$prefix.'pending_payout_minor'], 'owner' => $identity];
+                }
+            }
+            ksort($rows, SORT_STRING);
+            return $rows;
+        };
+        $before = $flatten($oldTransit, $oldCustody, $oldHeld, false);
+        $after = $flatten($transit, $custody, $held, true);
+        foreach (array_unique(array_merge(array_keys($before), array_keys($after))) as $key) {
+            $old = $before[$key] ?? null;
+            $new = $after[$key] ?? null;
+            if (($old['minor'] ?? 0) !== ($new['minor'] ?? 0)
+                || ($old !== null && $new !== null && $old['owner'] !== $new['owner'])) {
+                $issues[] = ['code' => 'outstanding_adjacent_source_mismatch', 'row' => $key];
+            } elseif (($old['minor'] ?? 0) > 0) {
+                $base['matched_sources']++;
+            }
+        }
+        if ($issues === []) {
+            $base['recorded_adjacent_rollforward_verified'] = true;
+            $base['prior_source_hash'] = hash('sha256', json_encode([
+                'period_id' => (int) $p->id, 'transit' => $oldTransit, 'custody' => $oldCustody,
+                'held' => $oldHeld], JSON_THROW_ON_ERROR));
+        }
+        return $base + ['issues' => $issues];
     }
 
     private function registered(object $posting, array $leg): string

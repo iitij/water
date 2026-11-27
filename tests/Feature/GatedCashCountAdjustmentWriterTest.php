@@ -9900,6 +9900,18 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['closure_authorized']);
         $this->assertDatabaseCount('treasury_transfers', 1);
         $this->assertDatabaseCount('financial_period_closures', 0);
+        $dec = (int) DB::table('financial_periods')->insertGetId(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        app(\App\Services\GatedTreasuryTransferWriter::class)->receive($receiver, (int) $transfer['id'], [
+            'amount' => '4.00', 'reference' => 'QA-LATE-CUTOFF-RECEIVED', 'received_on' => '2026-12-02', 'evidence' => self::EVIDENCE,
+        ], '77777777-7777-4777-8777-777777777777', $later);
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $next = DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($dec));
+        $this->assertFalse($next['adjacent_carry']['recorded_adjacent_rollforward_verified']);
+        $this->assertNull($next['adjacent_carry']['prior_source_hash']);
+        $this->assertContains(['code' => 'outstanding_adjacent_sector_unverified', 'sector' => 'transit'],
+            $next['adjacent_carry']['issues']);
+        $this->assertFalse($next['closure_authorized']);
     }
 
     public function test_outstanding_period_evidence_conserves_three_sectors_across_cutoff(): void
@@ -9965,6 +9977,14 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, $second['transit']['recorded_closing_minor']);
         $this->assertSame(0, $second['custody']['recorded_closing_minor']);
         $this->assertSame(0, $second['liability']['closing_minor']);
+        $adjacent = $second['adjacent_carry'];
+        $this->assertSame($nov, $adjacent['predecessor_period_id']);
+        $this->assertTrue($adjacent['recorded_adjacent_rollforward_verified'], json_encode($adjacent));
+        $this->assertSame(3, $adjacent['matched_sources']);
+        $this->assertSame([], $adjacent['issues']);
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{64}$/D', $adjacent['prior_source_hash']);
+        $this->assertFalse($adjacent['closure_authorized']);
+        $this->assertFalse($second['carry_evidence_verified']);
         $this->assertFalse($second['closure_authorized']);
         $this->assertDatabaseCount('financial_period_closures', 0);
     }
