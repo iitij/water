@@ -79,6 +79,9 @@ final class CashHandoverService
             throw ValidationException::withMessages(['handover' => 'بيانات التسليم أو المبلغ أو التاريخ غير صالحة.']);
         }
         return DB::transaction(function () use ($session, $receiver, $requested, $reference, $date, $evidence, $gatedWriter): CashHandover {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_handover_writer_required');
+            }
             // Global financial issuance lock serializes reference checks across tills.
             // No subscriber locks are acquired by this custody-only operation.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {

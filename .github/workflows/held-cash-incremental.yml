@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify internal settlement writer fences and atomic rollback
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_late_cash_fence_separate_handover|test_release_noncash_fence_claim|test_release_noncash_fence_late_bank|test_release_counted_cash_fence_preserves_capacity_and_single_ledger_effect|test_release_bank_confirmation_fence_claim|test_release_bank_confirmation_fence_late_bank|test_round134_noncash_claim_registers_both_legs_atomically|test_round134_late_cash_registers_both_legs_atomically' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify mandatory refund, handover and subscriber transfer writers
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_entrypoints_modal_and_api_share_atomic_debit|test_release_refund_service_fence_protects_both_legs_and_handover_reserve|test_release_handover_entrypoints_modal_and_api_preserve_single_treasury_effect|test_release_handover_service_fence_requires_atomic_custody_scope|test_release_subscriber_transfer_entry_preserves_original_cash_and_both_balances' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify internal settlement writer fences and atomic rollback
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_late_cash_fence_separate_handover|test_release_noncash_fence_claim|test_release_noncash_fence_late_bank|test_release_counted_cash_fence_preserves_capacity_and_single_ledger_effect|test_release_bank_confirmation_fence_claim|test_release_bank_confirmation_fence_late_bank|test_round134_noncash_claim_registers_both_legs_atomically|test_round134_late_cash_registers_both_legs_atomically' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify mandatory refund, handover and subscriber transfer writers
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_refund_entrypoints_modal_and_api_share_atomic_debit|test_release_refund_service_fence_protects_both_legs_and_handover_reserve|test_release_handover_entrypoints_modal_and_api_preserve_single_treasury_effect|test_release_handover_service_fence_requires_atomic_custody_scope|test_release_subscriber_transfer_entry_preserves_original_cash_and_both_balances' tests/Feature/GatedCashCountAdjustmentWriterTest.php

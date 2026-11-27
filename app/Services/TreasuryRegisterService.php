@@ -117,6 +117,9 @@ final class TreasuryRegisterService
             $this->reject('kind', 'مصدر الحركة غير مدعوم في هذه المرحلة.');
         }
         return DB::transaction(function () use ($actor, $accountId, $kind, $sourceId, $gatedHandover): array {
+            if ($gatedHandover === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException($kind === 'cash_handover' ? 'gated_handover_writer_required' : 'gated_refund_writer_required');
+            }
             $this->lockRegister();
             $account = DB::table('treasury_accounts')->where('id', $accountId)->lockForUpdate()->first();
             abort_unless($account, 404);

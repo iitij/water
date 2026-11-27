@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Models\Payment;
 use App\Models\User;
 use DomainException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -15,7 +16,8 @@ final class ProspectiveRefundEntry
 {
     public function enabled(): bool
     {
-        if (config('financial_candidate.refunds') !== true) return false;
+        if (config('financial_candidate.refunds') !== true
+            && ! DB::table('financial_scopes')->where('scope_key', 'water')->exists()) return false;
         abort_unless(app()->environment(['testing', 'staging']), 503);
         return true;
     }
