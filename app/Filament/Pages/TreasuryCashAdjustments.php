@@ -7,6 +7,7 @@ namespace App\Filament\Pages;
 use App\Models\User;
 use App\Services\GatedCashCountAdjustmentWriter;
 use App\Services\TreasuryRegisterService;
+use App\Services\TreasuryCashCountService;
 use App\Support\SignedMinor;
 use DomainException;
 use Filament\Actions\Action;
@@ -40,6 +41,48 @@ final class TreasuryCashAdjustments extends Page
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('record_cash_count')
+                ->label('تسجيل جرد نقدي')
+                ->visible(fn (): bool => self::canAccess())
+                ->form([
+                    Select::make('account_id')->label('الخزينة النقدية')
+                        ->options(fn (): array => $this->accountOptions())->searchable()->required(),
+                    TextInput::make('counted_amount')->label('النقد المعدود فعلياً')->required()
+                        ->rules(['regex:/^\\d{1,12}(?:\\.\\d{1,2})?$/D']),
+                    TextInput::make('reference')->label('مرجع الجرد')->required()->minLength(3)->maxLength(150),
+                    Textarea::make('evidence')->label('دليل الجرد')->required()->minLength(10)->maxLength(2000),
+                ])
+                ->action(function (array $data): void {
+                    abort_unless(self::canAccess(), 403);
+                    try {
+                        app(TreasuryCashCountService::class)->record(Auth::guard('web')->user(),
+                            (int) $data['account_id'], (string) $data['counted_amount'], $data['reference'], $data['evidence']);
+                    } catch (DomainException $error) {
+                        throw ValidationException::withMessages(['data' => $error->getMessage()]);
+                    }
+                    Notification::make()->success()->title('تم تسجيل الجرد للمراجعة')->send();
+                }),
+            Action::make('review_cash_count')
+                ->label('مراجعة الجرد')
+                ->visible(fn (): bool => self::canAccess())
+                ->form([
+                    Select::make('count_id')->label('الجرد ونتيجة المقارنة والدليل')
+                        ->options(fn (): array => $this->reviewOptions())->searchable()->required(),
+                    Select::make('accept')->label('القرار')->options(['1' => 'قبول الجرد', '0' => 'رفض الجرد'])
+                        ->required()->rules(['in:0,1']),
+                    Textarea::make('evidence')->label('دليل المراجعة المستقلة')->required()->minLength(10)->maxLength(2000),
+                ])
+                ->requiresConfirmation()
+                ->action(function (array $data): void {
+                    abort_unless(self::canAccess(), 403);
+                    try {
+                        app(TreasuryCashCountService::class)->review(Auth::guard('web')->user(),
+                            (int) $data['count_id'], (string) $data['accept'] === '1', $data['evidence']);
+                    } catch (DomainException $error) {
+                        throw ValidationException::withMessages(['data' => $error->getMessage()]);
+                    }
+                    Notification::make()->success()->title('تم تسجيل قرار المراجعة')->send();
+                }),
             Action::make('adjust_cash_count')
                 ->label('اعتماد تسوية الجرد')
                 ->visible(fn (): bool => self::canAccess())
@@ -70,6 +113,36 @@ final class TreasuryCashAdjustments extends Page
                     Notification::make()->success()->title('تم اعتماد تسوية الجرد وترحيلها')->send();
                 }),
         ];
+    }
+
+    private function accountOptions(): array
+    {
+        abort_unless(self::canAccess(), 403);
+        return DB::table('treasury_accounts')->where('channel', 'cash')
+            ->where('opening_on', '<=', now('Asia/Aden')->toDateString())->orderBy('code')
+            ->get(['id', 'code', 'name'])->mapWithKeys(fn ($row) => [$row->id => $row->code.' — '.$row->name])->all();
+    }
+
+    private function reviewOptions(): array
+    {
+        abort_unless(self::canAccess(), 403);
+        $actor = Auth::guard('web')->user();
+        $rows = DB::table('treasury_cash_counts as c')
+            ->join('treasury_accounts as a', 'a.id', '=', 'c.treasury_account_id')
+            ->leftJoin('treasury_cash_count_reviews as r', 'r.treasury_cash_count_id', '=', 'c.id')
+            ->where('a.channel', 'cash')->where('c.counted_by', '!=', $actor->id)
+            ->whereNull('r.id')->orderByDesc('c.id')
+            ->get(['c.id', 'c.reference', 'c.counted_minor', 'c.recorded_minor', 'c.variance_minor',
+                'c.observed_at', 'c.evidence', 'a.code', 'a.name']);
+        $options = [];
+        foreach ($rows as $row) {
+            $options[$row->id] = '#'.$row->id.' | '.$row->code.' — '.$row->name.' | '.$row->reference
+                .' | المعدود: '.SignedMinor::decimal(SignedMinor::parse($row->counted_minor))
+                .' | المسجل: '.SignedMinor::decimal(SignedMinor::parse($row->recorded_minor))
+                .' | الفرق: '.SignedMinor::decimal(SignedMinor::parse($row->variance_minor))
+                .' | '.$row->observed_at.' | '.$row->evidence;
+        }
+        return $options;
     }
 
     private function countOptions(): array

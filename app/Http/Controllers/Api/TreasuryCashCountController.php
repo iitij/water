@@ -27,8 +27,12 @@ final class TreasuryCashCountController extends ApiController
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
             'observed_at' => ['prohibited'],
         ]);
-        return response()->json($service->record($request->user(), $id, (string) $data['counted_amount'],
-            $data['reference'], $data['evidence']));
+        try {
+            return response()->json($service->record($request->user(), $id, (string) $data['counted_amount'],
+                $data['reference'], $data['evidence']));
+        } catch (\DomainException $error) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException($error->getMessage(), $error);
+        }
     }
 
     public function adjust(Request $request, int $id, TreasuryCashCountService $service)
@@ -67,6 +71,10 @@ final class TreasuryCashCountController extends ApiController
             'accept' => ['required', 'boolean'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
-        return response()->json($service->review($request->user(), $id, (bool) $data['accept'], $data['evidence']));
+        try {
+            return response()->json($service->review($request->user(), $id, (bool) $data['accept'], $data['evidence']));
+        } catch (\DomainException $error) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException($error->getMessage(), $error);
+        }
     }
 }

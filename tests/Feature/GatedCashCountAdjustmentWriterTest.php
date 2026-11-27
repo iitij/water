@@ -125,6 +125,55 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    public function test_cash_count_filament_full_observation_review_and_settlement_cycle(): void
+    {
+        $counter = $this->actor();
+        $reviewer = $this->actor();
+        $account = app(GatedTreasuryOpeningFundingWriter::class)->open($counter, [
+            'code' => 'QA-WEB-COUNT', 'name' => 'Synthetic web treasury', 'channel' => 'cash',
+            'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-WEB-COUNT-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], self::UUID, $this->nowAt())['account'];
+        config(['financial_candidate.cash_count_adjustments' => true]);
+        $page = \App\Filament\Pages\TreasuryCashAdjustments::class;
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($counter, 'web');
+        $record = ['account_id' => (int) $account['id'], 'counted_amount' => '99.75',
+            'reference' => 'QA-WEB-COUNT-01', 'evidence' => self::EVIDENCE];
+        DB::table('financial_periods')->update(['state' => 'FROZEN']);
+        \Livewire\Livewire::test($page)->callAction('record_cash_count', data: $record)->assertHasActionErrors();
+        $this->assertDatabaseCount('treasury_cash_counts', 0);
+        DB::table('financial_periods')->update(['state' => 'OPEN']);
+        \Livewire\Livewire::test($page)->callAction('record_cash_count', data: $record)->assertHasNoActionErrors();
+        $count = DB::table('treasury_cash_counts')->sole();
+        $this->assertSame(-25, (int) $count->variance_minor);
+        $this->assertSame((int) $counter->id, (int) $count->counted_by);
+        \Laravel\Sanctum\Sanctum::actingAs($counter);
+        $reviewUrl = '/api/treasury/cash-counts/'.$count->id.'/review';
+        $this->postJson($reviewUrl, ['accept' => true, 'evidence' => self::EVIDENCE])->assertForbidden();
+        $this->assertDatabaseCount('treasury_cash_count_reviews', 0);
+        $this->actingAs($reviewer, 'web');
+        $review = ['count_id' => (int) $count->id, 'accept' => '1', 'evidence' => self::EVIDENCE];
+        DB::table('financial_periods')->update(['state' => 'FROZEN']);
+        \Livewire\Livewire::test($page)->callAction('review_cash_count', data: $review)->assertHasActionErrors();
+        $this->assertDatabaseCount('treasury_cash_count_reviews', 0);
+        DB::table('financial_periods')->update(['state' => 'OPEN']);
+        \Livewire\Livewire::test($page)->callAction('review_cash_count', data: $review)->assertHasNoActionErrors();
+        $this->assertDatabaseHas('treasury_cash_count_reviews', ['treasury_cash_count_id' => $count->id,
+            'reviewed_by' => $reviewer->id, 'accepted' => true]);
+        $this->assertDatabaseCount('treasury_postings', 0);
+        $this->assertDatabaseCount('financial_posting_events', 1);
+        \Livewire\Livewire::test($page)->callAction('adjust_cash_count', data: [
+            'count_id' => (int) $count->id, 'reference' => 'QA-WEB-COUNT-ADJ', 'classification' => 'confirmed_cash_loss',
+            'reason' => self::REASON, 'evidence' => self::EVIDENCE, 'operation_uuid' => self::ADJUST,
+        ])->assertHasNoActionErrors();
+        $this->assertDatabaseCount('treasury_cash_adjustments', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => self::ADJUST, 'amount_minor' => -25]);
+        $this->assertDatabaseCount('financial_posting_events', 2);
+        $this->assertDatabaseCount('transactions', 0);
+    }
+
     public function test_cash_count_adjustment_filament_shares_gate_and_api_replay(): void
     {
         [$counter, $reviewer, , $count] = $this->fixture();

@@ -13,6 +13,28 @@ use Illuminate\Validation\ValidationException;
 /** Physical observations and independent review, not a balance adjustment or close. */
 final class TreasuryCashCountService
 {
+    /** Candidate observation and review use the same scope-first fence as posting.
+     * They still create evidence only, not a registry event or an accounting entry.
+     */
+    private function observationTransaction(User $actor, callable $work): array
+    {
+        if (config('financial_candidate.cash_count_adjustments') !== true) {
+            return DB::transaction(fn () => $work($actor), 3);
+        }
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        $now = now()->toDateTimeImmutable();
+        return app(FinancialWriteGate::class)->withinOpenPeriod('water',
+            $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d'), $now,
+            function () use ($actor, $work): array {
+                $this->lock();
+                $current = User::query()->lockForUpdate()->findOrFail($actor->id);
+                abort_if($current->isDisabled(), 403);
+                $current->setRelation('roles', $current->roles()->lockForUpdate()->get());
+                app(TreasuryRegisterService::class)->authorize($current);
+                return $work($current);
+            });
+    }
+
     private function lock(): void
     {
         if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
@@ -169,7 +191,7 @@ final class TreasuryCashCountService
             throw ValidationException::withMessages(['count' => 'مبلغ الجرد أو مرجع الإثبات غير صالح.']);
         }
         $minor = Cash::input($amount, 'count', DecimalDomain::D14, digitsOnly: true);
-        return DB::transaction(function () use ($actor, $id, $minor, $reference, $evidence): array {
+        return $this->observationTransaction($actor, function (User $actor) use ($id, $minor, $reference, $evidence): array {
             $this->lock();
             $account = $this->account($id);
             $existing = DB::table('treasury_cash_counts')->where('reference', $reference)->lockForUpdate()->first();
@@ -192,7 +214,7 @@ final class TreasuryCashCountService
                 'actor_user_id' => $actor->id, 'after' => $record,
             ]);
             return $this->report(DB::table('treasury_cash_counts')->find($countId), $account);
-        }, 3);
+        });
     }
 
     private function report(object $count, object $account): array
@@ -225,7 +247,7 @@ final class TreasuryCashCountService
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $evidence = $this->evidence($evidence);
-        return DB::transaction(function () use ($actor, $id, $accept, $evidence): array {
+        return $this->observationTransaction($actor, function (User $actor) use ($id, $accept, $evidence): array {
             $this->lock();
             $count = DB::table('treasury_cash_counts')->where('id', $id)->lockForUpdate()->first();
             abort_unless($count, 404);
@@ -251,7 +273,7 @@ final class TreasuryCashCountService
                 'actor_user_id' => $actor->id, 'after' => $record + ['financial_adjustment_created' => false],
             ]);
             return $this->report($count, $account);
-        }, 3);
+        });
     }
 
     /** Records a proven cause, not an arbitrary balancing plug or a complete GL journal. */
