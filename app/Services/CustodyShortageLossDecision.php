@@ -117,7 +117,10 @@ final class CustodyShortageLossDecision
         $event = ['source' => 'loss:'.$id, 'minor' => $shortage, 'kind' => 'confirmed_loss', 'treasury_minor' => 0,
             'proposed_by' => $p['proposed_by'], 'approved_by' => (int) $decision->actor_user_id,
             'collector_id' => $source['collector_id'], 'evidence_hash' => $hash];
-        if ($d != $event + ['proposal_id' => (int) $proposal->id, 'approved_on' => $local($decision)]) {
+        $expectedDecision = $event + ['proposal_id' => (int) $proposal->id, 'approved_on' => $local($decision)];
+        ksort($expectedDecision);
+        ksort($d);
+        if ($d !== $expectedDecision) {
             throw new DomainException('shortage_loss_document_mismatch');
         }
         $result = app(CustodyShortageSettlementPolicy::class)->reconcile($shortage, [$event]);
