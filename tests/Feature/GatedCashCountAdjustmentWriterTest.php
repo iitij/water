@@ -9358,6 +9358,109 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['closure_authorized']);
     }
 
+    public function test_bank_period_evidence_uses_cutoff_not_later_account_balance(): void
+    {
+        $importer = $this->actor();
+        $reviewer = $this->actor();
+        $account = app(GatedTreasuryOpeningFundingWriter::class)->open($importer, [
+            'code' => 'QA-CLOSE-BANK', 'name' => 'Synthetic close bank', 'channel' => 'bank',
+            'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-CLOSE-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], self::UUID, $this->nowAt())['account'];
+        $id = (int) $account['id'];
+        $bank = app(\App\Services\BankReconciliationService::class);
+        $writer = app(\App\Services\GatedBankFeeWriter::class);
+        $statement = $bank->import($importer, $id, [
+            'reference' => 'QA-CLOSE-STMT', 'from_date' => '2026-11-25', 'to_date' => '2026-11-25',
+            'opening_amount' => '100.00', 'closing_amount' => '99.60', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-CLOSE-DEBIT', 'booked_on' => '2026-11-25', 'amount' => '-0.40']],
+        ]);
+        $sid = (int) $statement['statement']['id'];
+        $line = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $sid)->value('id');
+        $writer->record($reviewer, $sid, $line, '2026-11-25', 'QA-CLOSE-FEE',
+            'Independent documented bank service fee', self::EVIDENCE, self::OTHER, $this->nowAt());
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-30T15:00:00+03:00'));
+        $bank->import($importer, $id, [
+            'reference' => 'QA-CLOSE-FINAL', 'from_date' => '2026-11-26', 'to_date' => '2026-11-30',
+            'opening_amount' => '99.60', 'closing_amount' => '99.60', 'evidence' => self::EVIDENCE, 'lines' => [],
+        ]);
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialSettlementCoverageDiagnostic::class)
+            ->inspect($reviewer, $periodId, '2026-11-30'));
+        $this->assertFalse($inspect()['bank_period_evidence']['period_ended']);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $proof = $inspect()['bank_period_evidence'];
+        $this->assertTrue($proof['period_ended']);
+        $this->assertTrue($proof['all_accounts_matched']);
+        $this->assertSame([], $proof['issues']);
+        $this->assertCount(1, $proof['rows']);
+        $row = $proof['rows'][0];
+        $this->assertSame($id, $row['account_id']);
+        $this->assertSame(0, $row['opening_minor']);
+        $this->assertSame(10000, $row['registered_opening_document_minor']);
+        $this->assertSame(-40, $row['registered_movement_minor']);
+        $this->assertSame(9960, $row['movement_minor']);
+        $this->assertSame(9960, $row['closing_minor']);
+        $this->assertCount(2, $row['statements']);
+        $this->assertCount(2, $row['registry_sources']);
+        $this->assertFalse($row['predecessor_verified']);
+        $this->assertFalse($proof['closure_authorized']);
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $next = $bank->import($importer, $id, [
+            'reference' => 'QA-CLOSE-NEXT', 'from_date' => '2026-12-02', 'to_date' => '2026-12-02',
+            'opening_amount' => '99.60', 'closing_amount' => '98.60', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-CLOSE-NEXT-DEBIT', 'booked_on' => '2026-12-02', 'amount' => '-1.00']],
+        ]);
+        $sid = (int) $next['statement']['id'];
+        $line = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $sid)->value('id');
+        $writer->record($reviewer, $sid, $line, '2026-12-02', 'QA-CLOSE-NEXT-FEE',
+            'Independent documented bank service fee', self::EVIDENCE, self::NEXT, $later);
+        $this->assertSame(9860, app(TreasuryRegisterService::class)->inspect($reviewer, $id)['provisional_recorded_balance_minor']);
+        $this->assertSame($proof, $inspect()['bank_period_evidence']);
+    }
+
+    public function test_bank_period_evidence_rejects_matched_but_unregistered_fee(): void
+    {
+        $importer = $this->actor();
+        $reviewer = $this->actor();
+        $account = app(GatedTreasuryOpeningFundingWriter::class)->open($importer, [
+            'code' => 'QA-CLOSE-GAP', 'name' => 'Synthetic bank registry gap', 'channel' => 'bank',
+            'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-CLOSE-GAP-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], self::UUID, $this->nowAt())['account'];
+        $id = (int) $account['id'];
+        $bank = app(\App\Services\BankReconciliationService::class);
+        $statement = $bank->import($importer, $id, [
+            'reference' => 'QA-CLOSE-GAP-STMT', 'from_date' => '2026-11-25', 'to_date' => '2026-11-25',
+            'opening_amount' => '100.00', 'closing_amount' => '99.60', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-CLOSE-GAP-DEBIT', 'booked_on' => '2026-11-25', 'amount' => '-0.40']],
+        ]);
+        $sid = (int) $statement['statement']['id'];
+        $line = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $sid)->value('id');
+        $bank->recordFee($reviewer, $sid, $line, 'QA-CLOSE-GAP-FEE',
+            'Independent documented bank service fee', self::EVIDENCE);
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-30T15:00:00+03:00'));
+        $bank->import($importer, $id, [
+            'reference' => 'QA-CLOSE-GAP-FINAL', 'from_date' => '2026-11-26', 'to_date' => '2026-11-30',
+            'opening_amount' => '99.60', 'closing_amount' => '99.60', 'evidence' => self::EVIDENCE, 'lines' => [],
+        ]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $result = DB::transaction(fn () => app(\App\Services\FinancialSettlementCoverageDiagnostic::class)
+            ->inspect($reviewer, $periodId, '2026-11-30'));
+        $this->assertTrue($result['scanned_settlements_match']);
+        $this->assertFalse($result['bank_period_evidence']['all_accounts_matched']);
+        $this->assertSame([], $result['bank_period_evidence']['rows']);
+        $this->assertContains(['code' => 'bank_period_registered_movements_unmatched', 'account_id' => $id],
+            $result['bank_period_evidence']['issues']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseCount('financial_posting_events', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+    }
+
     public function test_round142_settlement_audit_window_uses_exact_local_month_boundary(): void
     {
         $actor = $this->actor();
