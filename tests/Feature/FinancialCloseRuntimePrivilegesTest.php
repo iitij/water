@@ -75,6 +75,8 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             $this->assertStringStartsWith('water_runtime@', (string) DB::selectOne('SELECT CURRENT_USER() AS identity')->identity);
             $result = app(RuntimeDatabasePrivileges::class)->inspect();
             $this->assertTrue($result['accepted'], json_encode($result));
+            // Exercise the live metadata routine before the diagnostic catches individual guard errors.
+            $this->assertEquals($before, $metadata());
             $inventory = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
             $verified = $inventory();
             $this->assertTrue($verified['runtime_grant_allowlist_accepted'], json_encode($verified));
