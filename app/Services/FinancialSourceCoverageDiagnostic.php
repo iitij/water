@@ -211,6 +211,15 @@ final class FinancialSourceCoverageDiagnostic
                 $posting($fk, (int) $doc->id, $kind, $effectiveOn, $group);
             }
         }
+        foreach ($rows('custody_shortage_recoveries', 'effective_on') as $doc) {
+            $documents++;
+            $row = DB::table('treasury_postings')->where('id', $doc->treasury_posting_id)->lockForUpdate()->first();
+            if (! $row || $row->kind !== 'custody_shortage_recovery' || $row->effective_on !== $doc->effective_on) {
+                $issue('shortage_recovery_posting_mismatch', 'custody_shortage_recoveries', (string) $doc->id);
+                continue;
+            }
+            $expect('treasury_posting', (string) $row->id, 'treasury', $doc->effective_on);
+        }
         foreach ($rows('treasury_postings', 'effective_on') as $row) {
             if ($row->kind === 'held_cash_payout') {
                 if (! isset($expected['held_cash_payout|'.$row->held_cash_payout_uuid.'|treasury'])) {
