@@ -10343,6 +10343,82 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    public function test_final_accounting_shortage_api_routes_enforce_independent_exact_settlement(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $proposer = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        $url = '/api/cash-sessions/'.$session->id.'/shortage';
+        $uuid = '77777777-7777-4777-8777-777777777777';
+        $data = ['account_id' => (int) $account['id'], 'amount' => '1.20', 'reference' => 'QA-API-RECOVERY',
+            'evidence' => self::EVIDENCE, 'operation_uuid' => $uuid];
+        $approval = ['operation_uuid' => $uuid];
+        $loss = ['reason' => 'Independent evidence confirms residual loss', 'evidence' => self::EVIDENCE];
+        $before = DB::table('treasury_postings')->count();
+        $events = DB::table('financial_posting_events')->count();
+        $unauthorized = User::factory()->create(['role' => 'admin']);
+        \Laravel\Sanctum\Sanctum::actingAs($unauthorized);
+        $this->postJson($url.'/recovery-proposals', $data)->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($collector);
+        $this->postJson($url.'/recovery-proposals', $data)->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $this->postJson($url.'/recovery-proposals', $data + ['actor_id' => $reviewer->id])->assertUnprocessable();
+        $this->postJson($url.'/recovery-proposals', array_replace($data, ['amount' => '1.201']))->assertUnprocessable();
+        $this->postJson($url.'/recovery-proposals', array_replace($data, ['amount' => '2.01']))->assertConflict();
+        app()->instance('env', 'production');
+        try {
+            $this->postJson($url.'/recovery-proposals', $data)->assertStatus(503);
+        } finally {
+            app()->instance('env', 'testing');
+        }
+        $this->postJson($url.'/recovery-proposals', $data)->assertOk()->assertJsonPath('created', true)->assertJsonPath('cash_posted', false);
+        $this->postJson($url.'/recovery-proposals', $data)->assertOk()->assertJsonPath('created', false);
+        $this->postJson($url.'/recovery-approval', $approval)->assertConflict();
+        $this->assertDatabaseCount('custody_shortage_recoveries', 0);
+        $this->assertSame($before, DB::table('treasury_postings')->count());
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($url.'/recovery-approval', [])->assertUnprocessable();
+        $this->postJson($url.'/recovery-approval', $approval + ['amount' => '2.00'])->assertUnprocessable();
+        DB::table('financial_scopes')->update(['active_freeze_uuid' => self::ADJUST]);
+        try {
+            $this->postJson($url.'/recovery-approval', $approval)->assertConflict();
+        } finally {
+            DB::table('financial_scopes')->update(['active_freeze_uuid' => null]);
+        }
+        $this->assertSame($before, DB::table('treasury_postings')->count());
+        $this->assertSame($events, DB::table('financial_posting_events')->count());
+        $result = $this->postJson($url.'/recovery-approval', $approval)->assertOk()
+            ->assertJsonPath('registry_created', true)->assertJsonPath('recovered_minor', 120)->json();
+        $this->postJson($url.'/recovery-approval', $approval)->assertOk()->assertJsonPath('registry_created', false);
+        $this->assertDatabaseCount('custody_shortage_recoveries', 1);
+        $this->assertSame(120, (int) DB::table('treasury_postings')->where('id', $result['posting_id'])->value('amount_minor'));
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $this->postJson($url.'/loss-proposal', $loss + ['amount' => '2.00'])->assertUnprocessable();
+        $this->postJson($url.'/loss-proposal', $loss)->assertOk()->assertJsonPath('created', true);
+        $this->postJson($url.'/loss-approval', [])->assertConflict();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($url.'/loss-approval', ['reviewer_id' => $proposer->id])->assertUnprocessable();
+        $this->postJson($url.'/loss-approval', [])->assertOk()->assertJsonPath('confirmed_loss_minor', 80)
+            ->assertJsonPath('remaining_minor', 0)->assertJsonPath('closure_authorized', false);
+        $this->postJson($url.'/loss-approval', [])->assertOk()->assertJsonPath('created', false);
+        $this->assertSame($before + 1, DB::table('treasury_postings')->count());
+        $this->assertSame($events + 1, DB::table('financial_posting_events')->count());
+        $this->assertSame('-2.00', (string) $session->fresh()->variance_amount);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $report = DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($period));
+        $this->assertSame(120, $report['variance_exposure']['recovered_minor']);
+        $this->assertSame(80, $report['variance_exposure']['confirmed_loss_minor']);
+        $this->assertSame(0, $report['variance_exposure']['unresolved_shortage_minor']);
+        $this->assertFalse($report['closure_authorized']);
+    }
+
     public function test_final_accounting_mixed_shortage_recovery_and_residual_loss(): void
     {
         [, , $account, , , $subscriber] = $this->held();

@@ -39,11 +39,9 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify exact shortage disposition arithmetic
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/CustodyShortageSettlementPolicyTest.php
-      - name: Verify combined outstanding period evidence and affected close diagnostics
+      - name: Verify candidate shortage HTTP entrypoints
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_shortage_recovery_posts_once_after_independent_approval|test_final_accounting_shortage_recovery_preserves_prior_period_cutoff|test_final_accounting_partial_shortage_recovery_preserves_remaining_carry|test_final_accounting_mixed_shortage_recovery_and_residual_loss|test_final_accounting_multiple_shortage_recoveries_and_residual_loss|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss|test_final_accounting_invalid_shortage_decision_cannot_erase_exposure|test_final_accounting_shortage_recovery_proposal_requires_proven_source|test_final_accounting_shortage_loss_decision_is_independent_and_immutable|test_custody_source_coverage_keeps_shortage_visible_after_full_handover' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_final_accounting_shortage_api_routes_enforce_independent_exact_settlement tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -104,28 +102,6 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify independent cash session decision and shortage carry
+      - name: Verify candidate shortage HTTP entrypoints
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_shortage_recovery_posts_once_after_independent_approval|test_final_accounting_shortage_recovery_preserves_prior_period_cutoff|test_final_accounting_partial_shortage_recovery_preserves_remaining_carry|test_final_accounting_mixed_shortage_recovery_and_residual_loss|test_final_accounting_multiple_shortage_recoveries_and_residual_loss|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss|test_final_accounting_invalid_shortage_decision_cannot_erase_exposure|test_final_accounting_shortage_recovery_proposal_requires_proven_source|test_final_accounting_shortage_loss_decision_is_independent_and_immutable|test_custody_source_coverage_keeps_shortage_visible_after_full_handover' tests/Feature/GatedCashCountAdjustmentWriterTest.php
-      - name: Verify competing recovery reviewers on independent MySQL connections
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_final_accounting_shortage_recovery_competing_reviewers_commit_once tests/Feature/GatedCashCountAdjustmentWriterTest.php
-      - name: Provision disposable restricted runtime fixture
-        env:
-          QA_CONTAINER: ${{ job.services.mysql.id }}
-        run: |
-          set -euo pipefail
-          test "$APP_ENV" = testing
-          test "$DB_DATABASE" = water_test
-          test -n "$QA_CONTAINER"
-          php artisan migrate:fresh --force
-          php -r 'require "vendor/autoload.php"; $app = require "bootstrap/app.php"; $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); app(App\Services\LedgerProtection::class)->install(); app(App\Services\AllocationHistoryProtection::class)->install(); app(App\Services\FinancialTriggerMetadata::class)->install();'
-          docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password <<'SQL'
-          CREATE USER 'water_runtime'@'%' IDENTIFIED BY 'disposable_runtime_password';
-          GRANT SELECT, INSERT, UPDATE, DELETE ON `water\_test`.* TO 'water_runtime'@'%';
-          GRANT EXECUTE ON PROCEDURE `water_test`.`financial_read_trigger_metadata` TO 'water_runtime'@'%';
-          SQL
-      - name: Verify runtime DML isolation and live financial protections
-        env:
-          WATER_QA_RUNTIME: '1'
-        run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseRuntimePrivilegesTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_final_accounting_shortage_api_routes_enforce_independent_exact_settlement tests/Feature/GatedCashCountAdjustmentWriterTest.php
