@@ -8846,6 +8846,43 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             '2026-11-25', $this->nowAt())['created']);
         $this->assertTrue($this->payoutHeld($executor, 5, '55555555-5555-4555-8555-555555555555')['created']);
         $this->assertTrue($this->creditHeld($this->actor(), 10, '66666666-6666-4666-8666-666666666666')['created']);
+        $this->assertTrue(app(\App\Services\HeldCashDestinationProtection::class)->active());
+        foreach (['treasury_held_cash_assignments', 'treasury_held_cash_payout_authorizations',
+            'treasury_held_cash_payout_cancellations', 'treasury_held_cash_payouts',
+            'treasury_held_cash_credits', 'treasury_held_cash_liabilities'] as $table) {
+            $before = DB::table($table)->get()->toArray();
+            $row = (array) $before[0];
+            $restore = [];
+            if (DB::getDriverName() === 'sqlite') {
+                // Isolate destination predicates from collision guards only in disposable QA.
+                foreach (DB::table('sqlite_master')->where('type', 'trigger')->where('tbl_name', $table)->get() as $trigger) {
+                    if (str_starts_with($trigger->name, 'fin_held_') ||
+                        ! preg_match('/\\bBEFORE\\s+INSERT\\b/i', $trigger->sql)) continue;
+                    $this->assertMatchesRegularExpression('/^[a-zA-Z0-9_]+$/', $trigger->name);
+                    $restore[] = $trigger->sql;
+                    DB::unprepared('DROP TRIGGER '.$trigger->name);
+                }
+            }
+            try {
+                foreach (['2026-10-31', '2026-12-01'] as $outside) {
+                    $candidate = $row;
+                    if ($table === 'treasury_held_cash_liabilities') {
+                        $candidate['operation_uuid'] = 'ffffffff-ffff-4fff-8fff-ffffffffffff';
+                    } else {
+                        $candidate['effective_on'] = $outside;
+                    }
+                    try {
+                        DB::table($table)->insert($candidate);
+                        $this->fail('Held cash destination bypass accepted: '.$table);
+                    } catch (\Illuminate\Database\QueryException $error) {
+                        $this->assertStringContainsString('Held cash source period is fenced', $error->getMessage(), $table);
+                    }
+                }
+            } finally {
+                foreach ($restore as $sql) DB::unprepared($sql);
+            }
+            $this->assertEquals($before, DB::table($table)->get()->toArray());
+        }
         $this->assertHeldSourceInsertFence(['treasury_held_cash_liabilities', 'treasury_held_cash_assignments',
             'treasury_held_cash_payout_authorizations', 'treasury_held_cash_payout_cancellations',
             'treasury_held_cash_payouts', 'treasury_held_cash_credits']);
