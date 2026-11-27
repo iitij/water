@@ -42,6 +42,7 @@ final class FinancialSubscriberPeriodEvidence
             return $base + ['scanned_cutoff_accounts_match' => false, 'rows' => [], 'prior_accounts' => [], 'prior_account_movements' => [], 'all_cutoff_accounts_match' => false,
                 'issues' => [['code' => 'subscriber_cutoff_source_or_guard_unverified']]];
         }
+        $predecessor = app(FinancialOpeningContinuityDiagnostic::class)->predecessor($periodId);
         $events = DB::table('financial_posting_events as e')
             ->join('financial_posting_operations as o', 'o.operation_uuid', '=', 'e.operation_uuid')
             ->where('o.period_id', $periodId)->where('e.source_type', 'ledger_transaction')
@@ -80,6 +81,10 @@ final class FinancialSubscriberPeriodEvidence
                     $row = ['subscriber_id' => $id, 'opening_minor' => null,
                         'net_movement_minor' => $net, 'closing_minor' => null,
                         'registry_sources' => $hashes, 'opening_verified' => false];
+                    $saved = $predecessor['rows']['subscriber:'.$id] ?? null;
+                    $row['predecessor_journal_hash'] = $predecessor['predecessor_hash'];
+                    $row['journal_opening_minor'] = $saved['closing'] ?? null;
+                    $row['journal_based_closing_minor'] = $saved === null ? null : SignedMinor::add($saved['closing'], $net);
                     $row['source_hash'] = hash('sha256', json_encode($row, JSON_THROW_ON_ERROR));
                     $priorMovements[] = $row;
                 } catch (DomainException $error) {
