@@ -14,7 +14,7 @@ use DateTimeZone;
 use DomainException;
 use Illuminate\Support\Facades\DB;
 
-/** Candidate full recovery only. One physical inflow and its immutable source
+/** Candidate one-time full or partial recovery. One physical inflow and its immutable source
  * must commit together with the registry. No subscriber credit or debt. */
 final class CustodyShortageRecoveryWriter
 {
@@ -48,6 +48,8 @@ final class CustodyShortageRecoveryWriter
                     && $p['proposed_by'] > 0 && $p['proposed_by'] !== $source['collector_id']
                     && $p['proposed_by'] !== (int) $actor->id && $source['collector_id'] !== (int) $actor->id,
                     'shortage_recovery_independence');
+                $amount = $p['recovery_minor'] ?? $p['shortage_minor'];
+                $this->need(is_int($amount) && $amount > 0 && $amount <= $source['shortage_minor'], 'shortage_recovery_amount_invalid');
                 $proposalDate = (new DateTimeImmutable($proposal->getRawOriginal('occurred_at'), new DateTimeZone('UTC')))
                     ->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
                 $this->need(($p['proposed_on'] ?? null) === $proposalDate && $proposalDate <= $context['effective_on']
@@ -75,7 +77,7 @@ final class CustodyShortageRecoveryWriter
                         'shortage_recovery_proposal_conflict');
                     $postingId = DB::table('treasury_postings')->insertGetId([
                         'treasury_account_id' => $p['account_id'], 'kind' => 'custody_shortage_recovery',
-                        'amount_minor' => $source['shortage_minor'], 'effective_on' => $context['effective_on'],
+                        'amount_minor' => $amount, 'effective_on' => $context['effective_on'],
                         'evidence_reference' => $p['reference'], 'posted_by' => $actor->id,
                         'created_at' => now(), 'updated_at' => now(),
                     ]);
@@ -83,7 +85,7 @@ final class CustodyShortageRecoveryWriter
                         'cash_session_id' => $sessionId, 'treasury_account_id' => $p['account_id'],
                         'treasury_posting_id' => $postingId, 'count_approval_id' => $source['count_approval_id'],
                         'proposal_id' => $proposal->id, 'proposed_by' => $p['proposed_by'], 'approved_by' => $actor->id,
-                        'amount_minor' => $source['shortage_minor'], 'effective_on' => $context['effective_on'],
+                        'amount_minor' => $amount, 'effective_on' => $context['effective_on'],
                         'reference' => $p['reference'], 'operation_uuid' => $p['operation_uuid'], 'evidence' => $p['evidence'],
                         'created_at' => now(), 'updated_at' => now(),
                     ]);
@@ -123,7 +125,8 @@ final class CustodyShortageRecoveryWriter
             && is_array($p) && ($p['session_id'] ?? null) === (int) $session->id
             && ($p['collector_id'] ?? null) === (int) $session->user_id
             && ($p['count_approval_id'] ?? null) === (int) $count->id
-            && ($p['shortage_minor'] ?? null) === $minor && ($p['account_id'] ?? null) === (int) $account->id
+            && is_int($p['shortage_minor'] ?? null) && $p['shortage_minor'] >= $minor
+            && ($p['recovery_minor'] ?? $p['shortage_minor']) === $minor && ($p['account_id'] ?? null) === (int) $account->id
             && ($p['proposed_by'] ?? null) === (int) $r->proposed_by
             && ($p['reference'] ?? null) === $r->reference && ($p['evidence'] ?? null) === $r->evidence
             && ($p['operation_uuid'] ?? null) === $r->operation_uuid, 'shortage_recovery_source_mismatch');
@@ -136,7 +139,7 @@ final class CustodyShortageRecoveryWriter
             (int) $proposal->id, (int) $account->id, $minor, $r->effective_on, $r->reference,
             $r->operation_uuid, (int) $r->proposed_by, (int) $r->approved_by, $r->evidence,
             $p['original_source_hash'] ?? null], JSON_THROW_ON_ERROR));
-        app(CustodyShortageSettlementPolicy::class)->reconcile($minor, [['source' => 'recovery:'.$r->id,
+        app(CustodyShortageSettlementPolicy::class)->reconcile($p['shortage_minor'], [['source' => 'recovery:'.$r->id,
             'minor' => $minor, 'kind' => 'cash_recovery', 'treasury_minor' => $minor,
             'proposed_by' => (int) $r->proposed_by, 'approved_by' => (int) $r->approved_by,
             'collector_id' => (int) $session->user_id, 'evidence_hash' => $hash]]);
