@@ -143,6 +143,11 @@ final class CustodyShortageLossDecision
             app(TreasuryRegisterService::class)->authorize($actor);
             $session = CashSession::query()->lockForUpdate()->findOrFail($sessionId);
             abort_if((int) $session->user_id === (int) $actor->id, 403);
+            if (AuditEvent::query()->where('event', CustodyShortageRecoveryProposal::EVENT)
+                ->where('entity_id', (string) $sessionId)->lockForUpdate()->first()
+                || DB::table('custody_shortage_recoveries')->where('cash_session_id', $sessionId)->lockForUpdate()->first()) {
+                throw new DomainException('shortage_loss_recovery_conflict');
+            }
             $driver = $session->getConnection()->getDriverName();
             $expected = Cash::stored($session->getRawOriginal('expected_amount'), $driver, nullable: true);
             $counted = Cash::stored($session->getRawOriginal('counted_amount'), $driver, nullable: true);
