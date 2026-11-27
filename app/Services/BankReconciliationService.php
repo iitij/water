@@ -34,6 +34,10 @@ final class BankReconciliationService
         abort_unless(app()->environment(['testing', 'staging']), 503);
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $to, now()->toDateTimeImmutable(),
             function () use ($actor, $from, $to, $work): array {
+                if (! app(BankEvidencePeriodProtection::class)->active()
+                    || ! app(BankRangeDestinationProtection::class)->active()) {
+                    throw new \DomainException('bank_evidence_write_protection_missing');
+                }
                 $this->assertEvidenceRangeOpen($from, $to);
                 $this->lock();
                 $current = User::query()->lockForUpdate()->findOrFail($actor->id);
