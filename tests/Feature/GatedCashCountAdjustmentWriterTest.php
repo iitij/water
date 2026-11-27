@@ -965,6 +965,33 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $uuid, '2026-11-25', $this->nowAt());
     }
 
+    public function test_held_credit_requires_live_subscriber_ledger_protection(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $actor = $this->actor();
+        $tables = ['treasury_held_cash_credits', 'treasury_held_cash_assignments', 'treasury_postings',
+            'transactions', 'payment_allocations', 'payment_allocation_revisions',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events', 'subscribers'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        foreach (['ledger_reject_update', 'ledger_reject_delete'] as $trigger) {
+            $before = $snapshot();
+            DB::unprepared('DROP TRIGGER '.$trigger);
+            try {
+                $this->rejects('subscriber_financial_write_protection_missing', fn () => $this->creditHeld($actor, 20));
+                $this->assertEquals($before, $snapshot());
+                $this->assertSame(0, DB::transactionLevel());
+            } finally {
+                app(\App\Services\LedgerProtection::class)->install();
+            }
+        }
+        $this->assertTrue($this->creditHeld($actor, 20)['subscriber_credit_created']);
+        $this->assertFalse($this->creditHeld($actor, 20)['created']);
+        $this->assertSame(20, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertDatabaseCount('treasury_held_cash_credits', 1);
+        $this->assertDatabaseCount('transactions', 1);
+    }
+
     public function test_release_held_credit_model_fence_rejects_direct_document_and_ledger(): void
     {
         [, , $account, , $lot, $subscriber] = $this->held();

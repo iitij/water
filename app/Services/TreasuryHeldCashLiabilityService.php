@@ -388,6 +388,7 @@ final class TreasuryHeldCashLiabilityService
             function (array $context) use ($actor, $assignmentUuid, $minor, $reference, $evidence, $uuid, $date, $now): array {
                 $this->lock();
                 $this->requireWriteProtection();
+                app(SubscriberFinancialWriteProtection::class)->requireActive();
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
                 $this->treasury->authorize($actor);
                 $assignment = DB::table('treasury_held_cash_assignments')->where('operation_uuid', $assignmentUuid)->lockForUpdate()->first();
