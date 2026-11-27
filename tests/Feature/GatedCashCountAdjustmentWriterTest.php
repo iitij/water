@@ -8918,6 +8918,31 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($second['all_liabilities_verified']);
         $this->assertFalse($second['closure_authorized']);
         $this->assertEquals($before, $snapshot());
+        // Simulate a privileged metadata bypass only in the disposable fixture.
+        // The canonical payload remains valid; its recording time is late.
+        $op = DB::table('financial_posting_operations')->where('operation_uuid', self::NEXT)->sole();
+        $guard = app(\App\Services\FinancialPostingRegistryProtection::class);
+        DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
+        try {
+            DB::table('financial_posting_operations')->where('operation_uuid', self::NEXT)
+                ->update(['recorded_at_utc' => '2026-11-30T21:00:00.000000Z']);
+        } finally {
+            $guard->install();
+        }
+        try {
+            $this->rejects('held_period_source_recorded_after_cutoff', fn () => $inspect($firstId));
+            $this->rejects('held_period_source_recorded_after_cutoff', fn () => $inspect((int) $nextId));
+        } finally {
+            DB::unprepared('DROP TRIGGER fin_registry_op_reject_update');
+            try {
+                DB::table('financial_posting_operations')->where('operation_uuid', self::NEXT)
+                    ->update(['recorded_at_utc' => $op->recorded_at_utc]);
+            } finally {
+                $guard->install();
+            }
+        }
+        $this->assertSame($first, $inspect($firstId));
+        $this->assertSame($second, $inspect((int) $nextId));
     }
 
     public function test_period_movements_preserve_owner_gross_effects_and_do_not_invent_balances(): void
