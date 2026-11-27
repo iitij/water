@@ -64,6 +64,8 @@ final class GatedCollectionWriter
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null,
                     'gated_collection_issuance_lock');
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+                abort_if($actor->isDisabled(), 403);
+                $actor->setRelation('roles', $actor->roles()->lockForUpdate()->get());
                 app(TreasuryRegisterService::class)->authorize($actor);
                 $table = $kind === 'claim' ? 'noncash_collection_claims' : 'late_receipt_reviews';
                 $candidate = DB::table($table)->find($id);
@@ -86,6 +88,7 @@ final class GatedCollectionWriter
                     $this->need($statement !== null && $line !== null && $line->booked_on === $context['effective_on']
                         && (int) $line->treasury_account_id === (int) $statement->treasury_account_id
                         && in_array($claim->payment_method, ['check', 'bank_transfer'], true), 'gated_collection_effective_date');
+                    app(BankReconciliationService::class)->assertEvidenceRangeOpen($statement->from_date, $statement->to_date);
                     $accountId = (int) $statement->treasury_account_id;
                 }
                 $account = DB::table('treasury_accounts')->where('id', $accountId)->lockForUpdate()->first();

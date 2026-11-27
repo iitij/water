@@ -38,7 +38,7 @@ final class BankReconciliationService
             });
     }
 
-    private function assertEvidenceRangeOpen(string $from, string $to): void
+    public function assertEvidenceRangeOpen(string $from, string $to): void
     {
         $context = FinancialWriteGate::currentContext();
         if ($context['scope'] !== 'water' || $from > $to) {
@@ -398,7 +398,8 @@ final class BankReconciliationService
                 ->where('scope_key', 'water')->where('source_type', 'treasury_posting')->where('leg', 'treasury')
                 ->where('source_id', (string) $postingId)->exists();
             if (! ($gatedWriter !== null && $gatedWriter->allowsMutation($id, $lineId, (int) $actor->id))
-                && ($gatedWriter !== null || $registered || config('financial_candidate.bank_fees') === true)) {
+                && ($gatedWriter !== null || $registered || config('financial_candidate.bank_fees') === true
+                    || config('financial_candidate.bank_evidence') === true)) {
                 throw new \DomainException('gated_bank_fee_writer_required');
             }
             if ($existing) {
@@ -589,7 +590,8 @@ final class BankReconciliationService
         }
         $registered = is_string($uuid) && DB::table('financial_posting_operations')
             ->where('scope_key', 'water')->where('operation_uuid', $uuid)->exists();
-        if ($writer !== null || $registered || config('financial_candidate.noncash_settlements') === true) {
+        if ($writer !== null || $registered || config('financial_candidate.noncash_settlements') === true
+            || config('financial_candidate.bank_evidence') === true) {
             throw new \DomainException('gated_bank_collection_writer_required');
         }
     }

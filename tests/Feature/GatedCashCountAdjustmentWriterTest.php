@@ -5261,7 +5261,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
     }
 
-    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false, bool $api = false, bool $bankFence = false): void
+    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false, bool $api = false, bool $bankFence = false, bool $statementRange = false): void
     {
         [, , $cash, , $lot, $subscriber] = $this->held();
         $this->assignHeld($this->actor(), $lot, $subscriber, 25);
@@ -5302,8 +5302,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 'opening_reference' => 'QA-R134-OPEN', 'opening_evidence' => 'Independent opening bank evidence',
             ], '99999999-9999-4999-8999-999999999999', $this->nowAt())['account'];
             $accountId = (int) $bank['id'];
+            if ($statementRange) {
+                $this->travelTo(\Carbon\Carbon::parse('2026-12-02T10:00:00+03:00'));
+                DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+                    'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+            }
             $statement = app(\App\Services\BankReconciliationService::class)->import($issuer, $accountId, [
-                'reference' => 'QA-R134-STMT', 'from_date' => $date, 'to_date' => $date,
+                'reference' => 'QA-R134-STMT', 'from_date' => $date, 'to_date' => $statementRange ? '2026-12-02' : $date,
                 'opening_amount' => '0.00', 'closing_amount' => '0.30', 'evidence' => self::EVIDENCE,
                 'lines' => [['bank_reference' => 'QA-R134-IN', 'booked_on' => $date, 'amount' => '0.30']],
             ]);
@@ -5311,9 +5316,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $lineId = (int) DB::table('bank_statement_lines')->where('bank_statement_id', $statementId)->value('id');
             $act = $kind === 'claim'
                 ? fn () => $writer->clearClaim($reviewer, $id, $statementId, $lineId, $date,
-                    'QA-R134-PROOF', self::EVIDENCE, $uuid, $this->nowAt())
+                    'QA-R134-PROOF', self::EVIDENCE, $uuid, $statementRange ? now()->toDateTimeImmutable() : $this->nowAt())
                 : fn () => $writer->clearLateBank($reviewer, $id, $statementId, $lineId, $date,
-                    'QA-R134-REVIEW', 'QA-R134-PROOF', self::EVIDENCE, $uuid, $this->nowAt());
+                    'QA-R134-REVIEW', 'QA-R134-PROOF', self::EVIDENCE, $uuid, $statementRange ? now()->toDateTimeImmutable() : $this->nowAt());
             $direct = $kind === 'claim'
                 ? fn (?\App\Services\GatedCollectionWriter $candidate = null) => app(PaymentService::class)->clearNonCashClaim(
                     $reviewer, $id, $statementId, $lineId, 'QA-R134-PROOF', self::EVIDENCE, $candidate)
@@ -5341,6 +5346,25 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($tables as $table) $before[$table] = $snapshot($table);
         $beforeOps = $ops();
         $beforeSeq = $seq();
+        if ($statementRange) {
+            config(['financial_candidate.bank_evidence' => true, 'financial_candidate.noncash_settlements' => true]);
+            DB::table('financial_periods')->where('month', '2026-12')->update(['state' => 'FROZEN']);
+            $this->rejects('bank_evidence_period_range_not_open', $act);
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame($beforeOps, $ops());
+            $this->assertSame($beforeSeq, $seq());
+            DB::table('financial_periods')->where('month', '2026-12')->update(['state' => 'OPEN']);
+            $this->assertTrue($act()['registry_created']);
+            $this->assertFalse($act()['registry_created']);
+            $this->assertDatabaseCount('payments', 1);
+            $this->assertDatabaseCount('treasury_bank_collections', 1);
+            $this->assertDatabaseCount('bank_statement_matches', 1);
+            $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+            $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+            $this->assertSame([30, 30], $events->map(fn ($event) => (int) $event->amount_minor)->all());
+            $this->assertSame(50, $ledger->accountBalanceMinor($subscriber));
+            return;
+        }
         if ($bankFence) {
             config(['financial_candidate.noncash_settlements' => true]);
             $result = $act();
@@ -11323,6 +11347,59 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame([], $result['rows']);
         $this->assertContains(['code' => 'cash_period_count_not_equal_at_cutoff', 'account_id' => $id], $result['issues']);
         $this->assertFalse($result['closure_authorized']);
+    }
+
+    public function test_bank_fee_refuses_frozen_adjacent_statement_period_before_posting(): void
+    {
+        $importer = $this->actor();
+        $reviewer = $this->actor();
+        $account = app(GatedTreasuryOpeningFundingWriter::class)->open($importer, [
+            'code' => 'QA-FEE-RANGE', 'name' => 'Synthetic bank', 'channel' => 'bank',
+            'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-FEE-RANGE-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], self::UUID, $this->nowAt())['account'];
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-02T10:00:00+03:00'));
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $bank = app(\App\Services\BankReconciliationService::class);
+        $sid = (int) $bank->import($importer, (int) $account['id'], [
+            'reference' => 'QA-FEE-RANGE-STMT', 'from_date' => '2026-11-25', 'to_date' => '2026-12-02',
+            'opening_amount' => '100.00', 'closing_amount' => '99.60', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-FEE-RANGE-DEBIT', 'booked_on' => '2026-11-25', 'amount' => '-0.40']],
+        ])['statement']['id'];
+        $line = (int) DB::table('bank_statement_lines')->value('id');
+        config(['financial_candidate.bank_evidence' => true]);
+        $this->rejects('gated_bank_fee_writer_required', fn () => $bank->recordFee($reviewer, $sid, $line,
+            'QA-FEE-RANGE-PROOF', 'Independent documented bank fee', self::EVIDENCE));
+        config(['financial_candidate.bank_fees' => true]);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $url = '/api/treasury/bank-statements/'.$sid.'/fees';
+        $data = ['line_id' => $line, 'reference' => 'QA-FEE-RANGE-PROOF', 'reason' => 'Independent documented bank fee',
+            'evidence' => self::EVIDENCE, 'operation_uuid' => self::OTHER];
+        DB::table('financial_periods')->where('month', '2026-12')->update(['state' => 'FROZEN']);
+        $this->postJson($url, $data)->assertConflict();
+        $this->assertDatabaseCount('treasury_bank_fees', 0);
+        $this->assertDatabaseCount('treasury_postings', 0);
+        $this->assertDatabaseCount('bank_statement_matches', 0);
+        $this->assertDatabaseCount('financial_posting_events', 1);
+        DB::table('financial_periods')->where('month', '2026-12')->update(['state' => 'OPEN']);
+        $this->postJson($url, $data)->assertOk()->assertJsonPath('posting.amount_minor', -40);
+        $this->postJson($url, $data)->assertOk();
+        $this->assertDatabaseCount('treasury_bank_fees', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('bank_statement_matches', 1);
+        $this->assertDatabaseCount('financial_posting_events', 2);
+        $this->assertDatabaseCount('transactions', 0);
+    }
+
+    public function test_noncash_claim_refuses_frozen_adjacent_statement_period(): void
+    {
+        $this->round134Collection('claim', statementRange: true);
+    }
+
+    public function test_late_bank_refuses_frozen_adjacent_statement_period(): void
+    {
+        $this->round134Collection('late_bank', statementRange: true);
     }
 
     public function test_bank_evidence_entry_requires_every_statement_month_open_and_independent_match(): void
