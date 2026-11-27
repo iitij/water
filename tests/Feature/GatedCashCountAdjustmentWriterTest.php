@@ -9814,13 +9814,30 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($service->propose($proposer, (int) $session->id, 'Independent documented count loss', self::EVIDENCE, $this->nowAt())['created']);
         $this->rejects('shortage_loss_independence', fn () => $service->approve($proposer, (int) $session->id, $this->nowAt()));
         \Laravel\Sanctum\Sanctum::actingAs($reviewer);
-        $result = $service->approve($reviewer, (int) $session->id, $this->nowAt());
+        $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $dec = (int) DB::table('financial_periods')->insertGetId(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $inspect = fn (int $period) => DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($period));
+        $november = $inspect($nov);
+        $this->assertSame(200, $november['variance_exposure']['unresolved_shortage_minor']);
+        $result = $service->approve($reviewer, (int) $session->id, $later);
         $this->assertTrue($result['created']);
         $this->assertSame(200, $result['confirmed_loss_minor']);
         $this->assertSame(0, $result['remaining_minor']);
         $this->assertFalse($result['source_coverage_verified']);
         $this->assertFalse($result['closure_authorized']);
-        $this->assertFalse($service->approve($reviewer, (int) $session->id, $this->nowAt())['created']);
+        $this->assertFalse($service->approve($reviewer, (int) $session->id, $later)['created']);
+        $this->assertSame($november, $inspect($nov));
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $december = $inspect($dec);
+        $this->assertSame(200, $december['variance_exposure']['opening_unresolved_shortage_minor']);
+        $this->assertSame(0, $december['variance_exposure']['new_shortage_minor']);
+        $this->assertSame(200, $december['variance_exposure']['confirmed_loss_minor']);
+        $this->assertSame(0, $december['variance_exposure']['unresolved_shortage_minor']);
+        $this->assertTrue($december['custody']['all_count_variances_resolved']);
+        $this->assertFalse($december['closure_authorized']);
         $this->assertSame($before, DB::table('treasury_postings')->count());
         $this->assertSame($events, DB::table('financial_posting_events')->count());
         foreach ([$proposed['proposal_id'], $result['decision_id']] as $id) {
