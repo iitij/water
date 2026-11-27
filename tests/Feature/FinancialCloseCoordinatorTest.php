@@ -51,6 +51,7 @@ final class FinancialCloseCoordinatorTest extends TestCase
             public bool $enabled = true;
             public bool $coverage = true;
             public bool $replay = true;
+            public bool $disableConstraints = false;
             public ?string $predecessorHash = null;
             public ?array $nextRows = null;
             public ?array $nextCarries = null;
@@ -62,6 +63,10 @@ final class FinancialCloseCoordinatorTest extends TestCase
 
             public function evidence(string $action, array $period, int $actorId): array
             {
+                if ($this->disableConstraints) {
+                    DB::unprepared(DB::getDriverName() === 'sqlite'
+                        ? 'PRAGMA ignore_check_constraints = ON' : 'SET SESSION unique_checks = 0');
+                }
                 $h = str_repeat('a', 64);
                 $m = str_repeat('b', 64);
                 $facts = [
@@ -116,6 +121,43 @@ final class FinancialCloseCoordinatorTest extends TestCase
         } catch (DomainException $e) {
             $this->assertSame($reason, $e->getMessage());
         }
+    }
+
+    public function test_close_rejects_disabled_connection_constraints_and_rolls_back(): void
+    {
+        $sqlite = DB::getDriverName() === 'sqlite';
+        $off = $sqlite ? 'PRAGMA ignore_check_constraints = ON' : 'SET SESSION unique_checks = 0';
+        $on = $sqlite ? 'PRAGMA ignore_check_constraints = OFF' : 'SET SESSION unique_checks = 1';
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(),
+            ['financial_scopes', 'financial_periods', 'financial_close_commands', 'financial_period_closures']);
+        $before = $snapshot();
+        DB::unprepared($off);
+        try {
+            $this->rejects('financial_connection_constraints_disabled', fn () => $this->freeze());
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            DB::unprepared($on);
+        }
+        $this->proof->disableConstraints = true;
+        try {
+            $this->rejects('financial_connection_constraints_disabled', fn () => $this->freeze());
+            $this->assertSame(0, DB::transactionLevel());
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            $this->proof->disableConstraints = false;
+            DB::unprepared($on);
+        }
+        $this->assertSame('FROZEN', $this->freeze()['current_state']);
+        $frozen = $snapshot();
+        DB::unprepared($off);
+        try {
+            $this->rejects('financial_connection_constraints_disabled', fn () => $this->freeze());
+            $this->assertEquals($frozen, $snapshot());
+        } finally {
+            DB::unprepared($on);
+        }
+        $this->assertTrue($this->freeze()['replayed']);
+        $this->assertEquals($frozen, $snapshot());
     }
 
     public function test_close_refuses_missing_or_counterfeit_ledger_guard(): void
