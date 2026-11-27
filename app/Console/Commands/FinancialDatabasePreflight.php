@@ -57,6 +57,7 @@ final class FinancialDatabasePreflight extends Command
                 'custody_shortage_decisions' => fn () => app(\App\Services\CustodyShortageDecisionProtection::class)->active(),
                 'custody_shortage_recovery_proposals' => fn () => app(\App\Services\CustodyShortageRecoveryProposalProtection::class)->active(),
                 'custody_shortage_recoveries' => fn () => app(\App\Services\CustodyShortageRecoveryProtection::class)->active(),
+                'custody_shortage_period' => fn () => app(\App\Services\CustodyShortagePeriodProtection::class)->active(),
                 'completed_refund_request' => fn () => app(\App\Services\CompletedCashRefundRequestProtection::class)->active(),
                 'completed_refund_decision' => fn () => app(\App\Services\CompletedCashRefundDecisionProtection::class)->active(),
                 'completed_refund_resolution_proposal' => fn () => app(\App\Services\CompletedCashRefundResolutionProposalProtection::class)->active(),
