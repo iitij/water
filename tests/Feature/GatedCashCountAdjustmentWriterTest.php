@@ -9126,6 +9126,108 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($report, $diagnostic->inspect($reviewer, $period, $now));
     }
 
+    public function test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss(): void
+    {
+        app(\App\Services\LedgerProtection::class)->install();
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $period)->update(['version' => 0]);
+        [$counter, $reviewer, $cash, , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 25);
+        $this->creditHeld($this->actor(), 20);
+        $collector = $this->actor();
+        $sender = $this->actor();
+        $receiver = $this->actor();
+        $cashId = (int) $cash['id'];
+        \App\Models\Tariff::create(['name' => 'Integrated synthetic tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-FINAL-CYCLE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        app(\App\Services\GatedInvoiceTransferWriter::class)->issue($sender, (int) $subscriber->id, (int) $meter->id,
+            '55555555-5555-4555-8555-555555555555', $this->nowAt());
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '1.00'), true, $reviewer);
+        app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, $cashId,
+            '0.40', 'QA-FINAL-CYCLE-HANDOVER', '2026-11-25', self::EVIDENCE,
+            '77777777-7777-4777-8777-777777777777', $this->nowAt());
+        $shortCollector = $this->actor();
+        $shortSession = $sessions->open($shortCollector);
+        app(GatedCashReceiptWriter::class)->collect($shortCollector, (int) $subscriber->id, '2.00',
+            '11111111-1111-4111-8111-111111111111', $this->nowAt(), (int) $shortSession->id);
+        $shortSession = $sessions->decide($sessions->close($shortSession, '0.00'), true, $reviewer);
+        \Laravel\Sanctum\Sanctum::actingAs($sender);
+        $recoveryUuid = '22222222-2222-4222-8222-222222222222';
+        app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($sender, (int) $shortSession->id,
+            $cashId, 'QA-FINAL-CYCLE-RECOVERY', self::EVIDENCE, $recoveryUuid, $this->nowAt(), 120);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $recovered = app(\App\Services\CustodyShortageRecoveryWriter::class)
+            ->approve($reviewer, (int) $shortSession->id, $this->nowAt(), $recoveryUuid);
+        $this->assertSame(120, $recovered['recovered_minor']);
+        \Laravel\Sanctum\Sanctum::actingAs($sender);
+        $loss = app(\App\Services\CustodyShortageLossDecision::class);
+        $loss->propose($sender, (int) $shortSession->id, 'Independent review confirms the residual cash loss', self::EVIDENCE, $this->nowAt());
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->assertSame(80, $loss->approve($reviewer, (int) $shortSession->id, $this->nowAt())['confirmed_loss_minor']);
+        $bank = app(GatedTreasuryOpeningFundingWriter::class)->open($receiver, [
+            'code' => 'QA-FINAL-CYCLE-BANK', 'name' => 'Synthetic bank', 'channel' => 'bank',
+            'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-FINAL-CYCLE-OPEN', 'opening_evidence' => self::EVIDENCE,
+        ], '88888888-8888-4888-8888-888888888888', $this->nowAt())['account'];
+        $bankId = (int) $bank['id'];
+        app(\App\Services\GatedTreasuryTransferWriter::class)->dispatch($sender, ['from_account_id' => $cashId,
+            'to_account_id' => $bankId, 'amount' => '4.00', 'reference' => 'QA-FINAL-CYCLE-TRANSIT',
+            'dispatched_on' => '2026-11-25', 'evidence' => self::EVIDENCE],
+            '99999999-9999-4999-8999-999999999999', $this->nowAt());
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-30T15:00:00+03:00'));
+        $counts = app(TreasuryCashCountService::class);
+        $count = $counts->record($counter, $cashId, '97.85', 'QA-FINAL-CYCLE-CASH', self::EVIDENCE)['count'];
+        $counts->review($reviewer, (int) $count['id'], true, self::EVIDENCE);
+        app(\App\Services\BankReconciliationService::class)->import($sender, $bankId, [
+            'reference' => 'QA-FINAL-CYCLE-STMT', 'from_date' => '2026-11-25', 'to_date' => '2026-11-30',
+            'opening_amount' => '100.00', 'closing_amount' => '100.00', 'evidence' => self::EVIDENCE, 'lines' => [],
+        ]);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $current = $diagnostic->inspect($reviewer, $period, now()->toDateTimeImmutable());
+        $this->assertTrue($current['current_subscriber_diagnostic']['scanned_accounts_match'], json_encode($current));
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $now = now()->toDateTimeImmutable();
+        $report = $diagnostic->inspect($reviewer, $period, $now);
+        $this->assertTrue($report['source']['scanned_sources_match'], json_encode($report['source']));
+        $this->assertTrue($report['movements']['recorded_movements_verified']);
+        $this->assertTrue($report['cash_period_evidence']['all_accounts_matched'], json_encode($report['cash_period_evidence']));
+        $this->assertSame(9785, $report['cash_period_evidence']['rows'][0]['closing_minor']);
+        $this->assertTrue($report['settlement']['bank_period_evidence']['all_accounts_matched']);
+        $this->assertSame(10000, $report['settlement']['bank_period_evidence']['rows'][0]['closing_minor']);
+        $outstanding = $report['outstanding_period_evidence'];
+        $this->assertTrue($outstanding['transit']['recorded_rollforward_verified']);
+        $this->assertTrue($outstanding['custody']['recorded_rollforward_verified']);
+        $this->assertSame(400, $outstanding['transit']['recorded_closing_minor']);
+        $this->assertSame(60, $outstanding['custody']['recorded_closing_minor']);
+        $this->assertSame(5, $outstanding['liability']['closing_minor']);
+        $this->assertSame(0, $outstanding['variance_exposure']['unresolved_shortage_minor']);
+        $this->assertSame(200, $outstanding['variance_exposure']['new_shortage_minor']);
+        $this->assertSame(120, $outstanding['variance_exposure']['recovered_minor']);
+        $this->assertSame(80, $outstanding['variance_exposure']['confirmed_loss_minor']);
+        $this->assertTrue($outstanding['custody']['all_count_variances_resolved']);
+        $this->assertTrue($report['settlement']['shortage_settlements']['scanned_documents_match']);
+        $this->assertSame(0, $report['settlement']['shortage_settlements']['pending_count']);
+        $this->assertNotContains('custody_count_variances_unresolved', $report['blockers']);
+        $this->assertNotContains('settlement_sources_unmatched', $report['blockers']);
+        $this->assertFalse($report['writer_coverage']['complete_writer_coverage_verified']);
+        $this->assertFalse($report['closure_authorized']);
+        $coordinator = new \App\Services\FinancialCloseCoordinator(new \App\Support\FinancialClosePolicy(),
+            app(\App\Services\FinancialCloseReadinessProofSource::class));
+        $this->rejects('close_readiness_unverified:'.implode(',', $report['blockers']), fn () =>
+            $coordinator->execute('water', '2026-11', 'freeze', (int) $reviewer->id,
+                ['uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'version' => 0, 'reason' => 'Independent integrated accounting close review'], $now));
+        $this->assertDatabaseCount('financial_close_commands', 0);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+        $this->assertSame($report, $diagnostic->inspect($reviewer, $period, $now));
+    }
+
     public function test_final_accounting_subscriber_cutoff_preserves_prior_revision(): void
     {
         $actor = $this->actor();
