@@ -5261,7 +5261,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
     }
 
-    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false, bool $api = false, bool $bankFence = false, bool $statementRange = false, bool $web = false): void
+    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false, bool $api = false, bool $bankFence = false, bool $statementRange = false, bool $web = false, bool $enabled = true): void
     {
         [, , $cash, , $lot, $subscriber] = $this->held();
         $this->assignHeld($this->actor(), $lot, $subscriber, 25);
@@ -5437,7 +5437,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 : ['statement_id' => $statementId, 'line_id' => $lineId, 'evidence' => self::EVIDENCE] +
                     ($kind === 'claim' ? ['reference' => 'QA-R134-PROOF']
                         : ['evidence_reference' => 'QA-R134-REVIEW', 'bank_clearance_reference' => 'QA-R134-PROOF']);
-            config([$switch => true]);
+            config([$switch => $enabled]);
             \Laravel\Sanctum\Sanctum::actingAs($issuer);
             $this->postJson($url, $data)->assertForbidden();
             \Laravel\Sanctum\Sanctum::actingAs($reviewer);
@@ -5460,8 +5460,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $committedSeq = $seq();
             $this->postJson($url, $data)->assertOk()->assertJsonPath($key.'.payment_id', $first);
             $this->postJson($url, array_replace($data, ['evidence' => 'Different independent documented evidence']))->assertConflict();
-            config([$switch => false]);
-            $this->postJson($url, $data)->assertConflict();
+            config([$switch => ! $enabled]);
+            $this->postJson($url, $data)->assertOk()->assertJsonPath($key.'.payment_id', $first);
             foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
             $this->assertSame($committedOps, $ops());
             $this->assertSame($committedSeq, $seq());
@@ -5573,19 +5573,22 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->round134Collection('late_bank', bankFence: true);
     }
 
-    public function test_release_settlement_api_claim(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_settlement_api_claim(bool $enabled): void
     {
-        $this->round134Collection('claim', api: true);
+        $this->round134Collection('claim', api: true, enabled: $enabled);
     }
 
-    public function test_release_settlement_api_late_bank(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_settlement_api_late_bank(bool $enabled): void
     {
-        $this->round134Collection('late_bank', api: true);
+        $this->round134Collection('late_bank', api: true, enabled: $enabled);
     }
 
-    public function test_release_settlement_api_late_cash(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_settlement_api_late_cash(bool $enabled): void
     {
-        $this->round134Collection('late_cash', api: true);
+        $this->round134Collection('late_cash', api: true, enabled: $enabled);
     }
 
     public function test_release_late_cash_fence_separate_handover(): void
@@ -12148,7 +12151,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
     }
 
-    public function test_release_settlement_api_counted_cash(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_settlement_api_counted_cash(bool $enabled): void
     {
         [, , , , , $subscriber] = $this->held();
         $issuer = $this->actor();
@@ -12171,7 +12175,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'financial_posting_operations', 'financial_posting_events', 'audit_events', 'document_sequences'];
         $before = [];
         foreach ($tables as $table) $before[$table] = $snapshot($table);
-        config(['financial_candidate.late_cash_settlements' => true]);
+        config(['financial_candidate.late_cash_settlements' => $enabled]);
         \Laravel\Sanctum\Sanctum::actingAs($issuer);
         $this->postJson($url, $data)->assertForbidden();
         \Laravel\Sanctum\Sanctum::actingAs($reviewer);
@@ -12191,8 +12195,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $committed = [];
         foreach ($tables as $table) $committed[$table] = $snapshot($table);
         $this->postJson($url, $data)->assertOk()->assertJsonPath('review.payment_id', $payment);
-        config(['financial_candidate.late_cash_settlements' => false]);
-        $this->postJson($url, $data)->assertConflict();
+        config(['financial_candidate.late_cash_settlements' => ! $enabled]);
+        $this->postJson($url, $data)->assertOk()->assertJsonPath('review.payment_id', $payment);
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
         $period = (int) DB::table('financial_periods')->value('id');
