@@ -31,6 +31,14 @@ final class GatedBankFeeWriter
     {
         return $this->gate->withinOpenPeriod('water', $date, $now,
             function (array $context) use ($actor, $statementId, $lineId, $reference, $reason, $evidence, $uuid, $now): array {
+                app(TreasuryFinancialWriteProtection::class)->requireActive();
+                try {
+                    $active = app(BankEvidencePeriodProtection::class)->active()
+                        && app(BankRangeDestinationProtection::class)->active();
+                } catch (\LogicException $error) {
+                    throw new DomainException('bank_fee_write_protection_missing', 0, $error);
+                }
+                $this->need($active, 'bank_fee_write_protection_missing');
                 $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
                 DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_bank_fee_issuance_lock');
