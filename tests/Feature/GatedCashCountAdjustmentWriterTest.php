@@ -6856,7 +6856,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         config(['financial_candidate.invoices' => true]);
         $this->rejects('gated_invoice_writer_required', $directIssue);
         $this->rejects('gated_invoice_writer_required', fn () => DB::transaction(fn () => $directIssue($writer)));
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->rejects('financial_period_not_open', $issue);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -6878,7 +6878,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->rejects('gated_invoice_writer_required', $directCancel);
         $issued = [];
         foreach ($tables as $table) $issued[$table] = $snapshot($table);
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->rejects('financial_period_not_open', $cancel);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         foreach ($issued as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -6899,6 +6899,12 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
         foreach (['payments', 'treasury_postings'] as $table) $this->assertSame($before[$table], $snapshot($table), $table);
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
+        // CLOSED is terminal. Exercise it last instead of reopening it for fixture setup.
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $issue);
+        $this->rejects('financial_period_not_open', $cancel);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame('CLOSED', DB::table('financial_periods')->where('scope_key', 'water')->where('month', '2026-11')->value('state'));
     }
 
     public function test_round135_invoice_issue_cancel_register_exact_legs_and_rollback(): void
@@ -7341,7 +7347,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         config(['financial_candidate.refunds' => true]);
         $this->rejects('gated_refund_writer_required', $direct);
         $this->rejects('gated_refund_writer_required', fn () => DB::transaction(fn () => $direct($writer)));
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->rejects('financial_period_not_open', $record);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
         foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
@@ -7370,6 +7376,11 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(500, $report['held_cash_handover_surplus_reserve_minor']);
         $this->assertSame(525, $report['held_cash_total_protected_minor']);
         $this->assertSame(525, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount($accountId)));
+        // CLOSED is terminal. Exercise it last instead of reopening it for fixture setup.
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $record);
+        foreach ($committed as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame('CLOSED', DB::table('financial_periods')->where('scope_key', 'water')->where('month', '2026-11')->value('state'));
     }
 
     public function test_round136_cash_refund_records_both_legs_and_keeps_reserve(): void
