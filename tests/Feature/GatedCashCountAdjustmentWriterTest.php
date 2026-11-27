@@ -9026,6 +9026,30 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($after, $snapshot());
     }
 
+    public function test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime(): void
+    {
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
+        $before = $inspect();
+        $this->assertCount(24, $before['guards']);
+        $this->assertCount(13, $before['writers']);
+        $this->assertTrue($before['guards']['registry']);
+        $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
+        $this->assertArrayHasKey('held_release_journal', $before['guards']);
+        $this->assertFalse($before['runtime_grant_allowlist_accepted']);
+        $this->assertNotEmpty($before['runtime_grant_issues']);
+        $this->assertFalse($before['complete_writer_coverage_verified']);
+        DB::unprepared('DROP TRIGGER fin_registry_op_reject_delete');
+        try {
+            $report = $inspect();
+            $this->assertFalse($report['guards']['registry']);
+            $this->assertFalse($report['listed_guards_active']);
+            $this->assertFalse($report['closure_authorized']);
+        } finally {
+            app(\App\Services\FinancialPostingRegistryProtection::class)->install();
+        }
+        $this->assertSame($before, $inspect());
+    }
+
     public function test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate(): void
     {
         app(\App\Services\LedgerProtection::class)->install();
