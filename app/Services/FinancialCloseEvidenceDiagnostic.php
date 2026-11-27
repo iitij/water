@@ -78,6 +78,7 @@ final class FinancialCloseEvidenceDiagnostic
         $heldPeriod = $this->heldPeriod->inspect($periodId);
         $settlement = $this->settlements->inspect($actor, $periodId, $through);
         $cashEvidence = $ended ? app(FinancialCashPeriodEvidence::class)->inspect($periodId) : null;
+        $outstanding = $ended ? app(FinancialOutstandingPeriodEvidence::class)->inspect($periodId) : null;
         $incident = $this->refundIncidents();
         $batchCoverage = $this->refunds->verifyBatchAuditCoverage();
         $subscriber = $ended ? null : $this->subscribers->inspect($periodId);
@@ -105,11 +106,13 @@ final class FinancialCloseEvidenceDiagnostic
         }
         if (! app(LedgerProtection::class)->active()) $blockers[] = 'close_ledger_protection_missing';
         if (! app(FinancialCloseJournalProtection::class)->active()) $blockers[] = 'close_journal_protection_missing';
+        if ($outstanding !== null && ! $outstanding['transit']['recorded_rollforward_verified']) $blockers[] = 'transit_period_unmatched';
+        if ($outstanding !== null && ! $outstanding['custody']['recorded_rollforward_verified']) $blockers[] = 'custody_period_unmatched';
         sort($blockers, SORT_STRING);
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
-            'cash_period_evidence' => $cashEvidence, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
+            'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
             'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
     }
