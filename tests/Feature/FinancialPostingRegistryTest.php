@@ -133,6 +133,28 @@ final class FinancialPostingRegistryTest extends TestCase
         }
     }
 
+    public function test_registry_rejects_nonexistent_financial_source_legs(): void
+    {
+        $this->gate(fn (array $context) => $this->record($context, self::UUID, [$this->leg('10', 'bank', 10)]));
+        $before = DB::table('financial_posting_events')->orderBy('id')->get()->all();
+        $row = (array) $before[0];
+        unset($row['id']);
+        foreach ([
+            ['source_type' => 'ledger_transaction', 'leg' => 'subscriber'],
+            ['source_type' => 'treasury_posting', 'leg' => 'treasury'],
+            ['source_type' => 'treasury_opening', 'leg' => 'opening'],
+        ] as $fields) {
+            try {
+                DB::table('financial_posting_events')->insert(array_replace($row, $fields, ['source_id' => '9223372036854775807']));
+                $this->fail('Registry accepted a nonexistent financial source.');
+            } catch (QueryException $error) {
+                $this->assertStringContainsString('Financial registry source identity is invalid', $error->getMessage());
+            }
+            $this->assertEquals($before, DB::table('financial_posting_events')->orderBy('id')->get()->all());
+        }
+        $this->assertDatabaseCount('financial_posting_operations', 1);
+    }
+
     public function test_registry_protection_rejects_direct_mutation_and_fenced_inserts(): void
     {
         $this->assertTrue(app(\App\Services\FinancialPostingRegistryProtection::class)->active());
