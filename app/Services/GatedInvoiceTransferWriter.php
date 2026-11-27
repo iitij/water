@@ -111,7 +111,7 @@ final class GatedInvoiceTransferWriter
             $this->need($replay === ($this->operation($uuid) !== null), 'gated_invoice_operation_conflict');
             if ($replay) {
                 $this->need((int) $invoice->voided_by === (int) $actor->id && $invoice->void_reason === trim($reason)
-                    && $invoice->voided_at->toDateString() === $context['effective_on'], 'gated_invoice_replay_conflict');
+                    && $invoice->voided_at->copy()->setTimezone('Asia/Aden')->toDateString() === $context['effective_on'], 'gated_invoice_replay_conflict');
                 $this->owned($this->entry(Invoice::class, $invoiceId, 'invoice_reversal'), $uuid, $context['effective_on']);
             }
             $balance = app(TransactionService::class);
@@ -124,7 +124,7 @@ final class GatedInvoiceTransferWriter
                 $this->invoiceIdentity = null;
             }
             $leg = $this->ledger->leg((int) $this->entry(Invoice::class, $invoiceId, 'invoice_reversal')->id);
-            $this->need($invoice->status === 'cancelled' && $leg['amount_minor'] === AccountMoney::stored($invoice, 'total_amount')
+            $this->need($invoice->status === 'cancelled' && $invoice->voided_at?->copy()->setTimezone('Asia/Aden')->toDateString() === $context['effective_on'] && $leg['amount_minor'] === AccountMoney::stored($invoice, 'total_amount')
                 && $balance->accountBalanceMinor($subscriber) === SignedMinor::add($before, $replay ? 0 : $leg['amount_minor']),
                 'gated_invoice_effect_mismatch');
             $created = $this->registry->record($context, $uuid, [$leg], $now);
@@ -154,7 +154,7 @@ final class GatedInvoiceTransferWriter
                 $this->need((int) $existing->approved_by === (int) $actor->id
                     && (int) $existing->to_subscriber_id === $destinationId && $existing->reason === trim($reason)
                     && $existing->evidence === trim($evidence)
-                    && $existing->created_at->toDateString() === $context['effective_on'], 'gated_transfer_replay_conflict');
+                    && $existing->created_at->copy()->setTimezone('Asia/Aden')->toDateString() === $context['effective_on'], 'gated_transfer_replay_conflict');
                 $this->owned($this->entry(Payment::class, $paymentId, 'payment_reversal'), $uuid, $context['effective_on']);
                 $this->owned($this->entry(PaymentAccountTransfer::class, (int) $existing->id, 'payment_transfer_in'), $uuid, $context['effective_on']);
             }
@@ -171,7 +171,7 @@ final class GatedInvoiceTransferWriter
             $out = $this->ledger->leg((int) $this->entry(Payment::class, $paymentId, 'payment_reversal')->id);
             $in = $this->ledger->leg((int) $this->entry(PaymentAccountTransfer::class, (int) $transfer->id, 'payment_transfer_in')->id);
             $minor = AccountMoney::stored($payment);
-            $this->need($minor > 0 && $out['amount_minor'] === -$minor && $in['amount_minor'] === $minor
+            $this->need($transfer->created_at->copy()->setTimezone('Asia/Aden')->toDateString() === $context['effective_on'] && $minor > 0 && $out['amount_minor'] === -$minor && $in['amount_minor'] === $minor
                 && $balance->accountBalanceMinor($from) === SignedMinor::add($beforeFrom, $replay ? 0 : -$minor)
                 && $balance->accountBalanceMinor($to) === SignedMinor::add($beforeTo, $replay ? 0 : $minor),
                 'gated_transfer_effect_mismatch');

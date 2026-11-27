@@ -230,7 +230,7 @@ final class GatedReceiptVoidWriter
     private function register(Payment $payment, ?string $uuid, array $context, DateTimeImmutable $now, bool $replay): array
     {
         $this->validUuid($uuid);
-        $this->need($payment->isVoided() && $payment->voided_at->toDateString() === $context['effective_on'], 'gated_void_effective_date');
+        $this->need($payment->isVoided() && $payment->voided_at->copy()->setTimezone('Asia/Aden')->toDateString() === $context['effective_on'], 'gated_void_effective_date');
         $leg = $this->ledger->leg((int) $this->entry((int) $payment->id, 'payment_reversal')->id);
         $this->need($leg['amount_minor'] === -AccountMoney::stored($payment), 'gated_void_effect_mismatch');
         if ($replay) {
