@@ -11354,6 +11354,71 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($result['closure_authorized']);
     }
 
+    public function test_filament_bank_evidence_import_match_and_fee_use_shared_services(): void
+    {
+        $importer = $this->actor();
+        $reviewer = $this->actor();
+        $writer = app(GatedTreasuryOpeningFundingWriter::class);
+        $bank = $writer->open($importer, ['code' => 'QA-WEB-BANK', 'name' => 'Synthetic bank', 'channel' => 'bank',
+            'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-WEB-BANK-OPEN', 'opening_evidence' => self::EVIDENCE], self::UUID, $this->nowAt())['account'];
+        $cash = $writer->open($importer, ['code' => 'QA-WEB-BANK-CASH', 'name' => 'Synthetic cash', 'channel' => 'cash',
+            'opening_on' => '2026-11-25', 'opening_amount' => '0.00',
+            'opening_reference' => 'QA-WEB-BANK-CASH-OPEN', 'opening_evidence' => self::EVIDENCE], self::OTHER, $this->nowAt())['account'];
+        app(\App\Services\GatedTreasuryTransferWriter::class)->dispatch($importer, [
+            'from_account_id' => $bank['id'], 'to_account_id' => $cash['id'], 'amount' => '0.25',
+            'reference' => 'QA-WEB-BANK-TRANSFER', 'dispatched_on' => '2026-11-25', 'evidence' => self::EVIDENCE,
+        ], self::NEXT, $this->nowAt());
+        $posting = DB::table('treasury_postings')->sole();
+        $page = \App\Filament\Pages\TreasuryBankReconciliation::class;
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $this->actingAs($importer, 'web');
+        $this->assertFalse($page::canAccess());
+        config(['financial_candidate.bank_evidence' => true, 'financial_candidate.bank_fees' => true]);
+        $this->actingAs(User::factory()->create(['role' => 'admin']), 'web');
+        $this->assertFalse($page::canAccess());
+        $this->actingAs($importer, 'web');
+        $this->assertTrue($page::canAccess());
+        $restore = \Filament\Forms\Components\Repeater::fake();
+        $data = ['account_id' => $bank['id'], 'reference' => 'QA-WEB-BANK-STMT', 'from_date' => '2026-11-25',
+            'to_date' => '2026-11-25', 'opening_amount' => '100.00', 'closing_amount' => '99.35', 'evidence' => self::EVIDENCE,
+            'lines' => [
+                ['bank_reference' => 'QA-WEB-BANK-TRANSFER-LINE', 'booked_on' => '2026-11-25', 'amount' => '-0.25'],
+                ['bank_reference' => 'QA-WEB-BANK-FEE-LINE', 'booked_on' => '2026-11-25', 'amount' => '-0.40'],
+            ]];
+        try {
+            DB::table('financial_periods')->update(['state' => 'FROZEN']);
+            \Livewire\Livewire::test($page)->callAction('import_statement', data: $data)->assertHasActionErrors();
+            $this->assertDatabaseCount('bank_statements', 0);
+            DB::table('financial_periods')->update(['state' => 'OPEN']);
+            \Livewire\Livewire::test($page)->callAction('import_statement', data: $data)->assertHasNoActionErrors();
+        } finally {
+            $restore();
+        }
+        $sid = (int) DB::table('bank_statements')->value('id');
+        $line = (int) DB::table('bank_statement_lines')->where('bank_reference', 'QA-WEB-BANK-TRANSFER-LINE')->value('id');
+        $feeLine = (int) DB::table('bank_statement_lines')->where('bank_reference', 'QA-WEB-BANK-FEE-LINE')->value('id');
+        $match = ['line_id' => $line, 'posting_id' => $posting->id, 'evidence' => self::EVIDENCE];
+        \Laravel\Sanctum\Sanctum::actingAs($importer);
+        $this->postJson('/api/treasury/bank-statements/'.$sid.'/matches', $match)->assertForbidden();
+        $this->actingAs($reviewer, 'web');
+        \Livewire\Livewire::test($page)->callAction('match_line', data: $match)->assertHasNoActionErrors();
+        $this->assertDatabaseCount('bank_statement_matches', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $fee = ['line_id' => $feeLine, 'reference' => 'QA-WEB-BANK-FEE', 'reason' => 'Independent documented bank fee',
+            'evidence' => self::EVIDENCE, 'operation_uuid' => self::ADJUST];
+        \Livewire\Livewire::test($page)->callAction('record_fee', data: $fee)->assertHasNoActionErrors();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson('/api/treasury/bank-statements/'.$sid.'/fees', $fee)->assertOk()
+            ->assertJsonPath('reconciliation.fully_matched', true)->assertJsonPath('reconciliation.certified_balance', false);
+        $this->assertDatabaseCount('bank_statement_matches', 2);
+        $this->assertDatabaseCount('treasury_bank_fees', 1);
+        $this->assertDatabaseCount('treasury_postings', 2);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => self::ADJUST, 'amount_minor' => -40]);
+        $this->assertDatabaseCount('financial_posting_events', 4);
+        $this->assertDatabaseCount('transactions', 0);
+    }
+
     public function test_bank_fee_refuses_frozen_adjacent_statement_period_before_posting(): void
     {
         $importer = $this->actor();
