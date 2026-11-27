@@ -92,6 +92,56 @@ final class GatedTreasuryOpeningFundingWriterTest extends TestCase
         }
     }
 
+    public function test_treasury_writers_reject_missing_live_protection(): void
+    {
+        $issuer = $this->actor();
+        $collector = $this->actor();
+        $receiver = $this->actor();
+        $writer = app(GatedTreasuryOpeningFundingWriter::class);
+        $transfer = app(\App\Services\GatedTreasuryTransferWriter::class);
+        $open = fn () => $writer->open($issuer, $this->data(), self::UUID, $this->nowAt());
+        $account = $open()['account'];
+        $destination = $writer->open($receiver, $this->data('QA-DEST'), '33333333-3333-4333-8333-333333333333', $this->nowAt())['account'];
+        $fund = fn () => $writer->fund($collector, $issuer, $account['id'], '10.25',
+            'QA-FUNDED-REF', 'Independent physical funding receipt', self::OTHER, $this->nowAt());
+        $out = ['from_account_id' => $account['id'], 'to_account_id' => $destination['id'],
+            'amount' => '10.25', 'reference' => 'QA-TRANSFER-OUT', 'dispatched_on' => '2026-11-25',
+            'evidence' => 'Independent physical transfer dispatch'];
+        $in = ['amount' => '10.25', 'reference' => 'QA-TRANSFER-IN', 'received_on' => '2026-11-25',
+            'evidence' => 'Independent physical transfer receipt'];
+        $dispatch = fn () => $transfer->dispatch($issuer, $out, '44444444-4444-4444-8444-444444444444', $this->nowAt());
+        $sent = $dispatch();
+        $receive = fn () => $transfer->receive($receiver, $sent['transfer']['id'], $in,
+            '55555555-5555-4555-8555-555555555555', $this->nowAt());
+        $tables = ['treasury_accounts', 'cash_sessions', 'cash_session_fundings', 'treasury_transfers',
+            'treasury_transfer_receipts', 'treasury_postings', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        foreach ([
+            ['fin_dated_treasury_postings_insert', \App\Services\DatedFinancialSourcePeriodProtection::class],
+            ['fin_session_dest_insert', \App\Services\SessionTransferDestinationProtection::class],
+            ['fin_registry_source_identity_insert', \App\Services\RegistrySourceIdentityProtection::class],
+        ] as [$trigger, $guard]) {
+            $before = $snapshot();
+            DB::unprepared('DROP TRIGGER '.$trigger);
+            try {
+                foreach ([$open, $fund, $dispatch, $receive] as $action) {
+                    $this->rejects('treasury_financial_write_protection_missing', $action);
+                    $this->assertEquals($before, $snapshot());
+                }
+            } finally {
+                app($guard)->install();
+            }
+        }
+        $this->assertFalse($open()['registry_created']);
+        $this->assertTrue($fund()['registry_created']);
+        $this->assertFalse($dispatch()['registry_created']);
+        $this->assertTrue($receive()['registry_created']);
+        $this->assertFalse($receive()['registry_created']);
+        $this->assertDatabaseCount('treasury_transfer_receipts', 1);
+        $this->assertDatabaseCount('cash_session_fundings', 1);
+        $this->assertDatabaseCount('financial_posting_operations', 5);
+    }
+
     public function test_opening_and_funding_are_registered_atomically_and_replay_exactly(): void
     {
         $issuer = $this->actor();
