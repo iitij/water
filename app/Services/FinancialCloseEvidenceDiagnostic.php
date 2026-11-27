@@ -73,6 +73,7 @@ final class FinancialCloseEvidenceDiagnostic
         $through = $ended
             ? (new DateTimeImmutable($period->next_on, new DateTimeZone('Asia/Aden')))->modify('-1 day')->format('Y-m-d')
             : $today;
+        $writerCoverage = app(FinancialWriterCoverageDiagnostic::class)->inspect();
         $source = $this->sources->inspect($periodId);
         $movement = $this->movements->inspect($periodId);
         $heldPeriod = $this->heldPeriod->inspect($periodId);
@@ -112,7 +113,7 @@ final class FinancialCloseEvidenceDiagnostic
         sort($blockers, SORT_STRING);
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
-            'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
+            'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
             'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
             'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
