@@ -118,7 +118,7 @@ jobs:
             esac
             docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "GRANT $privileges ON water_test.$table TO 'water_close_runtime'@'%';"
           done
-      - name: Verify actual isolated close control identity
+      - name: Verify isolated runtime and privileged freeze serialization
         env:
           WATER_QA_CLOSE_CONTROL: '1'
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_close_control_read_only_runtime_can_post_but_cannot_write_close_control tests/Feature/FinancialCloseRuntimePrivilegesTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_close_control_isolated_runtime_serializes_against_privileged_freeze tests/Feature/FinancialCloseRuntimePrivilegesTest.php
