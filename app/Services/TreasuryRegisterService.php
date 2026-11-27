@@ -255,6 +255,14 @@ final class TreasuryRegisterService
                 if ($row->treasury_bank_collection_id) {
                     $issues[] = ['code' => 'unexpected_bank_collection_source', 'posting_id' => $row->id];
                 }
+                if ($row->kind === 'custody_shortage_recovery') {
+                    try {
+                        app(CustodyShortageRecoveryWriter::class)->leg((int) $row->id);
+                    } catch (\DomainException $error) {
+                        $issues[] = ['code' => 'shortage_recovery_source_mismatch', 'posting_id' => $row->id];
+                    }
+                    continue;
+                }
                 if ($row->kind === 'cash_count_adjustment') {
                     if (! app(TreasuryCashCountService::class)->checkAdjustmentPosting($row)) {
                         $issues[] = ['code' => 'cash_adjustment_source_mismatch', 'posting_id' => $row->id];
