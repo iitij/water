@@ -45,6 +45,7 @@ final class FinancialWriterCoverageDiagnostic
         $checks = [
             'ledger' => fn () => app(LedgerProtection::class)->active(),
             'source_period' => fn () => app(FinancialSourceInsertProtection::class)->active(),
+            'bank_evidence_period' => fn () => app(BankEvidencePeriodProtection::class)->active(),
             'registry' => fn () => app(FinancialPostingRegistryProtection::class)->active(),
             'close_journal' => fn () => app(FinancialCloseJournalProtection::class)->active(),
             'allocation_history' => fn () => app(AllocationHistoryProtection::class)->active(),

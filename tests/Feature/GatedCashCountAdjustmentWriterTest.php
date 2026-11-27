@@ -9175,7 +9175,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     {
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
-        $this->assertCount(28, $before['guards']);
+        $this->assertCount(29, $before['guards']);
         $this->assertCount(15, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
         $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
@@ -11379,6 +11379,36 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->postJson($url, $payload)->assertConflict();
         $this->assertDatabaseCount('bank_statement_matches', 1);
         $this->assertDatabaseCount('bank_statements', 1);
+        $this->assertTrue(app(\App\Services\BankEvidencePeriodProtection::class)->active());
+        $snapshots = [];
+        foreach (['bank_statements', 'bank_statement_lines', 'bank_statement_matches'] as $table) {
+            $row = (array) DB::table($table)->sole();
+            $snapshots[$table] = $row;
+            $insert = $row;
+            unset($insert['id']);
+            if ($table === 'bank_statements') $insert['reference'] = 'QA-RAW-STMT';
+            if ($table === 'bank_statement_lines') $insert['bank_reference'] = 'QA-RAW-LINE';
+            $actions = [
+                fn () => DB::table($table)->insert($insert),
+                fn () => DB::table($table)->where('id', $row['id'])->update(['updated_at' => now()->addMinute()]),
+                fn () => DB::table($table)->where('id', $row['id'])->delete(),
+            ];
+            if (DB::getDriverName() === 'sqlite') {
+                $actions[] = fn () => DB::statement('INSERT OR REPLACE INTO '.$table.' ('.implode(',', array_keys($row)).') VALUES ('
+                    .implode(',', array_fill(0, count($row), '?')).')', array_values($row));
+            }
+            foreach ($actions as $action) {
+                try {
+                    $action();
+                    $this->fail('Bank evidence mutation unexpectedly succeeded: '.$table);
+                } catch (\Illuminate\Database\QueryException $error) {
+                    $this->assertStringContainsString('Bank evidence period is fenced', $error->getMessage());
+                }
+                $this->assertSame($row, (array) DB::table($table)->sole());
+            }
+        }
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('financial_posting_events', 3);
     }
 
     public function test_bank_period_evidence_uses_cutoff_not_later_account_balance(): void
