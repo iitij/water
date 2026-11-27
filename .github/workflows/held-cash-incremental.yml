@@ -43,7 +43,7 @@ jobs:
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/CustodyShortageSettlementPolicyTest.php
       - name: Verify combined outstanding period evidence and affected close diagnostics
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_outstanding_rejects_late_recorded_prior_month_transfer|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_custody_source_coverage_keeps_shortage_visible_after_full_handover' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_shortage_loss_decision_is_independent_and_immutable|test_custody_source_coverage_keeps_shortage_visible_after_full_handover' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -106,7 +106,7 @@ jobs:
 
       - name: Verify independent cash session decision and shortage carry
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_outstanding_rejects_late_recorded_prior_month_transfer|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_custody_source_coverage_keeps_shortage_visible_after_full_handover' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_shortage_loss_decision_is_independent_and_immutable|test_custody_source_coverage_keeps_shortage_visible_after_full_handover' tests/Feature/GatedCashCountAdjustmentWriterTest.php
       - name: Provision disposable restricted runtime fixture
         env:
           QA_CONTAINER: ${{ job.services.mysql.id }}
