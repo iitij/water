@@ -102,6 +102,23 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify combined outstanding period evidence and affected close diagnostics
+      - name: Provision disposable restricted runtime fixture
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_subscriber_cutoff_|test_final_accounting_integrated_registered_cycle_|test_final_accounting_predecessor_readable_before_next_period_preparation' tests/Feature/GatedCashCountAdjustmentWriterTest.php tests/Feature/FinancialCloseCoordinatorTest.php
+          set -euo pipefail
+          test "$APP_ENV" = testing
+          test "$DB_DATABASE" = water_test
+          test -n "$QA_CONTAINER"
+          php artisan migrate:fresh --force
+          php -r 'require "vendor/autoload.php"; $app = require "bootstrap/app.php"; $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap(); app(App\Services\LedgerProtection::class)->install(); app(App\Services\AllocationHistoryProtection::class)->install(); app(App\Services\FinancialTriggerMetadata::class)->install();'
+          docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password <<'SQL'
+          CREATE USER 'water_runtime'@'%' IDENTIFIED BY 'disposable_runtime_password';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON `water\_test`.* TO 'water_runtime'@'%';
+          GRANT EXECUTE ON PROCEDURE `water_test`.`financial_read_trigger_metadata` TO 'water_runtime'@'%';
+          SQL
+      - name: Verify runtime DML isolation and live financial protections
+        env:
+          WATER_QA_RUNTIME: '1'
+        run: |
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseRuntimePrivilegesTest.php
