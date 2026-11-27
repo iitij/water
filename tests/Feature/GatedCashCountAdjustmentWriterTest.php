@@ -9831,14 +9831,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $raw['entity_id'] = (string) $session->id.':99999999-9999-4999-8999-999999999999';
         $period = DB::table('financial_periods')->where('month', '2026-11')->sole();
         foreach (['FROZEN', 'CLOSED'] as $state) {
-            DB::table('financial_periods')->where('id', $period->id)->update(['state' => $state]);
+            DB::beginTransaction();
             try {
+                DB::table('financial_periods')->where('id', $period->id)->update(['state' => $state]);
                 DB::table('audit_events')->insert($raw);
                 $this->fail('Direct shortage audit insert bypassed period protection.');
             } catch (\Illuminate\Database\QueryException $error) {
                 $this->assertStringContainsString('Custody shortage source period is fenced', $error->getMessage());
             } finally {
-                DB::table('financial_periods')->where('id', $period->id)->update(['state' => $period->state]);
+                DB::rollBack();
             }
         }
 
