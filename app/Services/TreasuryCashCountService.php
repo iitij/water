@@ -255,7 +255,7 @@ final class TreasuryCashCountService
     }
 
     /** Records a proven cause, not an arbitrary balancing plug or a complete GL journal. */
-    public function adjust(User $actor, int $id, string $reference, string $classification, string $reason, string $evidence): array
+    public function adjust(User $actor, int $id, string $reference, string $classification, string $reason, string $evidence, ?GatedCashCountAdjustmentWriter $writer = null): array
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $reference = mb_strtoupper(trim($reference));
@@ -266,7 +266,7 @@ final class TreasuryCashCountService
             || ! in_array($classification, ['confirmed_cash_loss', 'unattributed_cash_held'], true)) {
             throw ValidationException::withMessages(['adjustment' => 'يلزم تصنيف محدد وسبب مثبت ومرجع مستقل.']);
         }
-        return DB::transaction(function () use ($actor, $id, $reference, $classification, $reason, $evidence): array {
+        return DB::transaction(function () use ($actor, $id, $reference, $classification, $reason, $evidence, $writer): array {
             $this->lock();
             $count = DB::table('treasury_cash_counts')->where('id', $id)->lockForUpdate()->first();
             abort_unless($count, 404);
@@ -285,6 +285,15 @@ final class TreasuryCashCountService
                 'evidence' => $evidence, 'approved_by' => $actor->id,
             ];
             $existing = DB::table('treasury_cash_adjustments')->where('treasury_cash_count_id', $id)->lockForUpdate()->first();
+            $postingId = $existing === null ? null : DB::table('treasury_postings')
+                ->where('treasury_cash_adjustment_id', $existing->id)->value('id');
+            $registered = $postingId !== null && DB::table('financial_posting_events')->where('scope_key', 'water')
+                ->where('source_type', 'treasury_posting')->where('leg', 'treasury')
+                ->where('source_id', (string) $postingId)->exists();
+            if (! ($writer !== null && $writer->allowsMutation($id, (int) $actor->id))
+                && ($writer !== null || $registered || config('financial_candidate.cash_count_adjustments') === true)) {
+                throw new \DomainException('gated_cash_count_adjustment_writer_required');
+            }
             if ($existing) {
                 foreach ($record as $field => $value) {
                     abort_unless((string) $existing->$field === (string) $value, 409, 'سبق تسجيل تسوية مختلفة للجرد.');

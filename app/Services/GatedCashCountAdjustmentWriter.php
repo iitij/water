@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedCashCountAdjustmentWriter
 {
+    private ?array $mutationIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private TreasuryCashCountService $counts,
@@ -113,7 +115,13 @@ final class GatedCashCountAdjustmentWriter
                     $this->verifier->verifyPeriod('water', $periodId);
                 }
 
-                $result = $this->counts->adjust($actor, $countId, $reference, $classification, $reason, $evidence);
+                $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_cash_count_mutation_scope');
+                $this->mutationIdentity = [$countId, (int) $actor->id];
+                try {
+                    $result = $this->counts->adjust($actor, $countId, $reference, $classification, $reason, $evidence, $this);
+                } finally {
+                    $this->mutationIdentity = null;
+                }
                 $adjustment = $result['adjustment'];
                 $posting = $result['posting'];
                 $leg = $this->adjustments->leg((int) $posting['id']);
@@ -152,6 +160,11 @@ final class GatedCashCountAdjustmentWriter
                 }
                 return $result;
             });
+    }
+
+    public function allowsMutation(int $countId, int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->mutationIdentity === [$countId, $actorId];
     }
 
     private function audit(string $event, string $type, int $id): AuditEvent

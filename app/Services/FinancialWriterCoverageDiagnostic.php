@@ -24,6 +24,7 @@ final class FinancialWriterCoverageDiagnostic
         'refunds' => 'refund',
         'completed_cash_refund' => 'completed_cash_refund',
         'bank_fees' => 'bank_fee',
+        'cash_count_adjustments' => 'cash_count_adjustment',
         'late_cash_settlements' => 'late_cash_and_counted_cash',
         'noncash_settlements' => 'noncash_settlement',
         'active_held_release' => 'held_cash_release',

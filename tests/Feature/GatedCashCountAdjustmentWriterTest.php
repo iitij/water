@@ -125,6 +125,41 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    public function test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass(): void
+    {
+        [$counter, $reviewer, , $count] = $this->fixture();
+        $id = (int) $count['id'];
+        $url = '/api/treasury/cash-counts/'.$id.'/adjustment';
+        $payload = ['reference' => 'QA-ADJUST-01', 'classification' => 'confirmed_cash_loss',
+            'reason' => self::REASON, 'evidence' => self::EVIDENCE];
+        config(['financial_candidate.cash_count_adjustments' => true]);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson($url, $payload)->assertUnprocessable();
+        $this->rejects('gated_cash_count_adjustment_writer_required', fn () =>
+            app(TreasuryCashCountService::class)->adjust($reviewer, $id, 'QA-ADJUST-01',
+                'confirmed_cash_loss', self::REASON, self::EVIDENCE));
+        $payload['operation_uuid'] = self::ADJUST;
+        \Laravel\Sanctum\Sanctum::actingAs($counter);
+        $this->postJson($url, $payload)->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        DB::table('financial_periods')->update(['state' => 'FROZEN']);
+        $this->postJson($url, $payload)->assertConflict();
+        $this->assertDatabaseCount('treasury_cash_adjustments', 0);
+        $this->assertDatabaseCount('treasury_postings', 0);
+        DB::table('financial_periods')->update(['state' => 'OPEN']);
+        $this->postJson($url, $payload)->assertOk()->assertJsonPath('observation.current_recorded_minor', 9975);
+        $this->postJson($url, $payload)->assertOk();
+        $this->assertDatabaseCount('treasury_cash_adjustments', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => self::ADJUST, 'amount_minor' => -25]);
+        config(['financial_candidate.cash_count_adjustments' => false]);
+        $this->postJson($url, $payload)->assertConflict();
+        unset($payload['operation_uuid']);
+        $this->postJson($url, $payload)->assertConflict();
+        $this->assertDatabaseCount('treasury_cash_adjustments', 1);
+        $this->assertDatabaseCount('financial_posting_events', 2);
+    }
+
     public function test_confirmed_shortage_posts_exact_negative_variance_and_replays_once(): void
     {
         [, $reviewer, , $count] = $this->fixture();
@@ -9056,7 +9091,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
         $this->assertCount(28, $before['guards']);
-        $this->assertCount(13, $before['writers']);
+        $this->assertCount(14, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
         $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
         $this->assertArrayHasKey('held_release_journal', $before['guards']);

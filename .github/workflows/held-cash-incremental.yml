@@ -39,9 +39,9 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify adjacent shortage exposure and custody conservation
+      - name: Verify cash count adjustment entrypoint and writer safeguards
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_shortage_recovery_preserves_prior_period_cutoff|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_surplus_cutoff_evidence_separates_allocation_from_reserved_cash' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass|test_confirmed_shortage_posts_exact_negative_variance_and_replays_once|test_legacy_adjustment_and_conflicting_replay_are_not_adopted|test_registry_failure_rolls_back_adjustment_and_audit_then_retries|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -102,6 +102,6 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify adjacent shortage exposure and custody conservation
+      - name: Verify cash count adjustment entrypoint and writer safeguards
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_shortage_recovery_preserves_prior_period_cutoff|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_surplus_cutoff_evidence_separates_allocation_from_reserved_cash' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass|test_confirmed_shortage_posts_exact_negative_variance_and_replays_once|test_legacy_adjustment_and_conflicting_replay_are_not_adopted|test_registry_failure_rolls_back_adjustment_and_audit_then_retries|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php

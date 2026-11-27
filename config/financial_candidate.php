@@ -15,6 +15,7 @@ return [
     'treasury_opening_funding' => env('WATER_CANDIDATE_TREASURY_OPENING_FUNDING', false),
     'treasury_transfers' => env('WATER_CANDIDATE_TREASURY_TRANSFERS', false),
     'refunds' => env('WATER_CANDIDATE_REFUNDS', false),
+    'cash_count_adjustments' => env('WATER_CANDIDATE_CASH_COUNT_ADJUSTMENTS', false),
     'bank_fees' => env('WATER_CANDIDATE_BANK_FEES', false),
     'cash_handovers' => env('WATER_CANDIDATE_CASH_HANDOVERS', false),
     'late_cash_settlements' => env('WATER_CANDIDATE_LATE_CASH_SETTLEMENTS', false),
