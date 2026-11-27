@@ -16,6 +16,52 @@ use Illuminate\Validation\ValidationException;
 /** Evidence matching, not permission to alter money or certify a partial treasury register. */
 final class BankReconciliationService
 {
+    /** Evidence writes must serialize with close and cover every month in the statement.
+     * A late statement may be received for an open earlier month, never a closed one.
+     * No posting or accounting balance is created by this transport.
+     */
+    private function evidenceTransaction(User $actor, string $from, string $to, callable $work): array
+    {
+        if (config('financial_candidate.bank_evidence') !== true) {
+            return DB::transaction(fn () => $work($actor), 3);
+        }
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        return app(FinancialWriteGate::class)->withinOpenPeriod('water', $to, now()->toDateTimeImmutable(),
+            function () use ($actor, $from, $to, $work): array {
+                $this->assertEvidenceRangeOpen($from, $to);
+                $this->lock();
+                $current = User::query()->lockForUpdate()->findOrFail($actor->id);
+                abort_if($current->isDisabled(), 403);
+                $current->setRelation('roles', $current->roles()->lockForUpdate()->get());
+                app(TreasuryRegisterService::class)->authorize($current);
+                return $work($current);
+            });
+    }
+
+    private function assertEvidenceRangeOpen(string $from, string $to): void
+    {
+        $context = FinancialWriteGate::currentContext();
+        if ($context['scope'] !== 'water' || $from > $to) {
+            throw new \DomainException('bank_evidence_period_range_invalid');
+        }
+        $periods = DB::table('financial_periods')->where('scope_key', 'water')
+            ->where('start_on', '<=', $to)->where('next_on', '>', $from)
+            ->orderBy('start_on')->lockForUpdate()->get();
+        $cursor = $from;
+        foreach ($periods as $period) {
+            $expected = app(\App\Support\FinancialClosePolicy::class)->open('water', $period->month, 'Asia/Aden');
+            if ($period->start_on !== $expected['start'] || $period->next_on !== $expected['next']
+                || $period->start_on > $cursor || $period->next_on <= $cursor || $period->state !== 'OPEN'
+                || DB::table('financial_period_closures')->where('period_id', $period->id)->lockForUpdate()->first()
+                || DB::table('financial_close_commands')->where('period_id', $period->id)
+                    ->where('action', 'approve')->lockForUpdate()->first()) {
+                throw new \DomainException('bank_evidence_period_range_not_open');
+            }
+            $cursor = $period->next_on;
+        }
+        if ($cursor <= $to) throw new \DomainException('bank_evidence_period_range_not_open');
+    }
+
     private function lock(): void
     {
         if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
@@ -116,7 +162,7 @@ final class BankReconciliationService
         }
         usort($lines, fn ($a, $b) => strcmp($a['bank_reference'], $b['bank_reference']));
         $record['content_hash'] = hash('sha256', json_encode([$record, $lines], JSON_THROW_ON_ERROR));
-        return DB::transaction(function () use ($actor, $accountId, $record, $lines, $from, $to): array {
+        return $this->evidenceTransaction($actor, $from, $to, function (User $actor) use ($accountId, $record, $lines, $from, $to): array {
             $this->lock();
             $account = $this->account($accountId);
             $existing = DB::table('bank_statements')->where('treasury_account_id', $accountId)
@@ -152,7 +198,7 @@ final class BankReconciliationService
                 'after' => $record + ['line_count' => count($lines)],
             ]);
             return $this->report(DB::table('bank_statements')->find($id), $account);
-        }, 3);
+        });
     }
 
     /** Rebuild the original canonical payload; offsetting edits cannot hide behind a zero net. */
@@ -225,10 +271,16 @@ final class BankReconciliationService
         app(TreasuryRegisterService::class)->authorize($actor);
         $evidence = trim($evidence);
         if (mb_strlen($evidence) < 10 || mb_strlen($evidence) > 2000) $this->reject('evidence', 'يلزم إثبات المطابقة.');
-        return DB::transaction(function () use ($actor, $id, $lineId, $postingId, $evidence): array {
+        $range = DB::table('bank_statements')->where('id', $id)->first(['from_date', 'to_date']);
+        abort_unless($range, 404);
+        return $this->evidenceTransaction($actor, $range->from_date, $range->to_date,
+            function (User $actor) use ($id, $lineId, $postingId, $evidence, $range): array {
             $this->lock();
             $statement = DB::table('bank_statements')->where('id', $id)->lockForUpdate()->first();
             abort_unless($statement, 404);
+            if ($statement->from_date !== $range->from_date || $statement->to_date !== $range->to_date) {
+                throw new \DomainException('bank_evidence_period_range_changed');
+            }
             $account = $this->account((int) $statement->treasury_account_id);
             abort_if((int) $statement->imported_by === (int) $actor->id, 403, 'يلزم مراجع مستقل عن مدخل الكشف.');
             abort_unless($this->intact($statement, DB::table('bank_statement_lines')->where('bank_statement_id', $id)->get()),
@@ -256,7 +308,7 @@ final class BankReconciliationService
                 'actor_user_id' => $actor->id, 'after' => $record,
             ]);
             return $this->report($statement, $account);
-        }, 3);
+        });
     }
 
     /** Verify the independent fee document, its original bank line and exact posting/match. */

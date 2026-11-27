@@ -9172,7 +9172,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
         $this->assertCount(28, $before['guards']);
-        $this->assertCount(14, $before['writers']);
+        $this->assertCount(15, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
         $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
         $this->assertArrayHasKey('held_release_journal', $before['guards']);
@@ -11319,6 +11319,56 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame([], $result['rows']);
         $this->assertContains(['code' => 'cash_period_count_not_equal_at_cutoff', 'account_id' => $id], $result['issues']);
         $this->assertFalse($result['closure_authorized']);
+    }
+
+    public function test_bank_evidence_entry_requires_every_statement_month_open_and_independent_match(): void
+    {
+        $importer = $this->actor();
+        $reviewer = $this->actor();
+        $writer = app(GatedTreasuryOpeningFundingWriter::class);
+        $bank = $writer->open($importer, ['code' => 'QA-BANK-RANGE', 'name' => 'Synthetic bank', 'channel' => 'bank',
+            'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
+            'opening_reference' => 'QA-BANK-RANGE-OPEN', 'opening_evidence' => self::EVIDENCE], self::UUID, $this->nowAt())['account'];
+        $cash = $writer->open($importer, ['code' => 'QA-BANK-RANGE-CASH', 'name' => 'Synthetic cash', 'channel' => 'cash',
+            'opening_on' => '2026-11-25', 'opening_amount' => '0.00',
+            'opening_reference' => 'QA-BANK-RANGE-CASH-OPEN', 'opening_evidence' => self::EVIDENCE], self::OTHER, $this->nowAt())['account'];
+        app(\App\Services\GatedTreasuryTransferWriter::class)->dispatch($importer, [
+            'from_account_id' => $bank['id'], 'to_account_id' => $cash['id'], 'amount' => '0.25',
+            'reference' => 'QA-BANK-RANGE-TRANSFER', 'dispatched_on' => '2026-11-25', 'evidence' => self::EVIDENCE,
+        ], self::NEXT, $this->nowAt());
+        $posting = DB::table('treasury_postings')->sole();
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-02T10:00:00+03:00'));
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        config(['financial_candidate.bank_evidence' => true]);
+        $url = '/api/treasury/accounts/'.$bank['id'].'/bank-statements';
+        $payload = ['reference' => 'QA-BANK-RANGE-STMT', 'from_date' => '2026-11-25', 'to_date' => '2026-12-02',
+            'opening_amount' => '100.00', 'closing_amount' => '99.75', 'evidence' => self::EVIDENCE,
+            'lines' => [['bank_reference' => 'QA-BANK-RANGE-DEBIT', 'booked_on' => '2026-11-25', 'amount' => '-0.25']]];
+        \Laravel\Sanctum\Sanctum::actingAs($importer);
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'FROZEN']);
+        $this->postJson($url, $payload)->assertConflict();
+        $this->assertDatabaseCount('bank_statements', 0);
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'OPEN']);
+        $sid = $this->postJson($url, $payload)->assertOk()->json('statement.id');
+        $this->postJson($url, $payload)->assertOk()->assertJsonPath('statement.id', $sid);
+        $line = DB::table('bank_statement_lines')->sole();
+        $matchUrl = '/api/treasury/bank-statements/'.$sid.'/matches';
+        $match = ['line_id' => $line->id, 'posting_id' => $posting->id, 'evidence' => self::EVIDENCE];
+        $this->postJson($matchUrl, $match)->assertForbidden();
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
+        $this->postJson($matchUrl, $match)->assertConflict();
+        $this->assertDatabaseCount('bank_statement_matches', 0);
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'OPEN']);
+        $this->postJson($matchUrl, $match)->assertOk()->assertJsonPath('fully_matched', true);
+        $this->postJson($matchUrl, $match)->assertOk();
+        $this->assertDatabaseCount('bank_statements', 1);
+        $this->assertDatabaseCount('bank_statement_lines', 1);
+        $this->assertDatabaseCount('bank_statement_matches', 1);
+        $this->assertDatabaseCount('treasury_postings', 1);
+        $this->assertDatabaseCount('financial_posting_events', 3);
+        $this->assertDatabaseCount('transactions', 0);
     }
 
     public function test_bank_period_evidence_uses_cutoff_not_later_account_balance(): void

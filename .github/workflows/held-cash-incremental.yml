@@ -39,9 +39,9 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify full cash count observation and settlement cycle
+      - name: Verify bank evidence range and existing cutoff proofs
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_filament_full_observation_review_and_settlement_cycle|test_cash_count_adjustment_filament_shares_gate_and_api_replay|test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_bank_evidence_entry_requires_every_statement_month_open_and_independent_match|test_bank_period_evidence_uses_cutoff_not_later_account_balance|test_release_bank_fee_entry_blocks_direct_writer_and_preserves_single_debit|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -102,6 +102,6 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify full cash count observation and settlement cycle
+      - name: Verify bank evidence range and existing cutoff proofs
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_filament_full_observation_review_and_settlement_cycle|test_cash_count_adjustment_filament_shares_gate_and_api_replay|test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_bank_evidence_entry_requires_every_statement_month_open_and_independent_match|test_bank_period_evidence_uses_cutoff_not_later_account_balance|test_release_bank_fee_entry_blocks_direct_writer_and_preserves_single_debit|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
