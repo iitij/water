@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Reject ambiguous subscriber birth at insert and cutoff
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_subscriber_cutoff_rejects_missing_birth_even_without_financial_activity|test_subscriber_birth_identity_cannot_shift_across_cutoff' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify subscriber retirement identity and existing parent fences
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_subscriber_retirement_preserves_empty_cutoff_identity_and_financial_history|test_raw_observation_graph_freeze_blocks_all_mutations_and_detects_missing_guard|test_source_graph_fence_protects_square_cascade_and_parent_replacement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Reject ambiguous subscriber birth at insert and cutoff
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_subscriber_cutoff_rejects_missing_birth_even_without_financial_activity|test_subscriber_birth_identity_cannot_shift_across_cutoff' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify subscriber retirement identity and existing parent fences
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_subscriber_retirement_preserves_empty_cutoff_identity_and_financial_history|test_raw_observation_graph_freeze_blocks_all_mutations_and_detects_missing_guard|test_source_graph_fence_protects_square_cascade_and_parent_replacement' tests/Feature/GatedCashCountAdjustmentWriterTest.php

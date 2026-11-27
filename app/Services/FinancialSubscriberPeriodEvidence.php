@@ -215,7 +215,9 @@ final class FinancialSubscriberPeriodEvidence
         $id = (int) $account->id;
         $utc = new DateTimeZone('UTC');
         $end = new DateTimeImmutable($until, $utc);
-        if ($account->deleted_at !== null && $account->deleted_at < $until) {
+        // An empty retired account still has a stable zero row. A deleted
+        // account with financial effects is not an accepted cutoff source.
+        if ($account->deleted_at !== null && $account->deleted_at < $until && $legs !== []) {
             throw new DomainException('subscriber_cutoff_deleted_account');
         }
         $invoices = $credits = $hashes = $ids = [];

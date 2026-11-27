@@ -40,6 +40,37 @@ final class SubscriberBirthIdentityProtection
             : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF locked_scope IS NOT NULL AND ({$invalid}) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END";
         $defs['fin_subscriber_birth_insert'] = ['subscribers', 'INSERT',
             "BEFORE INSERT ON subscribers FOR EACH ROW {$body}", $body];
+        // Preserve account identity even when no posting exists. InnoDB
+        // cascades bypass child triggers, so also protect the square parent.
+        // Let the existing freeze guard own the error during a real freeze.
+        $configured = "EXISTS (SELECT 1 FROM financial_scopes WHERE scope_key = 'water' AND active_freeze_uuid IS NULL";
+        $configured .= $sqlite ? ')' : ' FOR UPDATE)';
+        foreach (['subscribers', 'squares'] as $table) {
+            $linked = $table === 'subscribers' ? '1 = 1'
+                : 'EXISTS (SELECT 1 FROM subscribers WHERE square_id = OLD.id'.($sqlite ? '' : ' FOR UPDATE').')';
+            $condition = "{$configured} AND ({$linked})";
+            $message = 'Financial source parent graph is fenced';
+            $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$message}'); END"
+                : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END";
+            $defs['fin_birth_'.$table.'_delete'] = [$table, 'DELETE', "BEFORE DELETE ON {$table} FOR EACH ROW {$body}", $body];
+        }
+        if ($sqlite) {
+            foreach (['INSERT', 'UPDATE'] as $event) {
+                $exclude = $event === 'UPDATE' ? ' AND victim.id <> OLD.id' : '';
+                $collision = "EXISTS (SELECT 1 FROM squares victim WHERE (victim.id = NEW.id OR victim.code = NEW.code){$exclude} AND EXISTS (SELECT 1 FROM subscribers WHERE square_id = victim.id))";
+                $body = "WHEN {$configured} AND {$collision} BEGIN SELECT RAISE(ABORT, 'Financial source parent replacement is fenced'); END";
+                $defs['fin_birth_squares_replace_'.strtolower($event)] = ['squares', $event,
+                    "BEFORE {$event} ON squares FOR EACH ROW {$body}", $body];
+            }
+        }
+        $deleted = $sqlite ? 'OLD.deleted_at IS NOT NEW.deleted_at' : 'NOT (OLD.deleted_at <=> NEW.deleted_at)';
+        $history = 'EXISTS (SELECT 1 FROM transactions WHERE subscriber_id = OLD.id'.($sqlite ? '' : ' FOR UPDATE').')';
+        $condition = "{$configured} AND ({$deleted}) AND {$history}";
+        $message = 'Subscriber with ledger history cannot change deletion state';
+        $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$message}'); END"
+            : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END";
+        $defs['fin_birth_subscriber_retire'] = ['subscribers', 'UPDATE',
+            "BEFORE UPDATE ON subscribers FOR EACH ROW {$body}", $body];
         return $defs;
     }
 

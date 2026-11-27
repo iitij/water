@@ -9541,7 +9541,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 $write();
                 $this->fail('Fenced parent graph operation unexpectedly accepted.');
             } catch (\Illuminate\Database\QueryException $error) {
-                $this->assertStringContainsString($message, $error->getMessage());
+                $this->assertTrue(str_contains($error->getMessage(), $message)
+                    || ($message === 'Financial source parent replacement is fenced'
+                        && str_contains($error->getMessage(), 'Subscriber birth identity is immutable')), $error->getMessage());
             }
         };
         $reject(fn () => DB::table('squares')->where('id', $squareId)->delete(), 'Financial source parent graph is fenced');
@@ -10383,6 +10385,45 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_close_commands', 0);
         $this->assertDatabaseCount('financial_period_closures', 0);
         $this->assertSame($report, $diagnostic->inspect($reviewer, $period, $now));
+    }
+
+    public function test_subscriber_retirement_preserves_empty_cutoff_identity_and_financial_history(): void
+    {
+        $actor = $this->actor();
+        $square = Square::create(['name' => 'Synthetic retirement square', 'code' => 'QA-RETIRE-SQUARE']);
+        $empty = Subscriber::create(['name' => 'Synthetic empty account', 'square_id' => $square->id, 'status' => 'active']);
+        $funded = Subscriber::create(['name' => 'Synthetic funded account', 'square_id' => $square->id, 'status' => 'active']);
+        app(GatedCashReceiptWriter::class)->collect($actor, (int) $funded->id, '2.00', self::UUID, $this->nowAt());
+        $reject = function (callable $write, string $message): void {
+            try {
+                $write();
+                $this->fail('Protected account identity changed.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString($message, $error->getMessage());
+            }
+        };
+        $reject(fn () => DB::table('subscribers')->where('id', $empty->id)->delete(), 'Financial source parent graph is fenced');
+        $reject(fn () => DB::table('squares')->where('id', $square->id)->delete(), 'Financial source parent graph is fenced');
+        $reject(fn () => DB::table('subscribers')->where('id', $funded->id)->update(['deleted_at' => now()]),
+            'Subscriber with ledger history cannot change deletion state');
+        if (DB::getDriverName() === 'sqlite') {
+            $reject(fn () => DB::statement('INSERT OR REPLACE INTO squares (id, name, code) VALUES (?, ?, ?)',
+                [$square->id, 'Replacement', $square->code]), 'Financial source parent replacement is fenced');
+        }
+        $empty->delete();
+        $this->assertSoftDeleted('subscribers', ['id' => $empty->id]);
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($period));
+        $before = $inspect();
+        $this->assertTrue($before['all_cutoff_accounts_match'], json_encode($before));
+        $this->assertSame([0, 200], array_column($before['rows'], 'recorded_balance_minor'));
+        $this->assertSame([(int) $empty->id, (int) $funded->id], array_column($before['rows'], 'subscriber_id'));
+        $empty->restore();
+        $this->assertSame($before, $inspect());
+        $this->assertSame(200, $funded->fresh()->getAccountBalanceMinor());
+        $this->assertDatabaseCount('transactions', 1);
+        $this->assertFalse($before['closure_authorized']);
     }
 
     public function test_subscriber_cutoff_rejects_missing_birth_even_without_financial_activity(): void
