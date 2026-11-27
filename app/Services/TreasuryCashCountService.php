@@ -18,8 +18,15 @@ final class TreasuryCashCountService
      */
     private function observationTransaction(User $actor, callable $work): array
     {
-        if (config('financial_candidate.cash_count_adjustments') !== true) {
-            return DB::transaction(fn () => $work($actor), 3);
+        $candidate = config('financial_candidate.cash_count_adjustments') === true;
+        if (! $candidate && ! DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
+            return DB::transaction(function () use ($actor, $work): array {
+                // Do not fall back if a scope was configured since the initial read.
+                if (DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                    throw new \DomainException('financial_scope_configured_retry');
+                }
+                return $work($actor);
+            }, 3);
         }
         abort_unless(app()->environment(['testing', 'staging']), 503);
         $now = now()->toDateTimeImmutable();

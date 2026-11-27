@@ -13049,6 +13049,46 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 0);
     }
 
+    public function test_cash_count_observation_and_review_require_open_scope_with_flag_disabled(): void
+    {
+        [$counter, $reviewer, $account, $count] = $this->fixture('100.00', accepted: null);
+        $service = app(TreasuryCashCountService::class);
+        $id = (int) $account['id'];
+        $countId = (int) $count['id'];
+        config(['financial_candidate.cash_count_adjustments' => false]);
+        $record = fn () => $service->record($counter, $id, '100.00', 'QA-COUNT-SCOPE-FENCE', self::EVIDENCE);
+        $review = fn () => $service->review($reviewer, $countId, true, self::EVIDENCE);
+        $tables = ['treasury_cash_counts', 'treasury_cash_count_reviews', 'treasury_postings', 'transactions',
+            'financial_posting_operations', 'financial_posting_events', 'audit_events'];
+        $snapshot = function () use ($tables): array {
+            $result = [];
+            foreach ($tables as $table) {
+                $result[$table] = DB::table($table)
+                    ->orderBy($table === 'financial_posting_operations' ? 'operation_uuid' : 'id')
+                    ->get()->map(fn ($row) => (array) $row)->all();
+            }
+            return $result;
+        };
+        $before = $snapshot();
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
+        $this->rejects('financial_period_not_open', $record);
+        $this->rejects('financial_period_not_open', $review);
+        $this->assertSame($before, $snapshot());
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
+        $review();
+        $record();
+        $this->assertDatabaseCount('treasury_cash_counts', 2);
+        $this->assertDatabaseCount('treasury_cash_count_reviews', 1);
+        $after = $snapshot();
+        foreach (['treasury_postings', 'transactions', 'financial_posting_operations', 'financial_posting_events'] as $table) {
+            $this->assertSame($before[$table], $after[$table], $table);
+        }
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        $this->rejects('financial_period_not_open', $record);
+        $this->rejects('financial_period_not_open', $review);
+        $this->assertSame($after, $snapshot());
+    }
+
     public function test_legacy_ledger_maintenance_is_read_only_across_period_states(): void
     {
         [, , , , , $subscriber] = $this->held();

@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify corrected maintenance, invoice and refund scenarios
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_legacy_ledger_maintenance_is_read_only_across_period_states|test_release_invoice_service_fence_preserves_original_and_reversal|test_release_refund_service_fence_protects_both_legs_and_handover_reserve' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify cash observation gate with disabled candidate switch
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_observation_and_review_require_open_scope_with_flag_disabled|test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify corrected maintenance, invoice and refund scenarios
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_legacy_ledger_maintenance_is_read_only_across_period_states|test_release_invoice_service_fence_preserves_original_and_reversal|test_release_refund_service_fence_protects_both_legs_and_handover_reserve' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify cash observation gate with disabled candidate switch
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_observation_and_review_require_open_scope_with_flag_disabled|test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass' tests/Feature/GatedCashCountAdjustmentWriterTest.php
