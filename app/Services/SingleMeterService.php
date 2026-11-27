@@ -118,14 +118,9 @@ class SingleMeterService
      */
     public function replace(Meter $oldMeter, array $newMeterData, string $removedAt, string $reason, ?int $actorId = null): array
     {
-        return DB::transaction(function () use ($oldMeter, $newMeterData, $removedAt, $reason, $actorId): array {
-            // Take the scope lock before issuance/account locks: the source
-            // triggers also serialize against a close. No financial posting
-            // is created by a physical replacement.
-            $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
-            if ($scope && $scope->active_freeze_uuid !== null) {
-                throw ValidationException::withMessages(['meter_id' => 'لا يمكن استبدال العداد أثناء تجميد الإغلاق المالي.']);
-            }
+        $work = function () use ($oldMeter, $newMeterData, $removedAt, $reason, $actorId): array {
+            // The enclosing transaction owns the scope lock before issuance.
+            // Replacement records physical provenance, not a financial posting.
             // Retirement may rewrite document provenance. Serialize with the
             // issuance and held-credit writers before locking the subscriber.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
@@ -217,7 +212,25 @@ class SingleMeterService
             return [
                 'current_meter' => $replacement->load('subscriber.square'),
             ];
-        }, 3);
+        };
+        try {
+            if (config('financial_candidate.invoices') === true
+                || DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
+                $now = now()->toDateTimeImmutable();
+                return app(FinancialWriteGate::class)->withinOpenPeriod('water',
+                    $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d'), $now, $work);
+            }
+            return DB::transaction(function () use ($work): array {
+                // Never fall back if a financial scope was configured since
+                // the initial read. Preserve the unconfigured legacy contract.
+                if (DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                    throw new \DomainException('financial_scope_configured_retry');
+                }
+                return $work();
+            }, 3);
+        } catch (\DomainException $error) {
+            throw ValidationException::withMessages(['meter_id' => 'لا يمكن استبدال العداد في نطاق مالي غير مفتوح.']);
+        }
     }
 
     private function ensureAvailable(int $subscriberId, ?int $exceptMeterId = null): void

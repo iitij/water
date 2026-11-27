@@ -8974,6 +8974,22 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $reject(fn () => DB::table($table)->where('id', $id)->update([
                 'meter_id' => null, 'retired_meter_id' => $meter->id, 'retired_meter_code' => 'FORGED']));
         }
+        // Even without an active freeze UUID, the current period must be open.
+        config(['financial_candidate.invoices' => false]);
+        $auditCount = DB::table('audit_events')->where('event', 'meter.replaced')->count();
+        try {
+            $replace();
+            $this->fail('Meter replacement bypassed the permanently closed current period.');
+        } catch (\Illuminate\Validation\ValidationException $error) {
+            $this->assertArrayHasKey('meter_id', $error->errors());
+        }
+        $this->assertEquals($before, $snapshot());
+        $this->assertEquals($events, $registry());
+        $this->assertSame($auditCount, DB::table('audit_events')->where('event', 'meter.replaced')->count());
+        $this->assertDatabaseHas('meters', ['id' => $meter->id]);
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-02T08:30:00Z'));
         $new = $replace()['current_meter'];
         $this->assertNotSame($meter->id, $new->id);
         $this->assertDatabaseMissing('meters', ['id' => $meter->id]);
