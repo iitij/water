@@ -9853,6 +9853,30 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('custody_shortage_recoveries', 0);
         $this->assertSame($before, DB::table('treasury_postings')->count());
         \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        // Fail after source and treasury posting are inserted, at the registry
+        // event insert. This trigger exists only on the disposable QA database.
+        $operations = DB::table('financial_posting_operations')->count();
+        $auditCount = DB::table('audit_events')->count();
+        $trigger = 'qa_fail_shortage_registry_insert';
+        DB::unprepared(DB::getDriverName() === 'sqlite'
+            ? "CREATE TRIGGER {$trigger} BEFORE INSERT ON financial_posting_events FOR EACH ROW BEGIN SELECT RAISE(ABORT, 'QA forced recovery registry failure'); END"
+            : "CREATE TRIGGER {$trigger} BEFORE INSERT ON financial_posting_events FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'QA forced recovery registry failure'");
+        try {
+            try {
+                $writer->approve($reviewer, (int) $session->id, $this->nowAt());
+                $this->fail('Recovery survived registry insertion failure.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('QA forced recovery registry failure', $error->getMessage());
+            }
+            $this->assertDatabaseCount('custody_shortage_recoveries', 0);
+            $this->assertSame($before, DB::table('treasury_postings')->count());
+            $this->assertSame($events, DB::table('financial_posting_events')->count());
+            $this->assertSame($operations, DB::table('financial_posting_operations')->count());
+            $this->assertSame($auditCount, DB::table('audit_events')->count());
+            $this->assertSame('-2.00', (string) $session->fresh()->variance_amount);
+        } finally {
+            DB::unprepared("DROP TRIGGER {$trigger}");
+        }
         $result = $writer->approve($reviewer, (int) $session->id, $this->nowAt());
         $this->assertTrue($result['registry_created']);
         $this->assertSame(200, $result['recovered_minor']);
