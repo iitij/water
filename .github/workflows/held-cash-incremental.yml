@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify legacy correction exclusion and supported receipt cancellation
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_candidate_refuses_legacy_historical_correction_entrypoints_without_mutations|test_release_void_intent_replays_pending_and_immediate_but_never_reopens_rejected_request' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify maintenance read-only behavior and correction writer fences
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_legacy_ledger_maintenance_is_read_only_across_period_states|test_release_invoice_service_fence_preserves_original_and_reversal|test_release_refund_service_fence_protects_both_legs_and_handover_reserve|test_release_correction_model_fence_rejects_direct_refunds_transfers_and_ledger' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify legacy correction exclusion and supported receipt cancellation
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_candidate_refuses_legacy_historical_correction_entrypoints_without_mutations|test_release_void_intent_replays_pending_and_immediate_but_never_reopens_rejected_request' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify maintenance read-only behavior and correction writer fences
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_legacy_ledger_maintenance_is_read_only_across_period_states|test_release_invoice_service_fence_preserves_original_and_reversal|test_release_refund_service_fence_protects_both_legs_and_handover_reserve|test_release_correction_model_fence_rejects_direct_refunds_transfers_and_ledger' tests/Feature/GatedCashCountAdjustmentWriterTest.php

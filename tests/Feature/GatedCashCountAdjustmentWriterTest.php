@@ -13038,6 +13038,46 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 0);
     }
 
+    public function test_legacy_ledger_maintenance_is_read_only_across_period_states(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $actor = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic maintenance tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-MAINT-AUDIT']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoiceWriter = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $invoice = $invoiceWriter->issue($actor, (int) $subscriber->id, (int) $meter->id,
+            '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
+        $receipt = app(GatedCashReceiptWriter::class)->collect($actor, (int) $subscriber->id, '1.00',
+            '77777777-7777-4777-8777-777777777777', $this->nowAt())['payment'];
+        $invoiceWriter->cancel($actor, (int) $invoice->id, 'Independent documented maintenance test cancellation',
+            '88888888-8888-4888-8888-888888888888', $this->nowAt());
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame(100, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+        $this->assertDatabaseHas('transactions', ['reference_type' => \App\Models\Invoice::class,
+            'reference_id' => $invoice->id, 'type' => 'invoice_reversal']);
+        $this->assertDatabaseHas('transactions', ['reference_type' => \App\Models\Payment::class,
+            'reference_id' => $receipt->id, 'type' => 'payment']);
+        $tables = ['invoices', 'invoice_items', 'invoice_tariff_lines', 'readings', 'payments', 'transactions',
+            'payment_allocation_revisions', 'payment_allocations', 'cash_sessions', 'audit_events', 'treasury_postings',
+            'document_sequences', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)
+            ->orderBy($table === 'financial_posting_operations' ? 'operation_uuid' : 'id')
+            ->get()->map(fn ($row) => (array) $row)->all();
+        config(['financial_candidate.invoices' => false, 'financial_candidate.cash_receipts' => false,
+            'financial_candidate.refunds' => false, 'financial_candidate.void_api' => false]);
+        foreach (['OPEN', 'FROZEN', 'CLOSED'] as $state) {
+            DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => $state]);
+            $before = [];
+            foreach ($tables as $table) $before[$table] = $snapshot($table);
+            $this->artisan('ledger:migrate')->assertExitCode(0);
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame(100, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+            $this->assertSame($state, DB::table('financial_periods')->where('scope_key', 'water')->where('month', '2026-11')->value('state'));
+        }
+    }
+
     public function test_candidate_refuses_legacy_historical_correction_entrypoints_without_mutations(): void
     {
         [, , , , , $subscriber] = $this->held();
