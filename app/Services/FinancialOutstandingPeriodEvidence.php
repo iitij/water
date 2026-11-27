@@ -181,7 +181,8 @@ final class FinancialOutstandingPeriodEvidence
                 $issues[] = ['code' => $error->getMessage(), 'session_id' => $id];
             }
         }
-        return $this->section($rows, $issues);
+        return $this->section($rows, $issues) + ['all_count_variances_resolved' => $issues === [] && ! array_filter($rows,
+            fn ($row) => ! $row['source_evidence']['variance_disposition_verified'])];
     }
 
 
