@@ -9831,6 +9831,49 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    public function test_final_accounting_shortage_recovery_posts_once_after_independent_approval(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $proposer = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $uuid = '77777777-7777-4777-8777-777777777777';
+        app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($proposer, (int) $session->id,
+            (int) $account['id'], 'QA-RECOVERY-POST', self::EVIDENCE, $uuid, $this->nowAt());
+        $writer = app(\App\Services\CustodyShortageRecoveryWriter::class);
+        $before = DB::table('treasury_postings')->count();
+        $events = DB::table('financial_posting_events')->count();
+        $this->rejects('shortage_recovery_independence', fn () => $writer->approve($proposer, (int) $session->id, $this->nowAt()));
+        $this->assertDatabaseCount('custody_shortage_recoveries', 0);
+        $this->assertSame($before, DB::table('treasury_postings')->count());
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $result = $writer->approve($reviewer, (int) $session->id, $this->nowAt());
+        $this->assertTrue($result['registry_created']);
+        $this->assertSame(200, $result['recovered_minor']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertFalse($writer->approve($reviewer, (int) $session->id, $this->nowAt())['registry_created']);
+        $this->assertDatabaseCount('custody_shortage_recoveries', 1);
+        $this->assertSame($before + 1, DB::table('treasury_postings')->count());
+        $this->assertSame($events + 1, DB::table('financial_posting_events')->count());
+        $this->assertSame(200, (int) DB::table('treasury_postings')->where('id', $result['posting_id'])->value('amount_minor'));
+        $this->assertSame('-2.00', (string) $session->fresh()->variance_amount);
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $coverage = DB::transaction(fn () => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($period));
+        $this->assertTrue($coverage['scanned_sources_match'], json_encode($coverage));
+        try {
+            DB::table('custody_shortage_recoveries')->where('id', $result['recovery_id'])->delete();
+            $this->fail('Recovery document deleted.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('Custody shortage recovery is immutable', $error->getMessage());
+        }
+    }
+
     public function test_final_accounting_shortage_loss_decision_is_independent_and_immutable(): void
     {
         [, , $account, , , $subscriber] = $this->held();
