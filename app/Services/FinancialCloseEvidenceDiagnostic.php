@@ -94,6 +94,7 @@ final class FinancialCloseEvidenceDiagnostic
         if (! $source['scanned_sources_match']) $blockers[] = 'document_registry_mismatch';
         if (! $movement['recorded_movements_verified']) $blockers[] = 'period_movements_unmatched';
         if (! $settlement['scanned_settlements_match']) $blockers[] = 'settlement_sources_unmatched';
+        if ($ended && ! $settlement['bank_period_evidence']['all_accounts_matched']) $blockers[] = 'bank_period_balances_unmatched';
         if ($incident['count'] !== 0 || $incident['orphan_accounts'] !== []) $blockers[] = 'unresolved_refund_incidents';
         if ($incident['unposted_cash_refund_minor'] !== 0) $blockers[] = 'unposted_cash_refunds';
         if ($subscriber !== null && ! $subscriber['scanned_accounts_match']) $blockers[] = 'subscriber_accounts_unmatched';
