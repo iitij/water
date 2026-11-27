@@ -375,6 +375,29 @@ final class FinancialCloseCoordinatorTest extends TestCase
             (int) DB::table('financial_periods')->where('month', $month)->value('id')));
     }
 
+    public function test_final_accounting_predecessor_readable_before_next_period_preparation(): void
+    {
+        $period = (int) DB::table('financial_periods')->where('month', '2026-12')->value('id');
+        $read = fn () => DB::transaction(fn () => app(\App\Services\FinancialOpeningContinuityDiagnostic::class)->predecessor($period));
+        $missing = $read();
+        $this->assertFalse($missing['predecessor_journal_verified']);
+        $this->assertSame([['code' => 'predecessor_not_closed']], $missing['issues']);
+        $this->freeze();
+        $prepared = $this->prepare();
+        $closed = $this->command('approve', 3, $this->approval($prepared['result']['attempt']['prepared']['hash']));
+        $result = $read();
+        $this->assertTrue($result['predecessor_journal_verified']);
+        $this->assertSame($closed['result']['closure']['hash'], $result['predecessor_hash']);
+        $this->assertSame(-10025, $result['rows']['subscriber:S1']['closing']);
+        $this->assertSame(10025, $result['rows']['subscriber:S2']['closing']);
+        $this->assertSame(101, $result['carries']['C1']['amount']);
+        $this->assertFalse($result['opening_source_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertSame('OPEN', DB::table('financial_periods')->where('id', $period)->value('state'));
+        $this->corruptJournalForDiagnostic();
+        $this->rejects('close_journal_hash', $read);
+    }
+
     public function test_round144_adjacent_openings_match_but_first_root_and_carry_are_unverified(): void
     {
         $closed = $this->prepareFollowingPeriod();
