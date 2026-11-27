@@ -264,6 +264,40 @@ final class FinancialPostingRegistryTest extends TestCase
         $this->assertSame(1, DB::table('financial_posting_events')->count());
     }
 
+    public function test_registry_requires_live_gate_and_exact_context(): void
+    {
+        $leg = $this->leg('10', 'bank', 10);
+        $context = $this->gate(fn (array $context) => $context);
+        $reject = function (callable $attempt, string $reason): void {
+            try {
+                $attempt();
+                $this->fail('Registry accepted an unauthenticated gate context.');
+            } catch (DomainException $error) {
+                $this->assertSame($reason, $error->getMessage());
+            }
+            $this->assertDatabaseCount('financial_posting_operations', 0);
+            $this->assertDatabaseCount('financial_posting_events', 0);
+        };
+        // A previously valid context cannot authorize another transaction.
+        $reject(fn () => DB::transaction(fn () => $this->record($context, self::UUID, [$leg])),
+            'posting_registry_requires_outer_gate');
+        $this->gate(function (array $live) use ($leg, $reject): void {
+            foreach ([
+                ['effective_on' => '2026-11-24'],
+                ['epoch' => $live['epoch'] - 1],
+                ['version' => $live['version'] - 1],
+                ['period_id' => $live['period_id'] + 1],
+            ] as $changes) {
+                $reject(fn () => $this->record(array_replace($live, $changes), self::UUID, [$leg]),
+                    'posting_gate_context_mismatch');
+            }
+        });
+        $this->assertTrue($this->gate(fn (array $live) => $this->record($live, self::UUID, [$leg])));
+        $this->assertFalse($this->gate(fn (array $live) => $this->record($live, self::UUID, [$leg])));
+        $this->assertDatabaseCount('financial_posting_operations', 1);
+        $this->assertDatabaseCount('financial_posting_events', 1);
+    }
+
     public function test_rejects_inexact_input_stale_context_and_corrupt_replay(): void
     {
         $leg = $this->leg('10', 'bank', 10);
@@ -276,7 +310,7 @@ final class FinancialPostingRegistryTest extends TestCase
 
         $this->gate(function (array $context) use ($leg): void {
             foreach ([
-                [array_replace($context, ['epoch' => 4]), [$leg], 'posting_scope_changed'],
+                [array_replace($context, ['epoch' => 4]), [$leg], 'posting_gate_context_mismatch'],
                 [$context, [array_replace($leg, ['amount_minor' => 10.0])], 'posting_minor'],
                 [$context, [array_replace($leg, ['amount_minor' => PHP_INT_MIN])], 'posting_minor'],
                 [$context, [$leg, $leg], 'duplicate_posting_leg'],

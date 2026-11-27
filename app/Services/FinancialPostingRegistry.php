@@ -37,6 +37,15 @@ final class FinancialPostingRegistry
         $date = DateTimeImmutable::createFromFormat('!Y-m-d', $context['effective_on'], new DateTimeZone('UTC'));
         $this->need($date !== false && $date->format('Y-m-d') === $context['effective_on'], 'posting_date');
 
+        // The transaction and a plausible context are not a capability.
+        // Require the actual gate on this connection and its exact date/fence.
+        try {
+            $active = FinancialWriteGate::currentContext();
+        } catch (DomainException $error) {
+            throw new DomainException('posting_registry_requires_outer_gate', 0, $error);
+        }
+        $this->need($context === $active, 'posting_gate_context_mismatch');
+
         $this->need(app(FinancialPostingRegistryProtection::class)->active(), 'posting_registry_protection_missing');
         $canonicalLegs = $this->legs($legs);
         $payload = [
