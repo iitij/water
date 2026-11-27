@@ -42,6 +42,9 @@ final class FinancialSourceCoverageDiagnostic
         $issue = static function (string $code, string $table, string $id) use (&$issues): void {
             $issues[$code.'|'.$table.'|'.$id] = ['code' => $code, 'source' => $table, 'id' => $id];
         };
+        if ($registry['other_registered_legs_unverified'] !== 0) {
+            $issue('registered_source_legs_unverified', 'financial_posting_events', (string) $periodId);
+        }
         $expect = static function (string $type, string $id, string $leg, string $date, ?string $group = null) use (&$expected, $issue): void {
             $key = $type.'|'.$id.'|'.$leg;
             $group ??= 'single:'.$key;
@@ -72,9 +75,19 @@ final class FinancialSourceCoverageDiagnostic
             if ($row->effective_on !== $date) $issue('treasury_document_date_mismatch', $column, (string) $id);
             $expect('treasury_posting', (string) $row->id, 'treasury', $date, $group);
         };
-        $rows = static fn (string $table, string $column) => DB::table($table)
-            ->where($column, '>=', $start)->where($column, '<', $end)->orderBy('id')->lockForUpdate()->get();
+        // Date-only fields are already local accounting dates. Timestamp
+        // fields are persisted in UTC; select the half-open local month in UTC.
+        $zone = new \DateTimeZone('Asia/Aden');
+        $utc = new \DateTimeZone('UTC');
+        $fromUtc = (new \DateTimeImmutable($start, $zone))->setTimezone($utc)->format('Y-m-d H:i:s');
+        $toUtc = (new \DateTimeImmutable($end, $zone))->setTimezone($utc)->format('Y-m-d H:i:s');
+        $rows = static function (string $table, string $column) use ($start, $end, $fromUtc, $toUtc) {
+            $timestamp = in_array($column, ['created_at', 'voided_at', 'decided_at'], true);
+            return DB::table($table)->where($column, '>=', $timestamp ? $fromUtc : $start)
+                ->where($column, '<', $timestamp ? $toUtc : $end)->orderBy('id')->lockForUpdate()->get();
+        };
         $date = static fn ($value): string => substr((string) $value, 0, 10);
+        $localDate = static fn ($value): string => (new \DateTimeImmutable((string) $value, $utc))->setTimezone($zone)->format('Y-m-d');
 
         foreach ($rows('invoices', 'bill_date') as $doc) {
             if ($doc->status === 'draft' && $doc->deleted_at === null) continue;
@@ -85,7 +98,7 @@ final class FinancialSourceCoverageDiagnostic
         foreach ($rows('invoices', 'voided_at') as $doc) {
             $documents++;
             if ($doc->status !== 'cancelled' || $doc->deleted_at !== null) $issue('invoice_reversal_state', 'invoices', (string) $doc->id);
-            $ledger(Invoice::class, (int) $doc->id, 'invoice_reversal', $date($doc->voided_at));
+            $ledger(Invoice::class, (int) $doc->id, 'invoice_reversal', $localDate($doc->voided_at));
         }
         foreach ($rows('payments', 'payment_date') as $doc) {
             $documents++;
@@ -111,7 +124,7 @@ final class FinancialSourceCoverageDiagnostic
         foreach ($rows('payments', 'voided_at') as $doc) {
             $documents++;
             if (! in_array($doc->voided_via, ['gated', 'approval'], true)) $issue('void_date_or_policy_unverified', 'payments', (string) $doc->id);
-            $ledger(Payment::class, (int) $doc->id, 'payment_reversal', $date($doc->voided_at));
+            $ledger(Payment::class, (int) $doc->id, 'payment_reversal', $localDate($doc->voided_at));
         }
         foreach ($rows('payment_account_transfers', 'created_at') as $doc) {
             $documents++;
@@ -121,12 +134,12 @@ final class FinancialSourceCoverageDiagnostic
             $proof = DB::table('audit_events')->where('event', 'payment.account_transferred')
                 ->where('entity_type', PaymentAccountTransfer::class)->where('entity_id', (string) $doc->id)->lockForUpdate()->get();
             if ($proof->count() !== 1 || (int) $proof[0]->actor_user_id !== (int) $doc->approved_by
-                || $date($proof[0]->occurred_at) !== $date($doc->created_at)) {
+                || $localDate($proof[0]->occurred_at) !== $localDate($doc->created_at)) {
                 $issue('transfer_effective_date_unverified', 'payment_account_transfers', (string) $doc->id);
             }
             $group = 'transfer:'.$doc->id;
-            $ledger(Payment::class, (int) $doc->payment_id, 'payment_reversal', $date($doc->created_at), $group);
-            $ledger(PaymentAccountTransfer::class, (int) $doc->id, 'payment_transfer_in', $date($doc->created_at), $group);
+            $ledger(Payment::class, (int) $doc->payment_id, 'payment_reversal', $localDate($doc->created_at), $group);
+            $ledger(PaymentAccountTransfer::class, (int) $doc->id, 'payment_transfer_in', $localDate($doc->created_at), $group);
         }
         foreach ($rows('payment_refunds', 'disbursed_on') as $doc) {
             $documents++;
@@ -284,7 +297,7 @@ final class FinancialSourceCoverageDiagnostic
         ksort($issues, SORT_STRING);
         return ['period_id' => $periodId, 'start_on' => $start, 'next_on' => $end,
             'documents_checked' => $documents, 'expected_legs' => count($expected), 'matched_legs' => $matched,
-            'registry_events' => $registry['events'], 'issues' => array_values($issues),
+            'registry_events' => $registry['events'], 'unverified_registry_legs' => $registry['other_registered_legs_unverified'], 'issues' => array_values($issues),
             'scanned_sources_match' => $issues === [],
             'source_coverage_verified' => false, 'closure_authorized' => false];
     }
