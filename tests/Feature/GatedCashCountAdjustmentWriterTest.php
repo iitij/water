@@ -5446,7 +5446,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
     }
 
-    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false, bool $api = false, bool $bankFence = false, bool $statementRange = false, bool $web = false, bool $enabled = true): void
+    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false, bool $api = false, bool $bankFence = false, bool $statementRange = false, bool $web = false, bool $enabled = true, bool $liveGuard = false): void
     {
         [, , $cash, , $lot, $subscriber] = $this->held();
         $this->assignHeld($this->actor(), $lot, $subscriber, 25);
@@ -5531,6 +5531,25 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         foreach ($tables as $table) $before[$table] = $snapshot($table);
         $beforeOps = $ops();
         $beforeSeq = $seq();
+        if ($liveGuard) {
+            $trigger = 'fin_ev_dest_payment_allocations_i';
+            DB::unprepared('DROP TRIGGER '.$trigger);
+            try {
+                $this->rejects('collection_financial_write_protection_missing', $act);
+                foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+                $this->assertSame($beforeOps, $ops());
+                $this->assertSame($beforeSeq, $seq());
+            } finally {
+                app(\App\Services\FinancialEvidenceDestinationProtection::class)->install();
+            }
+            $this->assertTrue($act()['registry_created']);
+            $this->assertFalse($act()['registry_created']);
+            $this->assertSame(50, $ledger->accountBalanceMinor($subscriber));
+            $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+            $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+            $this->assertSame([30, 30], $events->map(fn ($event) => (int) $event->amount_minor)->all());
+            return;
+        }
         if ($statementRange) {
             config(['financial_candidate.bank_evidence' => true, 'financial_candidate.noncash_settlements' => true]);
             DB::table('financial_periods')->where('month', '2026-12')->update(['state' => 'FROZEN']);
@@ -5792,6 +5811,17 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     public function test_release_noncash_fence_late_bank(): void
     {
         $this->round134Collection('late_bank', false, true);
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('collectionLiveGuardCases')]
+    public function test_collection_writers_require_live_evidence_guard(string $kind): void
+    {
+        $this->round134Collection($kind, liveGuard: true);
+    }
+
+    public static function collectionLiveGuardCases(): array
+    {
+        return [['claim'], ['late_bank'], ['late_cash']];
     }
 
     public function test_round134_noncash_claim_registers_both_legs_atomically(): void
