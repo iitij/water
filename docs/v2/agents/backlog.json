@@ -1767,6 +1767,42 @@
  "owner_acceptance": "not_tested",
  "issue_url": "https://github.com/5krm/water/issues/40",
  "evidence": "مراجعة مستقلة كشفت بقايا محلية ومشكلات دفعات وتزامن/DDL واختبار صور فعلي؛ انظر #40 والتقرير. لا تؤشَّر كمكتملة قبل نجاح جميع اختبارات القبول."
+},
+{
+ "id": "WATER-G1B-BANK-PERIOD-EVIDENCE",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "مطابقة أرصدة كشوف البنك لنهاية الفترة مع الحركات المسجلة",
+ "files": "app/Services/FinancialSettlementCoverageDiagnostic.php; app/Services/FinancialCloseEvidenceDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "candidate_awaiting_exact_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "اعتماد بيانات كشوف متصلة ومطابقة للحركات المسجلة في الفترة المنتهية. الفحص مخصص لأدلة البنك ضمن التشخيص الداخلي. راجع نتائج SQLite وMySQL 8 على SHA مرشح الفرع."
+},
+{
+ "id": "WATER-G1B-CASH-PERIOD-OBSERVATION",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "التحقق من جرد النقد المعتمد في آخر يوم من الفترة مع سجل الترحيل عند الحد الفاصل",
+ "files": "app/Services/TreasuryCashCountService.php; app/Services/FinancialCloseEvidenceDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "candidate_awaiting_exact_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "يطابق الجرد ذا الفرق الصفري الذي راجعه مستخدم مستقل مع سجل الترحيل حتى بداية الفترة التالية بتوقيت عدن. راجع نتائج المحركين على SHA المرشح."
+},
+{
+ "id": "WATER-G1B-TRANSIT-PERIOD-EVIDENCE",
+ "sprint": "G1B",
+ "agent": "A6+A7+A10",
+ "task": "مطابقة الأموال في الطريق حسب حدود الفترة وأدلة الإرسال والاستلام",
+ "files": "app/Services/FinancialTransitPeriodDiagnostic.php; app/Services/FinancialCloseEvidenceDiagnostic.php; tests/Feature/GatedCashCountAdjustmentWriterTest.php; .github/workflows/held-cash-incremental.yml",
+ "status": "partial",
+ "verification_status": "candidate_awaiting_exact_ci",
+ "owner_acceptance": "not_tested",
+ "issue_url": "https://github.com/iitij/water/issues/57",
+ "evidence": "يفصل إثبات إرسال التحويل واستلامه وحالته المالية عند حدود الفترة ويتحقق من ارتباط كل حركة بسجلها. راجع CI للفرع."
 }
 ]
 }
