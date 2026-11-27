@@ -476,6 +476,28 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_held_cash_assignments', 1);
     }
 
+    public function test_held_cash_coverage_rejects_extra_leg_reusing_existing_assignment(): void
+    {
+        [, , , , $lot, $subscriber] = $this->held();
+        $this->assignHeld($this->actor(), $lot, $subscriber, 20);
+        $service = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $verify = fn () => $this->gate(fn () => $service->verifyCoverage());
+        $this->assertSame(20, $verify()['identified_minor']);
+        $before = DB::table('financial_posting_events')->count();
+        $this->rejects('held_cash_coverage_orphan_event', fn () => $this->gate(function (array $context) use ($service): void {
+            $this->assertTrue(app(FinancialPostingRegistry::class)->record($context,
+                '66666666-6666-4666-8666-666666666666', [[
+                    'source_type' => 'held_cash_assignment', 'source_id' => self::NEXT,
+                    'leg' => 'bank', 'amount_minor' => 20, 'currency' => 'YER',
+                    'source_hash' => str_repeat('a', 64),
+                ]], $this->nowAt()));
+            $service->verifyCoverage();
+        }));
+        $this->assertDatabaseCount('financial_posting_events', $before);
+        $this->assertSame(20, $verify()['identified_minor']);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+    }
+
     public function test_held_cash_coverage_detects_missing_assignment_and_modified_amount(): void
     {
         [, , , , $lot, $subscriber] = $this->held();
