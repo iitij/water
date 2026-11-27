@@ -31,14 +31,14 @@ final class FinancialSubscriberPeriodEvidence
         $until = $end->format('Y-m-d H:i:s');
         $base = ['period_id' => $periodId, 'period_ended' => now('Asia/Aden')->toDateString() >= $period->next_on,
             'opening_continuity_verified' => false, 'allocation_policy_verified' => false, 'closure_authorized' => false];
-        if (! $base['period_ended']) return $base + ['scanned_cutoff_accounts_match' => false, 'rows' => [], 'issues' => [], 'prior_accounts' => []];
+        if (! $base['period_ended']) return $base + ['scanned_cutoff_accounts_match' => false, 'rows' => [], 'issues' => [], 'prior_accounts' => [], 'prior_account_movements' => [], 'all_cutoff_accounts_match' => false];
         if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
             throw new DomainException('subscriber_cutoff_issuance_lock');
         }
         $source = $this->sources->inspect($periodId);
-        $issues = $rows = $prior = $byAccount = [];
+        $issues = $rows = $prior = $priorMovements = $byAccount = [];
         if (! $source['scanned_sources_match'] || ! app(AllocationHistoryProtection::class)->active()) {
-            return $base + ['scanned_cutoff_accounts_match' => false, 'rows' => [], 'prior_accounts' => [],
+            return $base + ['scanned_cutoff_accounts_match' => false, 'rows' => [], 'prior_accounts' => [], 'prior_account_movements' => [], 'all_cutoff_accounts_match' => false,
                 'issues' => [['code' => 'subscriber_cutoff_source_or_guard_unverified']]];
         }
         $events = DB::table('financial_posting_events as e')
@@ -57,6 +57,33 @@ final class FinancialSubscriberPeriodEvidence
             unset($byAccount[$id]);
             if ($account->created_at < $start) {
                 $prior[] = $id;
+                // Prior accounts still have period movements to verify. Do
+                // not infer their opening or closing from a current balance.
+                try {
+                    $ids = $hashes = [];
+                    $net = 0;
+                    foreach ($legs as [$event, $entry]) {
+                        if (new DateTimeImmutable($event->recorded_at_utc, $utc) >= $end
+                            || $entry->created_at < $start || $entry->created_at >= $until) {
+                            throw new DomainException('subscriber_cutoff_recorded_outside_period');
+                        }
+                        $ids[] = (int) $entry->id;
+                        $net = SignedMinor::add($net, SignedMinor::parse($event->amount_minor));
+                        $hashes[] = [$event->operation_uuid, $event->source_hash];
+                    }
+                    $observed = DB::table('transactions')->where('subscriber_id', $id)
+                        ->where('created_at', '>=', $start)->where('created_at', '<', $until)
+                        ->orderBy('id')->lockForUpdate()->pluck('id')->map(fn ($value) => (int) $value)->all();
+                    sort($ids, SORT_NUMERIC);
+                    if ($ids !== $observed) throw new DomainException('subscriber_cutoff_prior_or_unregistered_effect');
+                    $row = ['subscriber_id' => $id, 'opening_minor' => null,
+                        'net_movement_minor' => $net, 'closing_minor' => null,
+                        'registry_sources' => $hashes, 'opening_verified' => false];
+                    $row['source_hash'] = hash('sha256', json_encode($row, JSON_THROW_ON_ERROR));
+                    $priorMovements[] = $row;
+                } catch (DomainException $error) {
+                    $issues[] = ['code' => $error->getMessage(), 'subscriber_id' => $id];
+                }
                 continue;
             }
             try {
@@ -155,6 +182,7 @@ final class FinancialSubscriberPeriodEvidence
         }
         foreach (array_keys($byAccount) as $id) $issues[] = ['code' => 'subscriber_cutoff_owner_not_present', 'subscriber_id' => $id];
         return $base + ['scanned_cutoff_accounts_match' => $issues === [], 'rows' => $rows,
-            'issues' => $issues, 'prior_accounts' => $prior];
+            'issues' => $issues, 'prior_accounts' => $prior, 'prior_account_movements' => $priorMovements,
+            'all_cutoff_accounts_match' => $issues === [] && $prior === []];
     }
 }
