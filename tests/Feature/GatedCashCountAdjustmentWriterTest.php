@@ -5261,7 +5261,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 1);
     }
 
-    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false, bool $api = false, bool $bankFence = false, bool $statementRange = false): void
+    private function round134Collection(string $kind, bool $legacy = false, bool $fence = false, bool $api = false, bool $bankFence = false, bool $statementRange = false, bool $web = false): void
     {
         [, , $cash, , $lot, $subscriber] = $this->held();
         $this->assignHeld($this->actor(), $lot, $subscriber, 25);
@@ -5355,6 +5355,32 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $this->assertSame($beforeSeq, $seq());
             DB::table('financial_periods')->where('month', '2026-12')->update(['state' => 'OPEN']);
             $this->assertTrue($act()['registry_created']);
+            $this->assertFalse($act()['registry_created']);
+            $this->assertDatabaseCount('payments', 1);
+            $this->assertDatabaseCount('treasury_bank_collections', 1);
+            $this->assertDatabaseCount('bank_statement_matches', 1);
+            $events = DB::table('financial_posting_events')->where('operation_uuid', $uuid)->orderBy('leg')->get();
+            $this->assertSame(['subscriber', 'treasury'], $events->pluck('leg')->all());
+            $this->assertSame([30, 30], $events->map(fn ($event) => (int) $event->amount_minor)->all());
+            $this->assertSame(50, $ledger->accountBalanceMinor($subscriber));
+            return;
+        }
+        if ($web) {
+            config(['financial_candidate.bank_evidence' => true, 'financial_candidate.noncash_settlements' => true]);
+            $page = \App\Filament\Pages\TreasuryBankReconciliation::class;
+            \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+            $this->actingAs($reviewer, 'web');
+            $action = $kind === 'claim' ? 'clear_claim' : 'clear_late_bank';
+            $data = ['claim_id' => $id, 'line_id' => $lineId, 'reference' => 'QA-R134-PROOF', 'evidence' => self::EVIDENCE];
+            if ($kind === 'late_bank') $data['review_reference'] = 'QA-R134-REVIEW';
+            DB::table('financial_periods')->update(['state' => 'FROZEN']);
+            \Livewire\Livewire::test($page)->callAction($action, data: $data)->assertHasActionErrors();
+            foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+            $this->assertSame($beforeOps, $ops());
+            $this->assertSame($beforeSeq, $seq());
+            DB::table('financial_periods')->update(['state' => 'OPEN']);
+            \Livewire\Livewire::test($page)->callAction($action, data: $data)->assertHasNoActionErrors()
+                ->assertSet('statementId', $statementId)->assertSee('مطابق بالكامل');
             $this->assertFalse($act()['registry_created']);
             $this->assertDatabaseCount('payments', 1);
             $this->assertDatabaseCount('treasury_bank_collections', 1);
@@ -11352,6 +11378,16 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame([], $result['rows']);
         $this->assertContains(['code' => 'cash_period_count_not_equal_at_cutoff', 'account_id' => $id], $result['issues']);
         $this->assertFalse($result['closure_authorized']);
+    }
+
+    public function test_filament_bank_claim_clearance_and_report(): void
+    {
+        $this->round134Collection('claim', web: true);
+    }
+
+    public function test_filament_late_bank_clearance_and_report(): void
+    {
+        $this->round134Collection('late_bank', web: true);
     }
 
     public function test_filament_bank_evidence_import_match_and_fee_use_shared_services(): void

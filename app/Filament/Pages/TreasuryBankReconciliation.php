@@ -7,6 +7,8 @@ namespace App\Filament\Pages;
 use App\Models\User;
 use App\Services\BankReconciliationService;
 use App\Services\GatedBankFeeWriter;
+use App\Services\ProspectiveSettlementEntry;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use App\Support\SignedMinor;
 use DomainException;
 use Filament\Actions\Action;
@@ -30,6 +32,8 @@ final class TreasuryBankReconciliation extends Page
     protected static string | \UnitEnum | null $navigationGroup = 'الفوترة والتحصيل';
     protected static ?string $title = 'مطابقة كشوف البنك';
     protected string $view = 'filament.pages.treasury-bank-reconciliation';
+
+    public ?int $statementId = null;
 
     public static function canAccess(): bool
     {
@@ -61,7 +65,7 @@ final class TreasuryBankReconciliation extends Page
         $actor = $this->actor();
         try {
             $action($actor);
-        } catch (DomainException $error) {
+        } catch (DomainException | ConflictHttpException $error) {
             throw ValidationException::withMessages(['data' => $error->getMessage()]);
         }
         Notification::make()->success()->title($message)->send();
@@ -70,6 +74,18 @@ final class TreasuryBankReconciliation extends Page
     protected function getHeaderActions(): array
     {
         return [
+            Action::make('inspect_statement')->label('عرض نتيجة المطابقة')
+                ->visible(fn (): bool => self::canAccess())
+                ->form([
+                    Select::make('statement_id')->label('الكشف البنكي')->options(fn (): array => $this->statementOptions())
+                        ->searchable()->required()->rules(['integer', 'min:1']),
+                ])
+                ->action(function (array $data): void {
+                    app(BankReconciliationService::class)->inspect($this->actor(), (int) $data['statement_id']);
+                    $this->statementId = (int) $data['statement_id'];
+                }),
+            $this->collectionAction(false),
+            $this->collectionAction(true),
             Action::make('import_statement')->label('تسجيل كشف بنكي')
                 ->visible(fn (): bool => self::canAccess())
                 ->form([
@@ -132,6 +148,72 @@ final class TreasuryBankReconciliation extends Page
         ];
     }
 
+    private function collectionAction(bool $late): Action
+    {
+        $fields = [
+            Select::make('claim_id')->label($late ? 'طلب التحصيل المتأخر' : 'طلب التحصيل غير النقدي')
+                ->options(fn (): array => $this->claimOptions($late))->searchable()->required()->rules(['integer', 'min:1']),
+            Select::make('line_id')->label('حركة الإيداع البنكي')->options(fn (): array => $this->lineOptions(false, true))
+                ->searchable()->required()->rules(['integer', 'min:1']),
+            TextInput::make('reference')->label('مرجع إثبات وصول المبلغ')->required()->minLength(3)->maxLength(150),
+            $this->evidence(),
+        ];
+        if ($late) $fields[] = TextInput::make('review_reference')->label('مرجع مراجعة السند المتأخر')
+            ->required()->minLength(3)->maxLength(150);
+        return Action::make($late ? 'clear_late_bank' : 'clear_claim')
+            ->label($late ? 'اعتماد التحصيل البنكي المتأخر' : 'اعتماد التحصيل غير النقدي')
+            ->visible(fn (): bool => self::canAccess() && config('financial_candidate.noncash_settlements') === true)
+            ->form($fields)->requiresConfirmation()
+            ->action(fn (array $data) => $this->bankAction(function (User $actor) use ($data, $late): void {
+                abort_unless(config('financial_candidate.noncash_settlements') === true, 403);
+                $line = $this->line((int) $data['line_id']);
+                $common = ['statement_id' => (int) $line->bank_statement_id, 'line_id' => (int) $line->id,
+                    'evidence' => $data['evidence']];
+                $entry = app(ProspectiveSettlementEntry::class);
+                if ($late) {
+                    $entry->clearBank($actor, (int) $data['claim_id'], $common + [
+                        'evidence_reference' => $data['review_reference'], 'bank_clearance_reference' => $data['reference']]);
+                } else {
+                    $entry->clearClaim($actor, (int) $data['claim_id'], $common + ['reference' => $data['reference']]);
+                }
+                $this->statementId = (int) $line->bank_statement_id;
+            }, 'تم اعتماد التحصيل وترحيله'));
+    }
+
+    private function claimOptions(bool $late): array
+    {
+        $actor = $this->actor();
+        $table = $late ? 'late_receipt_reviews' : 'noncash_collection_claims';
+        $query = DB::table($table)->whereIn('payment_method', ['bank_transfer', 'check'])
+            ->where($late ? 'collector_id' : 'submitted_by', '!=', $actor->id)
+            ->where(function ($q) use ($late, $actor) {
+                $q->where('status', 'pending')->orWhere(function ($q) use ($late, $actor) {
+                    $q->where('status', $late ? 'approved' : 'cleared')->where('decided_by', $actor->id);
+                    if ($late) $q->where('settlement_method', 'verified_non_cash');
+                });
+            })->orderByDesc('id');
+        return $query->get()->mapWithKeys(function ($row) use ($late) {
+            $minor = $late ? \App\Support\CashCustodyAmounts::positiveStored($row->amount, DB::getDriverName(), \App\Support\DecimalDomain::D12)
+                : SignedMinor::parse($row->amount_minor);
+            return [$row->id => '#'.$row->id.' | مشترك #'.$row->subscriber_id.' | '.($late ? $row->reference_number : $row->instrument_reference)
+                .' | '.SignedMinor::decimal($minor).' | '.$row->status];
+        })->all();
+    }
+
+    private function statementOptions(): array
+    {
+        $this->actor();
+        return DB::table('bank_statements as b')->join('treasury_accounts as a', 'a.id', '=', 'b.treasury_account_id')
+            ->orderByDesc('b.id')->get(['b.id', 'b.reference', 'b.from_date', 'b.to_date', 'a.code'])
+            ->mapWithKeys(fn ($row) => [$row->id => $row->code.' | '.$row->reference.' | '.$row->from_date.' — '.$row->to_date])->all();
+    }
+
+    public function selectedReport(): ?array
+    {
+        $actor = $this->actor();
+        return $this->statementId === null ? null : app(BankReconciliationService::class)->inspect($actor, $this->statementId);
+    }
+
     private function line(int $id): object
     {
         $this->actor();
@@ -147,13 +229,14 @@ final class TreasuryBankReconciliation extends Page
             ->get(['id', 'code', 'name'])->mapWithKeys(fn ($row) => [$row->id => $row->code.' — '.$row->name])->all();
     }
 
-    private function lineOptions(bool $debit): array
+    private function lineOptions(bool $debit, bool $credit = false): array
     {
         $actor = $this->actor();
         $query = DB::table('bank_statement_lines as l')->join('bank_statements as b', 'b.id', '=', 'l.bank_statement_id')
             ->join('treasury_accounts as a', 'a.id', '=', 'l.treasury_account_id')
             ->where('b.imported_by', '!=', $actor->id)->where('a.channel', 'bank');
         if ($debit) $query->where('l.amount_minor', '<', 0);
+        if ($credit) $query->where('l.amount_minor', '>', 0);
         // Include already matched lines for exact replay; the service refuses conflicting re-use.
         return $query->orderByDesc('l.id')->get(['l.id', 'l.bank_reference', 'l.booked_on', 'l.amount_minor',
             'b.reference', 'b.from_date', 'b.to_date', 'a.code'])
