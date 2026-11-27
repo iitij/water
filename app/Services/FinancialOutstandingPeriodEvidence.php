@@ -246,6 +246,40 @@ final class FinancialOutstandingPeriodEvidence
      * ordinary pre-close voids. Unsupported settlements remain explicit
      * blockers; an approved count alone is not collection coverage.
      */
+    /** Reuse actual registered collection/funding evidence before any new
+     * recovery proposal. The caller must hold the scope and issuance locks. */
+    public function verifiedShortageSource(CashSession $session, string $next): array
+    {
+        if (DB::transactionLevel() <= 0) throw new DomainException('outstanding_period_requires_gate');
+        FinancialWriteGate::currentContext();
+        $this->checkedPeriods = [];
+        $id = (int) $session->id;
+        $driver = $session->getConnection()->getDriverName();
+        $until = (new DateTimeImmutable($next, new DateTimeZone('Asia/Aden')))
+            ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+        $approved = $session->getRawOriginal('approved_at');
+        $closed = $session->getRawOriginal('closed_at');
+        if (! $session->isApproved() || $session->settlement_basis !== 'physical_cash'
+            || ! $approved || ! $closed || $approved >= $until || $closed > $approved
+            || (int) $session->approved_by <= 0 || (int) $session->approved_by === (int) $session->user_id) {
+            throw new DomainException('custody_period_independent_count_missing');
+        }
+        $counted = Cash::stored($session->getRawOriginal('counted_amount'), $driver, DecimalDomain::D14);
+        $audits = AuditEvent::query()->where('event', 'cash_session.approved')->where('entity_type', CashSession::class)
+            ->where('entity_id', (string) $id)->lockForUpdate()->get();
+        if ($audits->count() !== 1 || (int) $audits[0]->actor_user_id !== (int) $session->approved_by
+            || ($audits[0]->after['counted_amount'] ?? null) !== SignedMinor::decimal($counted)
+            || ($audits[0]->after['state'] ?? null) !== CashSession::STATE_APPROVED
+            || $audits[0]->getRawOriginal('occurred_at') >= $until) {
+            throw new DomainException('custody_period_approval_unverified');
+        }
+        $source = $this->sessionSources($session, $audits[0], $counted, $next);
+        if ($source['shortage_minor'] <= 0) throw new DomainException('shortage_recovery_no_shortage');
+        return ['session_id' => $id, 'collector_id' => (int) $session->user_id,
+            'count_approval_id' => (int) $audits[0]->id, 'shortage_minor' => $source['shortage_minor'],
+            'original_source_hash' => hash('sha256', json_encode($source, JSON_THROW_ON_ERROR))];
+    }
+
     private function sessionSources(CashSession $session, AuditEvent $approval, int $counted, string $next): array
     {
         $id = (int) $session->id;
