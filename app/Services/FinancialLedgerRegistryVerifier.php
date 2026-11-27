@@ -32,6 +32,7 @@ final class FinancialLedgerRegistryVerifier
         $result = $this->registry->verifyPeriod($scope, $periodId);
         $verified = 0;
         $unverified = 0;
+        $unverifiedSources = [];
         $treasuryVerified = 0;
         $openingVerified = 0;
         $heldVerified = 0;
@@ -61,6 +62,8 @@ final class FinancialLedgerRegistryVerifier
             }
             if (! in_array($event->source_type, ['ledger_transaction', 'treasury_posting', 'treasury_opening'], true)) {
                 $unverified++;
+                $unverifiedSources[] = ['source_type' => $event->source_type, 'source_id' => $event->source_id,
+                    'leg' => $event->leg, 'reason' => 'unsupported_source_type'];
                 continue;
             }
             $id = $event->source_id;
@@ -96,6 +99,8 @@ final class FinancialLedgerRegistryVerifier
                     $actual = $this->collection->leg((int) $id);
                 } else {
                     $unverified++;
+                    $unverifiedSources[] = ['source_type' => $event->source_type, 'source_id' => $event->source_id,
+                        'leg' => $event->leg, 'reason' => 'unsupported_treasury_kind'];
                     continue;
                 }
             } else {
@@ -126,6 +131,7 @@ final class FinancialLedgerRegistryVerifier
             'registered_opening_legs_verified' => $openingVerified,
             'registered_held_legs_verified' => $heldVerified,
             'other_registered_legs_unverified' => $unverified,
+            'unverified_registered_sources' => $unverifiedSources,
         ];
     }
 }
