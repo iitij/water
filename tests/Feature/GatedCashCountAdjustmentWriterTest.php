@@ -10233,7 +10233,27 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertNotContains('settlement_sources_unmatched', $report['blockers']);
         $this->assertNull($current['cutoff_evidence_manifest']);
         $manifest = $report['cutoff_evidence_manifest'];
-        $this->assertSame(3, $manifest['format_version']);
+        $this->assertSame(4, $manifest['format_version']);
+        $accountMovements = $report['cutoff_account_movements'];
+        $this->assertTrue($accountMovements['matched'], json_encode($accountMovements));
+        $this->assertCount(3, $accountMovements['rows']);
+        $this->assertSame(hash('sha256', json_encode($accountMovements, JSON_THROW_ON_ERROR)), $manifest['account_movements_hash']);
+        $this->assertNotContains('cutoff_account_movements_unmatched', $report['blockers']);
+        // A discrepancy between independent sources must be visible even if
+        // the original section's own match flag is still true.
+        $reconcile = app(\App\Services\FinancialCutoffMovementReconciliation::class);
+        $cashEvidence = $report['cash_period_evidence'];
+        $cashEvidence['rows'][0]['registered_movement_minor']++;
+        $mismatch = $reconcile->inspect($cashEvidence, $report['settlement']['bank_period_evidence'],
+            $report['subscriber_period_evidence'], $report['movements']);
+        $this->assertFalse($mismatch['matched']);
+        $this->assertContains('cutoff_account_movement_mismatch', array_column($mismatch['issues'], 'code'));
+        $unmatched = $report['movements'];
+        $unmatched['rows'][] = ['sector' => 'cash', 'key' => '999999999', 'recorded_opening_document_minor' => 0, 'net_movement_minor' => 1];
+        $orphan = $reconcile->inspect($report['cash_period_evidence'], $report['settlement']['bank_period_evidence'],
+            $report['subscriber_period_evidence'], $unmatched);
+        $this->assertFalse($orphan['matched']);
+        $this->assertContains('cutoff_movement_account_missing', array_column($orphan['issues'], 'code'));
         $this->assertTrue($manifest['registry']['recorded_movements_matched']);
         $this->assertSame($report['source']['registry_events'], $manifest['registry']['registry_events']);
         $this->assertSame($report['movements']['movement_hash'], $manifest['registry']['movement_hash']);
