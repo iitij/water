@@ -10343,6 +10343,76 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    public function test_final_accounting_shortage_filament_actions_use_gated_independent_settlement(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $proposer = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '0.00'), true, $reviewer);
+        \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
+        $page = \App\Filament\Resources\CashSessions\Pages\ListCashSessions::class;
+        $action = fn (string $name) => \Filament\Actions\Testing\TestAction::make($name)->table($session);
+        $live = fn () => \Livewire\Livewire::test($page);
+        $login = function (User $user): void {
+            app('auth')->forgetGuards();
+            $this->actingAs($user, 'web');
+        };
+        $recover = $action('propose_shortage_recovery');
+        $approve = $action('approve_shortage_recovery');
+        $loss = $action('propose_shortage_loss');
+        $approveLoss = $action('approve_shortage_loss');
+        $uuid = '77777777-7777-4777-8777-777777777777';
+        $data = ['account_id' => (int) $account['id'], 'amount' => '1.20', 'reference' => 'QA-WEB-RECOVERY',
+            'evidence' => self::EVIDENCE, 'operation_uuid' => $uuid];
+        $before = DB::table('treasury_postings')->count();
+        $events = DB::table('financial_posting_events')->count();
+        $login($collector);
+        $live()->assertActionHidden($recover)->assertActionHidden($loss);
+        $login($proposer);
+        $live()->assertActionHidden($approve)->assertActionHidden($approveLoss);
+        $live()->callAction($recover, data: array_replace($data, ['amount' => '1.201']))->assertHasActionErrors();
+        $live()->callAction($recover, data: $data)->assertHasNoActionErrors();
+        $live()->assertActionHidden($approve)->assertActionHidden($loss);
+        $this->assertDatabaseCount('custody_shortage_recoveries', 0);
+        $this->assertSame($before, DB::table('treasury_postings')->count());
+        $login($reviewer);
+        $modal = $live()->mountAction($approve)->setActionData(['operation_uuid' => $uuid]);
+        DB::table('financial_scopes')->update(['active_freeze_uuid' => self::ADJUST]);
+        try {
+            $modal->callMountedAction()->assertHasActionErrors();
+        } finally {
+            DB::table('financial_scopes')->update(['active_freeze_uuid' => null]);
+        }
+        $this->assertSame($before, DB::table('treasury_postings')->count());
+        $this->assertSame($events, DB::table('financial_posting_events')->count());
+        $modal->callMountedAction()->assertHasNoActionErrors();
+        $this->assertDatabaseCount('custody_shortage_recoveries', 1);
+        $this->assertSame(120, (int) DB::table('custody_shortage_recoveries')->value('amount_minor'));
+        $live()->assertActionHidden($approve);
+        $login($proposer);
+        $live()->callAction($loss, data: ['reason' => 'Independent documented residual loss', 'evidence' => self::EVIDENCE])
+            ->assertHasNoActionErrors();
+        $live()->assertActionHidden($approveLoss)->assertActionHidden($recover);
+        $login($reviewer);
+        $live()->callAction($approveLoss)->assertHasNoActionErrors();
+        $live()->assertActionHidden($approveLoss)->assertActionHidden($loss);
+        $this->assertSame($before + 1, DB::table('treasury_postings')->count());
+        $this->assertSame($events + 1, DB::table('financial_posting_events')->count());
+        $this->assertSame('-2.00', (string) $session->fresh()->variance_amount);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $report = DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($period));
+        $this->assertSame(120, $report['variance_exposure']['recovered_minor']);
+        $this->assertSame(80, $report['variance_exposure']['confirmed_loss_minor']);
+        $this->assertSame(0, $report['variance_exposure']['unresolved_shortage_minor']);
+        $this->assertFalse($report['closure_authorized']);
+    }
+
     public function test_final_accounting_shortage_api_routes_enforce_independent_exact_settlement(): void
     {
         [, , $account, , , $subscriber] = $this->held();

@@ -114,6 +114,7 @@ class CashSessionsTable
                     ->preload(),
             ])
             ->recordActions([
+                ...CustodyShortageActions::make(),
                 Action::make('record_treasury_handover')
                     ->label('توثيق استلام الخزينة')
                     ->icon('heroicon-o-banknotes')
