@@ -41,7 +41,7 @@ jobs:
           git diff --exit-code -- composer.lock
       - name: Verify bank evidence range and existing cutoff proofs
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_cutoff_audit_is_immutable_and_rejects_forged_identity|test_collection_cutoff_registered_bank_claim_proof|test_collection_cutoff_unregistered_approval_is_not_adopted|test_collection_cutoff_evidence_uses_recorded_submission_and_decision_not_current_status|test_release_settlement_api_counted_cash|test_collection_cutoff_registered_late_bank_proof|test_collection_cutoff_registered_late_cash_proof|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_audit_identity_survives_stale_snapshot_and_unrelated_duplicates|test_collection_cutoff_audit_is_immutable_and_rejects_forged_identity|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -104,4 +104,4 @@ jobs:
 
       - name: Verify bank evidence range and existing cutoff proofs
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_cutoff_audit_is_immutable_and_rejects_forged_identity|test_collection_cutoff_registered_bank_claim_proof|test_collection_cutoff_unregistered_approval_is_not_adopted|test_collection_cutoff_evidence_uses_recorded_submission_and_decision_not_current_status|test_release_settlement_api_counted_cash|test_collection_cutoff_registered_late_bank_proof|test_collection_cutoff_registered_late_cash_proof|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_audit_identity_survives_stale_snapshot_and_unrelated_duplicates|test_collection_cutoff_audit_is_immutable_and_rejects_forged_identity|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php

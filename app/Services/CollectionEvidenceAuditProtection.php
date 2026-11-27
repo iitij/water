@@ -11,6 +11,61 @@ use Illuminate\Support\Facades\DB;
  */
 final class CollectionEvidenceAuditProtection
 {
+    private const IDENTITY_INDEX = 'fin_collection_audit_identity';
+    private const IDENTITY_COLUMN = 'fin_collection_event_key';
+    private const EVENTS = "'noncash_claim.submitted', 'noncash_claim.rejected', 'noncash_claim.cleared', 'late_receipt.submitted', 'late_receipt.rejected', 'late_receipt.approved', 'financial.counted_cash_allocated'";
+
+    private function expression(): string
+    {
+        return 'CASE WHEN event IN ('.self::EVENTS.') THEN event ELSE NULL END';
+    }
+
+    private function sqliteIndex(): string
+    {
+        return 'CREATE UNIQUE INDEX '.self::IDENTITY_INDEX.' ON audit_events (event, entity_id) WHERE event IN ('.self::EVENTS.')';
+    }
+
+    private function normalizeExpression(string $expression): string
+    {
+        return preg_replace('/[\s\x60()]+/', '', strtolower(preg_replace('/_[a-zA-Z0-9]+(?=\x27)/', '', $expression)));
+    }
+
+    private function identityActive(): bool
+    {
+        if (DB::getDriverName() === 'sqlite') {
+            $row = DB::table('sqlite_master')->where('type', 'index')->where('name', self::IDENTITY_INDEX)->first();
+            return $row !== null && $row->tbl_name === 'audit_events' && $row->sql === $this->sqliteIndex();
+        }
+        $column = DB::table('information_schema.COLUMNS')->whereRaw('TABLE_SCHEMA = DATABASE()')
+            ->where('TABLE_NAME', 'audit_events')->where('COLUMN_NAME', self::IDENTITY_COLUMN)->first();
+        if ($column === null || $column->DATA_TYPE !== 'varchar' || (int) $column->CHARACTER_MAXIMUM_LENGTH !== 80
+            || ! str_contains(strtoupper($column->EXTRA), 'VIRTUAL') || ! str_contains(strtoupper($column->EXTRA), 'INVISIBLE')
+            || $this->normalizeExpression((string) $column->GENERATION_EXPRESSION) !== $this->normalizeExpression($this->expression())) {
+            return false;
+        }
+        $index = DB::table('information_schema.STATISTICS')->whereRaw('TABLE_SCHEMA = DATABASE()')
+            ->where('TABLE_NAME', 'audit_events')->where('INDEX_NAME', self::IDENTITY_INDEX)->orderBy('SEQ_IN_INDEX')->get();
+        return $index->count() === 2 && $index->pluck('COLUMN_NAME')->all() === [self::IDENTITY_COLUMN, 'entity_id']
+            && $index->every(fn ($row) => (int) $row->NON_UNIQUE === 0 && $row->SUB_PART === null);
+    }
+
+    public function installIdentity(): void
+    {
+        if ($this->identityActive()) return;
+        if (DB::getDriverName() === 'sqlite') {
+            DB::unprepared($this->sqliteIndex());
+        } else {
+            $column = DB::table('information_schema.COLUMNS')->whereRaw('TABLE_SCHEMA = DATABASE()')
+                ->where('TABLE_NAME', 'audit_events')->where('COLUMN_NAME', self::IDENTITY_COLUMN)->exists();
+            if (! $column) {
+                DB::unprepared('ALTER TABLE audit_events ADD COLUMN '.self::IDENTITY_COLUMN
+                    .' VARCHAR(80) GENERATED ALWAYS AS ('.$this->expression().') VIRTUAL INVISIBLE');
+            }
+            DB::unprepared('CREATE UNIQUE INDEX '.self::IDENTITY_INDEX.' ON audit_events ('.self::IDENTITY_COLUMN.', entity_id)');
+        }
+        if (! $this->identityActive()) throw new \LogicException('Collection audit identity index incomplete.');
+    }
+
     private function definitions(): array
     {
         $driver = DB::getDriverName();
@@ -109,7 +164,7 @@ final class CollectionEvidenceAuditProtection
         foreach ($this->definitions() as $name => $definition) {
             if (! $this->verified($name, $definition)) return false;
         }
-        return true;
+        return $this->identityActive();
     }
 
     public function install(): void
@@ -117,6 +172,7 @@ final class CollectionEvidenceAuditProtection
         foreach ($this->definitions() as $name => $definition) {
             if (! $this->verified($name, $definition)) DB::unprepared("CREATE TRIGGER {$name} {$definition[2]}");
         }
+        $this->installIdentity();
         if (! $this->active()) throw new \LogicException('Collection evidence audit protection incomplete.');
     }
 }

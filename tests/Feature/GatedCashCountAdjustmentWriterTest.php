@@ -12428,6 +12428,60 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_collection_audit_identity_survives_stale_snapshot_and_unrelated_duplicates(): void
+    {
+        $issuer = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic audit uniqueness',
+            'square_id' => Square::create(['name' => 'Synthetic uniqueness square'])->id, 'status' => 'active']);
+        $claims = app(\App\Services\NonCashClaimService::class);
+        $data = ['sync_uuid' => self::UUID, 'subscriber_id' => $subscriber->id, 'amount' => '0.25',
+            'payment_method' => 'check', 'instrument_reference' => 'QA-UNIQUE-AUDIT', 'instrument_on' => '2026-11-25'];
+        $unrelated = ['event' => 'qa.unrelated.repeat', 'entity_id' => '1', 'source' => 'internal',
+            'occurred_at' => now(), 'created_at' => now(), 'updated_at' => now()];
+        DB::table('audit_events')->insert([$unrelated, $unrelated]);
+        $this->assertSame(2, DB::table('audit_events')->where('event', 'qa.unrelated.repeat')->count());
+        $protection = app(\App\Services\CollectionEvidenceAuditProtection::class);
+        $this->assertTrue($protection->active());
+        if (DB::getDriverName() === 'mysql') {
+            $main = DB::connection();
+            config(['database.connections.qa_claim_stale' => config('database.connections.mysql')]);
+            $stale = DB::connection('qa_claim_stale');
+            try {
+                $stale->statement('SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+                $stale->beginTransaction();
+                // Establish a snapshot before the other connection commits the claim.
+                $this->assertSame(0, $stale->table('audit_events')->where('event', 'noncash_claim.submitted')->count());
+                $claim = $claims->submit($issuer, $data);
+                $audit = (array) $main->table('audit_events')->where('event', 'noncash_claim.submitted')->sole();
+                unset($audit['id']);
+                $this->assertSame(0, $stale->table('audit_events')->where('event', 'noncash_claim.submitted')->count());
+                try {
+                    $stale->table('audit_events')->insert($audit);
+                    $this->fail('Duplicate protected audit accepted under stale read.');
+                } catch (\Illuminate\Database\QueryException $error) {
+                    $this->assertSame('23000', $error->errorInfo[0], $error->getMessage());
+                    $this->assertSame(1062, (int) $error->errorInfo[1]);
+                    $this->assertStringContainsString('fin_collection_audit_identity', $error->getMessage());
+                }
+            } finally {
+                if ($stale->transactionLevel() > 0) $stale->rollBack();
+                DB::purge('qa_claim_stale');
+            }
+        } else {
+            $claim = $claims->submit($issuer, $data);
+            $this->assertDatabaseHas('sqlite_master', ['type' => 'index', 'name' => 'fin_collection_audit_identity']);
+        }
+        $this->assertSame(1, DB::table('audit_events')->where('event', 'noncash_claim.submitted')->count());
+        $this->assertDatabaseHas('noncash_collection_claims', ['id' => $claim['id'], 'status' => 'pending']);
+        $this->assertDatabaseCount('payments', 0);
+        // Missing index must be detected even if every trigger is present.
+        DB::unprepared(DB::getDriverName() === 'sqlite' ? 'DROP INDEX fin_collection_audit_identity'
+            : 'DROP INDEX fin_collection_audit_identity ON audit_events');
+        $this->assertFalse($protection->active());
+        $protection->installIdentity();
+        $this->assertTrue($protection->active());
+    }
+
     public function test_collection_cutoff_audit_is_immutable_and_rejects_forged_identity(): void
     {
         // A raw unrelated audit must remain writable on both engines; if not,
@@ -12469,7 +12523,16 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                     .implode(',', array_fill(0, count($replace), '?')).')', array_values($replace)));
             }
         }
-        $reject(fn () => DB::table('users')->where('id', $issuer->id)->delete());
+        try {
+            DB::table('users')->where('id', $issuer->id)->delete();
+            $this->fail('Protected actor deletion unexpectedly succeeded.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $message = $error->getMessage();
+            $this->assertTrue(str_contains($message, 'Collection evidence audit is immutable or invalid')
+                || str_contains($message, 'User identity cannot be deleted'), $message);
+            if (DB::getDriverName() === 'mysql') $this->assertSame('45000', $error->errorInfo[0]);
+        }
+        $this->assertDatabaseHas('users', ['id' => $issuer->id]);
         $this->assertSame($rows, DB::table('audit_events')->whereIn('event', ['noncash_claim.submitted', 'noncash_claim.rejected'])
             ->orderBy('id')->get()->map(fn ($row) => (array) $row)->all());
     }
