@@ -8317,8 +8317,6 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             ['payments', 'transactions', 'financial_posting_operations', 'financial_posting_events']);
         $before = $snapshot();
         $periodId = DB::table('financial_periods')->where('month', '2026-11')->value('id');
-        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
-        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
         $reject = function (callable $action): void {
             try {
                 $action();
@@ -8327,6 +8325,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 $this->assertStringContainsString('Financial ledger scope is fenced', $error->getMessage());
             }
         };
+        $this->assertTrue(app(\App\Services\LedgerSourceInsertProtection::class)->active());
+        $reject(fn () => DB::table('transactions')->insert($candidate));
+        foreach (['adjustment', 'opening_balance'] as $type) {
+            $reject(fn () => DB::table('transactions')->insert(array_replace($candidate, ['type' => $type])));
+        }
+        $reject(fn () => DB::table('transactions')->insert(array_replace($candidate, ['reference_type' => \App\Models\Invoice::class])));
+        $this->assertEquals($before, $snapshot());
+        DB::table('financial_periods')->where('id', $periodId)->update(['state' => 'FROZEN']);
+        DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
         $reject(fn () => DB::table('transactions')->insert($candidate));
         $reject(fn () => DB::table('transactions')->where('id', $original['id'])->update(['amount' => $original['amount']]));
         $this->assertEquals($before, $snapshot());

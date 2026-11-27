@@ -19,6 +19,7 @@ final class FinancialGuardInventory
                     ? FinancialTriggerMetadata::query()->isNotEmpty()
                     : app(FinancialTriggerMetadata::class)->deploymentVerified()),
             'ledger' => fn () => app(LedgerProtection::class)->active(),
+            'ledger_source_insert' => fn () => app(LedgerSourceInsertProtection::class)->active(),
             'source_period' => fn () => app(FinancialSourceInsertProtection::class)->active(),
             'dated_source_destinations' => fn () => app(DatedFinancialSourcePeriodProtection::class)->active(),
             'financial_evidence_destinations' => fn () => app(FinancialEvidenceDestinationProtection::class)->active(),
