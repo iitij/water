@@ -9831,6 +9831,142 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
+    private function shortageRecoveryRace(int $sessionId, array $actors): array
+    {
+        $this->assertSame('mysql', DB::getDriverName());
+        $this->assertSame('water_test', DB::getDatabaseName());
+        $this->assertSame(0, DB::transactionLevel());
+        $this->assertTrue(function_exists('pcntl_fork') && function_exists('posix_kill'));
+        $dir = sys_get_temp_dir().'/water-shortage-race-'.\Illuminate\Support\Str::uuid();
+        mkdir($dir, 0700);
+        $wait = static function (string $path): void {
+            $deadline = microtime(true) + 20;
+            while (! is_file($path)) {
+                if (microtime(true) > $deadline) throw new \RuntimeException('Shortage recovery race barrier timed out: '.$path);
+                usleep(1000);
+            }
+        };
+        DB::disconnect();
+        $pids = [];
+        try {
+            foreach ($actors as $i => $actorId) {
+                $pid = pcntl_fork();
+                if ($pid === -1) throw new \RuntimeException('Shortage recovery race fork failed');
+                if ($pid === 0) {
+                    DB::purge();
+                    try {
+                        $connection = (int) DB::selectOne('SELECT CONNECTION_ID() AS id')->id;
+                        DB::statement('SET SESSION innodb_lock_wait_timeout = 15');
+                        \Laravel\Sanctum\Sanctum::actingAs(User::findOrFail($actorId));
+                        file_put_contents("$dir/ready-$i", (string) $connection);
+                        $wait("$dir/start");
+                        touch("$dir/enter-$i");
+                        $result = app(\App\Services\CustodyShortageRecoveryWriter::class)
+                            ->approve(User::findOrFail($actorId), $sessionId, $this->nowAt());
+                        $outcome = ['ok' => true, 'created' => $result['registry_created'], 'actor' => $actorId];
+                    } catch (\Throwable $error) {
+                        $outcome = ['ok' => false, 'error' => get_class($error), 'message' => $error->getMessage(), 'actor' => $actorId];
+                    }
+                    file_put_contents("$dir/result-$i", json_encode($outcome, JSON_THROW_ON_ERROR));
+                    DB::disconnect();
+                    exit(0);
+                }
+                $pids[] = $pid;
+            }
+            $wait("$dir/ready-0");
+            $wait("$dir/ready-1");
+            $connections = [(int) file_get_contents("$dir/ready-0"), (int) file_get_contents("$dir/ready-1")];
+            DB::purge();
+            $parentId = (int) DB::selectOne('SELECT CONNECTION_ID() AS id')->id;
+            $this->assertCount(3, array_unique([...$connections, $parentId]));
+            // Hold the exact scope row until BOTH independent workers reach
+            // the actual blocked locking SELECT. No sleep-only race proof.
+            DB::beginTransaction();
+            try {
+                DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->sole();
+                touch("$dir/start");
+                $wait("$dir/enter-0");
+                $wait("$dir/enter-1");
+                $deadline = microtime(true) + 10;
+                do {
+                    $blocked = collect(DB::select('SHOW FULL PROCESSLIST'))->filter(
+                        static fn ($row) => in_array((int) $row->Id, $connections, true)
+                            && str_contains(strtolower((string) $row->Info), 'financial_scopes')
+                            && str_contains(strtolower((string) $row->Info), 'for update')
+                    )->count();
+                    if ($blocked === 2) break;
+                    usleep(10000);
+                } while (microtime(true) < $deadline);
+                $this->assertSame(2, $blocked, 'Both workers must contend on the real financial scope row');
+                $this->assertFileDoesNotExist("$dir/result-0");
+                $this->assertFileDoesNotExist("$dir/result-1");
+            } finally {
+                DB::rollBack();
+            }
+            $deadline = microtime(true) + 45;
+            while ($pids !== []) {
+                foreach ($pids as $key => $pid) {
+                    $joined = pcntl_waitpid($pid, $status, WNOHANG);
+                    if ($joined === $pid) {
+                        unset($pids[$key]);
+                        $this->assertTrue(pcntl_wifexited($status));
+                        $this->assertSame(0, pcntl_wexitstatus($status));
+                    } elseif ($joined === -1) {
+                        unset($pids[$key]);
+                        throw new \RuntimeException('Shortage recovery race worker join failed');
+                    }
+                }
+                if ($pids !== [] && microtime(true) > $deadline) throw new \RuntimeException('Shortage recovery race worker timeout');
+                usleep(1000);
+            }
+            DB::purge();
+            return [
+                json_decode(file_get_contents("$dir/result-0"), true, 512, JSON_THROW_ON_ERROR),
+                json_decode(file_get_contents("$dir/result-1"), true, 512, JSON_THROW_ON_ERROR),
+            ];
+        } finally {
+            foreach ($pids as $pid) {
+                posix_kill($pid, SIGTERM);
+                pcntl_waitpid($pid, $status);
+            }
+            foreach (glob("$dir/*") as $file) unlink($file);
+            rmdir($dir);
+        }
+    }
+
+    public function test_final_accounting_shortage_recovery_competing_reviewers_commit_once(): void
+    {
+        $this->assertSame('mysql', DB::getDriverName());
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $proposer = $this->actor();
+        $first = $this->actor();
+        $second = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->open($collector);
+        app(GatedCashReceiptWriter::class)->collect($collector, (int) $subscriber->id, '2.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $session = $sessions->decide($sessions->close($session, '0.00'), true, $first);
+        \Laravel\Sanctum\Sanctum::actingAs($proposer);
+        $uuid = '77777777-7777-4777-8777-777777777777';
+        app(\App\Services\CustodyShortageRecoveryProposal::class)->propose($proposer, (int) $session->id,
+            (int) $account['id'], 'QA-RECOVERY-RACE', self::EVIDENCE, $uuid, $this->nowAt());
+        $before = DB::table('treasury_postings')->count();
+        $events = DB::table('financial_posting_events')->count();
+        $outcomes = $this->shortageRecoveryRace((int) $session->id, [(int) $first->id, (int) $second->id]);
+        $winner = array_values(array_filter($outcomes, fn ($r) => $r['ok']));
+        $loser = array_values(array_filter($outcomes, fn ($r) => ! $r['ok']));
+        $this->assertCount(1, $winner, json_encode($outcomes));
+        $this->assertCount(1, $loser, json_encode($outcomes));
+        $this->assertTrue($winner[0]['created']);
+        $this->assertSame('shortage_recovery_replay_conflict', $loser[0]['message']);
+        $this->assertDatabaseCount('custody_shortage_recoveries', 1);
+        $this->assertSame($winner[0]['actor'], (int) DB::table('custody_shortage_recoveries')->sole()->approved_by);
+        $this->assertSame($before + 1, DB::table('treasury_postings')->count());
+        $this->assertSame($events + 1, DB::table('financial_posting_events')->count());
+        $this->assertSame(1, DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->count());
+    }
+
     public function test_final_accounting_shortage_recovery_posts_once_after_independent_approval(): void
     {
         [, , $account, , , $subscriber] = $this->held();
