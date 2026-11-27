@@ -59,7 +59,7 @@ final class FinancialOutstandingPeriodEvidence
         // not by itself an enforceable receivable, and a liquidity restriction
         // is not a second liability. Never net a shortage against a surplus.
         $variance = ['opening_unresolved_shortage_minor' => 0, 'new_shortage_minor' => 0,
-            'unresolved_shortage_minor' => 0, 'confirmed_loss_minor' => 0, 'unallocated_surplus_minor' => 0,
+            'unresolved_shortage_minor' => 0, 'confirmed_loss_minor' => 0, 'recovered_minor' => 0, 'unallocated_surplus_minor' => 0,
             'surplus_liquidity_reserve_minor' => 0, 'rows' => [], 'settlement_coverage_verified' => false];
         foreach ($custody['rows'] as $row) {
             $source = $row['source_evidence'];
@@ -69,11 +69,15 @@ final class FinancialOutstandingPeriodEvidence
             $surplus = $disposition['unallocated_minor'] ?? $source['surplus_minor'];
             $reserved = $disposition['liquidity_reserve']['reserved_minor'] ?? 0;
             $loss = $source['loss_disposition'] ?? null;
+            $recovery = $source['recovery_disposition'] ?? null;
             $priorLoss = $loss !== null && $loss['approved_on'] < $start;
-            $shortageOpening = $row['approval_before_period'] && ! $priorLoss ? $shortage : 0;
+            $priorRecovery = $recovery !== null && $recovery['effective_on'] < $start;
+            $shortageOpening = $row['approval_before_period'] && ! $priorLoss && ! $priorRecovery ? $shortage : 0;
             $shortageNew = $row['approval_before_period'] ? 0 : $shortage;
             $classified = $loss !== null && ! $priorLoss ? $loss['confirmed_loss_minor'] : 0;
-            $remaining = SignedMinor::subtract(SignedMinor::add($shortageOpening, $shortageNew), $classified);
+            $recovered = $recovery !== null && ! $priorRecovery ? $recovery['recovered_minor'] : 0;
+            $remaining = SignedMinor::subtract(SignedMinor::subtract(SignedMinor::add($shortageOpening, $shortageNew), $classified), $recovered);
+            $variance['recovered_minor'] = SignedMinor::add($variance['recovered_minor'], $recovered);
             $variance['confirmed_loss_minor'] = SignedMinor::add($variance['confirmed_loss_minor'], $classified);
             $variance['opening_unresolved_shortage_minor'] = SignedMinor::add($variance['opening_unresolved_shortage_minor'], $shortageOpening);
             $variance['new_shortage_minor'] = SignedMinor::add($variance['new_shortage_minor'], $shortageNew);
@@ -82,12 +86,12 @@ final class FinancialOutstandingPeriodEvidence
             $variance['surplus_liquidity_reserve_minor'] = SignedMinor::add($variance['surplus_liquidity_reserve_minor'], $reserved);
             $variance['rows'][] = ['session_id' => $row['session_id'], 'collector_id' => $row['collector_id'],
                 'shortage_minor' => $shortage, 'opening_unresolved_shortage_minor' => $shortageOpening,
-                'new_shortage_minor' => $shortageNew, 'confirmed_loss_minor' => $classified,
+                'new_shortage_minor' => $shortageNew, 'confirmed_loss_minor' => $classified, 'recovered_minor' => $recovered,
                 'unresolved_shortage_minor' => $remaining, 'unallocated_surplus_minor' => $surplus,
                 'reserved_liquidity_minor' => $reserved, 'recoverable_recognized' => false];
         }
         if (SignedMinor::subtract(SignedMinor::add($variance['opening_unresolved_shortage_minor'], $variance['new_shortage_minor']),
-            $variance['confirmed_loss_minor']) !== $variance['unresolved_shortage_minor']) {
+            SignedMinor::add($variance['confirmed_loss_minor'], $variance['recovered_minor'])) !== $variance['unresolved_shortage_minor']) {
             throw new DomainException('custody_shortage_rollforward_mismatch');
         }
         return $base + ['transit' => $transit, 'custody' => $custody, 'liability' => $liability,
@@ -223,9 +227,14 @@ final class FinancialOutstandingPeriodEvidence
                         $source['surplus_disposition']['unallocated_minor'] === 0;
                 }
                 if ($source['variance_minor'] < 0) {
+                    $recovery = $this->recoveryDisposition($session, $audits[0], $source, $next);
                     $source['loss_disposition'] = app(CustodyShortageLossDecision::class)
                         ->verifiedThrough($session, $audits[0], $source['shortage_minor'], $next);
-                    $source['variance_disposition_verified'] = $source['loss_disposition'] !== null;
+                    if ($recovery !== null && $source['loss_disposition'] !== null) {
+                        throw new DomainException('shortage_recovery_loss_conflict');
+                    }
+                    $source['recovery_disposition'] = $recovery;
+                    $source['variance_disposition_verified'] = $source['loss_disposition'] !== null || $recovery !== null;
                 }
                 $rows[] = ['session_id' => $id, 'collector_id' => (int) $session->user_id,
                     'approval_audit_id' => (int) $audits[0]->id, 'approval_before_period' => $approved < $from,
@@ -241,6 +250,35 @@ final class FinancialOutstandingPeriodEvidence
             fn ($row) => ! $row['source_evidence']['variance_disposition_verified'])];
     }
 
+
+    /** Full recovery is a new treasury inflow, not a change to counted custody. */
+    private function recoveryDisposition(CashSession $session, AuditEvent $approval, array $source, string $next): ?array
+    {
+        $r = DB::table('custody_shortage_recoveries')->where('cash_session_id', $session->id)
+            ->where('effective_on', '<', $next)->lockForUpdate()->first();
+        if (! $r) return null;
+        $proposal = AuditEvent::query()->where('id', $r->proposal_id)->lockForUpdate()->first();
+        $posting = DB::table('treasury_postings')->where('id', $r->treasury_posting_id)->lockForUpdate()->first();
+        $p = $proposal?->after;
+        $sourceHash = hash('sha256', json_encode($source, JSON_THROW_ON_ERROR));
+        if (! $posting || ! is_array($p) || (int) $r->count_approval_id !== (int) $approval->id
+            || ($p['original_source_hash'] ?? null) !== $sourceHash
+            || SignedMinor::parseUnsigned($r->amount_minor) !== $source['shortage_minor']) {
+            throw new DomainException('shortage_recovery_source_changed');
+        }
+        $leg = app(CustodyShortageRecoveryWriter::class)->leg((int) $posting->id);
+        $hash = $this->registered($posting, $leg);
+        $op = DB::table('financial_posting_operations')->where('operation_uuid', $r->operation_uuid)->lockForUpdate()->first();
+        $event = DB::table('financial_posting_events')->where('scope_key', 'water')
+            ->where('source_type', 'treasury_posting')->where('source_id', (string) $posting->id)
+            ->where('leg', 'treasury')->lockForUpdate()->first();
+        if (! $op || ! $event || $event->operation_uuid !== $r->operation_uuid
+            || $op->effective_on !== $r->effective_on || $leg['amount_minor'] !== $source['shortage_minor']) {
+            throw new DomainException('shortage_recovery_registry_mismatch');
+        }
+        return ['recovery_id' => (int) $r->id, 'effective_on' => $r->effective_on,
+            'recovered_minor' => $leg['amount_minor'], 'posting_hash' => $hash];
+    }
 
     /** Revalidate the original cash-only till, including funded opening and
      * ordinary pre-close voids. Unsupported settlements remain explicit
