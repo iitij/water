@@ -149,8 +149,13 @@ final class CustodyShortageLossDecision
             $session = CashSession::query()->lockForUpdate()->findOrFail($sessionId);
             abort_if((int) $session->user_id === (int) $actor->id, 403);
             $recovery = null;
-            if (AuditEvent::query()->where('event', CustodyShortageRecoveryProposal::EVENT)
-                ->where('entity_id', (string) $sessionId)->lockForUpdate()->first()
+            $proposals = CustodyShortageRecoveryProposal::forSession($sessionId)->lockForUpdate()->get();
+            foreach ($proposals as $proposal) {
+                if (! DB::table('custody_shortage_recoveries')->where('proposal_id', $proposal->id)->lockForUpdate()->first()) {
+                    throw new DomainException('shortage_loss_recovery_conflict');
+                }
+            }
+            if ($proposals->isNotEmpty()
                 || DB::table('custody_shortage_recoveries')->where('cash_session_id', $sessionId)->lockForUpdate()->first()) {
                 $next = (new DateTimeImmutable($date, new DateTimeZone('Asia/Aden')))->modify('+1 day')->format('Y-m-d');
                 $recovery = app(FinancialOutstandingPeriodEvidence::class)->verifiedPriorRecovery($session, $next);
@@ -184,9 +189,14 @@ final class CustodyShortageLossDecision
     {
         if ($expected === null) return $stored === null;
         if (! is_array($stored)) return false;
-        ksort($stored);
-        ksort($expected);
-        return $stored === $expected;
+        $canonical = static function (array $value) use (&$canonical): array {
+            if (! array_is_list($value)) ksort($value);
+            foreach ($value as &$item) {
+                if (is_array($item)) $item = $canonical($item);
+            }
+            return $value;
+        };
+        return $canonical($stored) === $canonical($expected);
     }
 
     private function decisionHash(array $source, array $proposal, ?array $recovery): string
