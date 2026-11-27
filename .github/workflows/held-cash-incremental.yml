@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify held assignment operation identity
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_held_recognition_and_cancellation_fail_closed_and_retry tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify subscriber financial write protection
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_subscriber_financial_writers_reject_missing_live_source_protection tests/Feature/GatedCashReceiptWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify held assignment operation identity
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_held_recognition_and_cancellation_fail_closed_and_retry tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify subscriber financial write protection
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_subscriber_financial_writers_reject_missing_live_source_protection tests/Feature/GatedCashReceiptWriterTest.php
