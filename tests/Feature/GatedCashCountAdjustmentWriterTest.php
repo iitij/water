@@ -9823,6 +9823,25 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($before, DB::table('treasury_postings')->count());
         $this->assertSame($events, DB::table('financial_posting_events')->count());
         $this->assertDatabaseCount('custody_shortage_recoveries', 0);
+        $this->assertTrue(app(\App\Services\CustodyShortagePeriodProtection::class)->active());
+        // Raw insert into a frozen/closed financial period must fail, even
+        // when the proposal identity is distinct from existing audit rows.
+        $raw = (array) DB::table('audit_events')->where('id', $document->id)->first();
+        unset($raw['id']);
+        $raw['entity_id'] = (string) $session->id.':99999999-9999-4999-8999-999999999999';
+        $period = DB::table('financial_periods')->where('month', '2026-11')->sole();
+        foreach (['FROZEN', 'CLOSED'] as $state) {
+            DB::table('financial_periods')->where('id', $period->id)->update(['state' => $state]);
+            try {
+                DB::table('audit_events')->insert($raw);
+                $this->fail('Direct shortage audit insert bypassed period protection.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Custody shortage source period is fenced', $error->getMessage());
+            } finally {
+                DB::table('financial_periods')->where('id', $period->id)->update(['state' => $period->state]);
+            }
+        }
+
         try {
             DB::table('audit_events')->where('id', $document->id)->delete();
             $this->fail('Recovery proposal was deleted.');
