@@ -84,4 +84,82 @@ final class FinancialCleanStart
             return $result;
         }, 1);
     }
+
+    /**
+     * Independent review before writers are admitted. This is a zero-data
+     * commissioning checkpoint, not a certified historical balance or close.
+     */
+    public function review(User $actor): array
+    {
+        CompletedCashRefundRequest::authenticated($actor);
+        abort_unless(app()->environment('testing') ||
+            (app()->environment('staging') && app()->isDownForMaintenance()), 503);
+        if (DB::transactionLevel() !== 0) throw new DomainException('clean_start_review_requires_outer_transaction');
+        return DB::transaction(function () use ($actor): array {
+            $gate = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
+            if (! $gate || $gate->mode !== 'LEGACY_DISABLED' || $gate->currency !== 'YER'
+                || $gate->timezone !== 'Asia/Aden' || (string) $gate->calendar_version !== '1'
+                || (string) $gate->fence_epoch !== '0' || $gate->active_freeze_uuid !== null) {
+                throw new DomainException('clean_start_review_scope_invalid');
+            }
+            $periods = DB::table('financial_periods')->lockForUpdate()->get();
+            if ($periods->count() !== 1) throw new DomainException('clean_start_review_period_invalid');
+            $period = $periods->first();
+            $month = now('Asia/Aden')->format('Y-m');
+            $calendar = app(FinancialClosePolicy::class)->open('water', $month, 'Asia/Aden');
+            if ($period->scope_key !== 'water' || $period->month !== $month
+                || $period->start_on !== $calendar['start'] || $period->next_on !== $calendar['next']
+                || $period->state !== 'OPEN' || (string) $period->version !== '0') {
+                throw new DomainException('clean_start_review_period_invalid');
+            }
+            if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+                throw new DomainException('clean_start_issuance_lock_missing');
+            }
+            $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+            CompletedCashRefundRequest::authenticated($actor);
+            abort_unless($actor->roles()->lockForUpdate()->get()->contains(fn ($role) =>
+                $role->name === 'super_admin' && $role->guard_name === 'web'), 403);
+            if (! app(FinancialCleanStartAuditProtection::class)->active()
+                || ! (new FinancialCleanStartAuditProtection(true))->active()) {
+                throw new DomainException('clean_start_audit_protection_missing');
+            }
+            $audits = \App\Models\AuditEvent::query()->lockForUpdate()->get();
+            if ($audits->count() !== 1) throw new DomainException('clean_start_review_audit_count');
+            $initial = $audits->first();
+            if ($initial->event !== 'financial.clean_start_initialized' || $initial->entity_type !== 'financial_scope'
+                || $initial->entity_id !== 'water' || $initial->source !== 'internal'
+                || (int) $initial->actor_user_id <= 0 || $initial->before !== null) {
+                throw new DomainException('clean_start_review_audit_invalid');
+            }
+            if ((int) $initial->actor_user_id === (int) $actor->id) {
+                throw new DomainException('clean_start_review_requires_independent_actor');
+            }
+            $expected = ['format' => 1, 'scope' => 'water', 'period_id' => (int) $period->id,
+                'month' => $month, 'start_on' => $period->start_on, 'next_on' => $period->next_on,
+                'initialization_mode' => 'LEGACY_DISABLED', 'checked_empty_tables' => self::EMPTY_TABLES,
+                'root_opening_verified' => false, 'closure_authorized' => false];
+            $actual = $initial->after;
+            if (! is_array($actual)) throw new DomainException('clean_start_review_audit_invalid');
+            ksort($actual, SORT_STRING);
+            ksort($expected, SORT_STRING);
+            if ($actual !== $expected) throw new DomainException('clean_start_review_audit_invalid');
+            foreach (self::EMPTY_TABLES as $table) {
+                if (in_array($table, ['audit_events', 'financial_scopes', 'financial_periods'], true)) continue;
+                if (DB::table($table)->lockForUpdate()->first() !== null) {
+                    throw new DomainException('clean_start_nonempty:'.$table);
+                }
+            }
+            $result = ['format' => 1, 'scope' => 'water', 'period_id' => (int) $period->id,
+                'month' => $month, 'initialized_by' => (int) $initial->actor_user_id,
+                'initial_audit_id' => (int) $initial->id,
+                'initial_evidence_hash' => hash('sha256', json_encode($expected, JSON_THROW_ON_ERROR)),
+                'reviewed_by' => (int) $actor->id, 'empty_start_reviewed' => true,
+                'root_opening_verified' => false, 'closure_authorized' => false];
+            app(AuditLogger::class)->recordRequired('financial.clean_start_reviewed', [
+                'actor_user_id' => (int) $actor->id, 'entity_type' => 'financial_scope',
+                'entity_id' => 'water', 'source' => 'internal', 'after' => $result,
+            ]);
+            return $result;
+        }, 1);
+    }
 }
