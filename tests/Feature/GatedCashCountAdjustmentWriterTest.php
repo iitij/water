@@ -12421,6 +12421,56 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
+    public function test_candidate_refuses_legacy_historical_correction_entrypoints_without_mutations(): void
+    {
+        [, , , , , $subscriber] = $this->held();
+        $issuer = $this->actor();
+        $reviewer = $this->actor();
+        \App\Models\Tariff::create(['name' => 'Synthetic correction tariff', 'unit_price' => '0.10', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-HIST-FENCE']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($issuer, (int) $subscriber->id,
+            (int) $meter->id, '66666666-6666-4666-8666-666666666666', $this->nowAt(), 'Synthetic invoice')['invoice'];
+        $session = app(CashSessionService::class)->open($issuer);
+        $payment = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '88888888-8888-4888-8888-888888888888', $this->nowAt(), (int) $session->id)['payment'];
+        $original = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
+            '99999999-9999-4999-8999-999999999999', $this->nowAt(), (int) $session->id)['payment'];
+        $tables = ['invoices', 'invoice_items', 'invoice_tariff_lines', 'readings', 'payments', 'transactions',
+            'payment_allocation_revisions', 'payment_allocations', 'cash_sessions', 'audit_events',
+            'historical_invoice_corrections', 'closed_cash_corrections', 'financial_posting_operations', 'financial_posting_events'];
+        $snapshot = fn (string $table) => DB::table($table)->get()->map(fn ($row) => (array) $row)->all();
+        $before = [];
+        foreach ($tables as $table) $before[$table] = $snapshot($table);
+        config(['financial_candidate.invoices' => true, 'financial_candidate.cash_receipts' => true]);
+        \Laravel\Sanctum\Sanctum::actingAs($reviewer);
+        $this->postJson('/api/invoices/'.$invoice->id.'/correct-historical', [
+            'corrected_units' => '1.00', 'historical_unit_price' => '0.10', 'reason' => self::REASON, 'evidence' => self::EVIDENCE,
+        ])->assertConflict();
+        $this->postJson('/api/cash-sessions/'.$session->id.'/correct-duplicate', [
+            'payment_id' => $original->id, 'duplicate_of_id' => $payment->id, 'reason' => self::REASON,
+            'evidence' => self::EVIDENCE, 'no_second_cash_receipt' => true,
+        ])->assertConflict();
+        $historical = app(\App\Services\HistoricalInvoiceCorrectionService::class);
+        $duplicates = app(\App\Services\ClosedCashCorrectionService::class);
+        $actions = [
+            fn () => $historical->correct($invoice, $reviewer, '1.00', '0.10', self::REASON, self::EVIDENCE),
+            fn () => $historical->correctReadings($invoice, $reviewer, [], self::REASON, self::EVIDENCE),
+            fn () => $duplicates->correctDuplicate($original, $payment->id, $reviewer, self::REASON, self::EVIDENCE),
+        ];
+        foreach ($actions as $action) {
+            try {
+                $action();
+                $this->fail('Legacy correction unexpectedly entered the candidate path.');
+            } catch (\Symfony\Component\HttpKernel\Exception\ConflictHttpException $error) {
+                $this->assertSame(409, $error->getStatusCode());
+            }
+        }
+        foreach ($before as $table => $rows) $this->assertSame($rows, $snapshot($table), $table);
+        $this->assertSame(190, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
+    }
+
     public function test_release_void_service_fence_preserves_unregistered_legacy_receipt_behavior(): void
     {
         [, , , , , $subscriber] = $this->held();

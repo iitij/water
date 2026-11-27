@@ -22,6 +22,15 @@ final class ClosedCashCorrectionService
     {
         abort_unless($actor->hasRole('super_admin') ||
             ($actor->can('cash_sessions.approve') && $actor->can('payments.void.approve')), 403);
+        // A legacy duplicate correction cannot create an unregistered reversal
+        // when the prospective receipt/correction routes are active.
+        if (config('financial_candidate.cash_receipts') === true
+            || config('financial_candidate.void_api') === true
+            || config('financial_candidate.cash_handovers') === true
+            || config('financial_candidate.refunds') === true) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException(
+                'تصحيح السند التاريخي خارج نطاق النظام المحاسبي الجديد.');
+        }
         $reason = trim($reason);
         $evidence = trim($evidence);
         if (mb_strlen($reason) < 10 || mb_strlen($evidence) < 10 || mb_strlen($reason) > 1000 || mb_strlen($evidence) > 2000) {

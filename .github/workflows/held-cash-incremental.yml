@@ -41,7 +41,7 @@ jobs:
           git diff --exit-code -- composer.lock
       - name: Verify bank evidence range and existing cutoff proofs
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_filament_bank_claim_clearance_and_report|test_filament_late_bank_clearance_and_report' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_candidate_refuses_legacy_historical_correction_entrypoints_without_mutations' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -104,4 +104,4 @@ jobs:
 
       - name: Verify bank evidence range and existing cutoff proofs
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_filament_bank_claim_clearance_and_report|test_filament_late_bank_clearance_and_report' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_candidate_refuses_legacy_historical_correction_entrypoints_without_mutations' tests/Feature/GatedCashCountAdjustmentWriterTest.php

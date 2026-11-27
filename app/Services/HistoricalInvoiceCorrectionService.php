@@ -33,6 +33,12 @@ final class HistoricalInvoiceCorrectionService
     {
         abort_unless($actor->hasRole('super_admin') ||
             ($actor->can('delete', $invoice) && $actor->can('create', Invoice::class)), 403);
+        // No historical replacement writer is accepted by the prospective registry.
+        // Fail before touching source documents, allocations or ledger projections.
+        if (config('financial_candidate.invoices') === true) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException(
+                'التصحيح التاريخي للفواتير خارج نطاق النظام المحاسبي الجديد.');
+        }
         $reason = trim($reason);
         $evidence = trim($evidence);
         $validNumber = static fn ($v): bool => (is_string($v) || is_int($v) || is_float($v))
