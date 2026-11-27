@@ -18,13 +18,13 @@ use Illuminate\Support\Facades\DB;
  * must commit together with the registry. No subscriber credit or debt. */
 final class CustodyShortageRecoveryWriter
 {
-    public function approve(User $actor, int $sessionId, DateTimeImmutable $now): array
+    public function approve(User $actor, int $sessionId, DateTimeImmutable $now, ?string $operationUuid = null): array
     {
         CompletedCashRefundRequest::authenticated($actor);
         abort_unless(app()->environment(['testing', 'staging']), 503);
         $local = $now->setTimezone(new DateTimeZone('Asia/Aden'));
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $local->format('Y-m-d'), $now,
-            function (array $context) use ($actor, $sessionId, $now, $local): array {
+            function (array $context) use ($actor, $sessionId, $now, $local, $operationUuid): array {
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null
                     && app(CustodyShortageRecoveryProposalProtection::class)->active()
                     && app(CustodyShortageRecoveryProtection::class)->active(), 'shortage_recovery_protection_required');
@@ -33,12 +33,14 @@ final class CustodyShortageRecoveryWriter
                 $actor->setRelation('roles', $actor->roles()->lockForUpdate()->get());
                 app(TreasuryRegisterService::class)->authorize($actor);
                 $session = CashSession::query()->lockForUpdate()->findOrFail($sessionId);
-                $proposal = AuditEvent::query()->where('event', CustodyShortageRecoveryProposal::EVENT)
-                    ->where('entity_type', 'custody_shortage_recovery')->where('entity_id', (string) $sessionId)
-                    ->lockForUpdate()->first();
+                $proposals = CustodyShortageRecoveryProposal::forSession($sessionId)->orderBy('id')->lockForUpdate()->get();
+                if ($operationUuid === null && $proposals->count() > 1) throw new DomainException('shortage_recovery_uuid_required');
+                $proposal = $operationUuid === null ? $proposals->first() : $proposals->first(
+                    fn ($row) => ($row->after['operation_uuid'] ?? null) === $operationUuid);
                 $this->need($proposal !== null && $proposal->source === 'internal' && is_array($proposal->after),
                     'shortage_recovery_proposal_missing');
                 $p = $proposal->after;
+                $this->need(is_string($p['operation_uuid'] ?? null) && CustodyShortageRecoveryProposal::matchesIdentity($proposal, $sessionId, $p['operation_uuid']), 'shortage_recovery_proposal_conflict');
                 $source = app(FinancialOutstandingPeriodEvidence::class)
                     ->verifiedShortageSource($session, $local->modify('+1 day')->format('Y-m-d'));
                 foreach ($source as $key => $value) {
@@ -64,13 +66,16 @@ final class CustodyShortageRecoveryWriter
                 $account = DB::table('treasury_accounts')->where('id', $p['account_id'])->lockForUpdate()->first();
                 $this->need($account && $account->channel === 'cash' && $account->opening_on <= $context['effective_on'],
                     'shortage_recovery_account_invalid');
-                $existing = DB::table('custody_shortage_recoveries')->where('cash_session_id', $sessionId)->lockForUpdate()->first();
+                $existing = DB::table('custody_shortage_recoveries')->where('proposal_id', $proposal->id)->lockForUpdate()->first();
                 if ($existing) {
                     $this->need((int) $existing->approved_by === (int) $actor->id
                         && $existing->effective_on === $context['effective_on'], 'shortage_recovery_replay_conflict');
                     $id = (int) $existing->id;
                     $postingId = (int) $existing->treasury_posting_id;
                 } else {
+                    $prior = app(FinancialOutstandingPeriodEvidence::class)->verifiedPriorRecovery($session, $local->modify('+1 day')->format('Y-m-d'));
+                    $remaining = SignedMinor::subtract($source['shortage_minor'], $prior['recovered_minor'] ?? 0);
+                    $this->need($amount <= $remaining, 'shortage_recovery_amount_invalid');
                     $this->need(! DB::table('treasury_accounts')->where('opening_reference', $p['reference'])->exists()
                         && ! DB::table('treasury_postings')->where('evidence_reference', $p['reference'])->exists()
                         && ! DB::table('financial_posting_operations')->where('operation_uuid', $p['operation_uuid'])->exists(),
@@ -118,7 +123,8 @@ final class CustodyShortageRecoveryWriter
             && (int) $posting->posted_by === (int) $r->approved_by && $posting->effective_on === $r->effective_on
             && $posting->evidence_reference === $r->reference && SignedMinor::parse($posting->amount_minor) === $minor
             && $proposal->event === CustodyShortageRecoveryProposal::EVENT && $proposal->source === 'internal'
-            && $proposal->entity_type === 'custody_shortage_recovery' && $proposal->entity_id === (string) $session->id
+            && $proposal->entity_type === 'custody_shortage_recovery'
+            && CustodyShortageRecoveryProposal::matchesIdentity($proposal, (int) $session->id, $r->operation_uuid)
             && (int) $proposal->actor_user_id === (int) $r->proposed_by
             && $count->event === 'cash_session.approved' && $count->entity_type === CashSession::class
             && $count->entity_id === (string) $session->id && $session->isApproved()
