@@ -65,6 +65,63 @@ final class FinancialCutoffMovementReconciliation
         return ['matched' => $issues === [], 'rows' => array_values($rows), 'issues' => $issues];
     }
 
+    public function inspectPhysical(array $outstanding, array $movement): array
+    {
+        if (($movement['recorded_movements_verified'] ?? false) !== true
+            || ! $outstanding['transit']['recorded_rollforward_verified']
+            || ! $outstanding['custody']['recorded_rollforward_verified']) {
+            return ['matched' => false, 'rows' => [], 'issues' => [['code' => 'cutoff_physical_unverified']]];
+        }
+        $expected = $registered = $issues = [];
+        $add = static function (array $row) use (&$expected, &$issues): void {
+            $id = $row['posting_id'];
+            if (! is_int($id) || $id <= 0 || isset($expected[$id])) {
+                $issues[] = ['code' => 'cutoff_physical_duplicate_or_invalid_source', 'posting_id' => $id];
+                return;
+            }
+            $expected[$id] = $row;
+        };
+        foreach ($outstanding['transit']['rows'] as $row) {
+            $sent = SignedMinor::parseUnsigned($row['dispatched_minor']);
+            $received = SignedMinor::parseUnsigned($row['received_minor']);
+            if ($sent > 0) $add(['kind' => 'internal_transfer_out', 'posting_id' => $row['dispatch_posting_id'],
+                'account_id' => $row['from_account_id'], 'amount_minor' => SignedMinor::negate($sent), 'source_hash' => $row['dispatch_hash']]);
+            if ($received > 0) $add(['kind' => 'internal_transfer_in', 'posting_id' => $row['receipt_posting_id'],
+                'account_id' => $row['to_account_id'], 'amount_minor' => $received, 'source_hash' => $row['receipt_hash']]);
+            if (SignedMinor::subtract(SignedMinor::add($row['opening_minor'], $sent), $received) !== $row['closing_minor']) {
+                $issues[] = ['code' => 'cutoff_transit_conservation', 'transfer_id' => $row['transfer_id']];
+            }
+        }
+        foreach ($outstanding['custody']['rows'] as $row) {
+            $received = 0;
+            foreach ($row['period_handovers'] as $handover) {
+                $received = SignedMinor::add($received, SignedMinor::parseUnsigned($handover['amount_minor']));
+                $add($handover);
+            }
+            if ($received !== $row['received_minor'] || SignedMinor::subtract(
+                SignedMinor::add($row['opening_minor'], $row['recognized_counted_minor']), $received) !== $row['closing_minor']) {
+                $issues[] = ['code' => 'cutoff_custody_conservation', 'session_id' => $row['session_id']];
+            }
+        }
+        foreach ($movement['physical_effects'] as $row) {
+            $id = $row['posting_id'];
+            if (isset($registered[$id])) {
+                $issues[] = ['code' => 'cutoff_physical_duplicate_registry', 'posting_id' => $id];
+                continue;
+            }
+            $registered[$id] = $row;
+        }
+        foreach ($expected as $id => $row) {
+            if (($registered[$id] ?? null) !== $row) {
+                $issues[] = ['code' => 'cutoff_physical_movement_mismatch', 'posting_id' => $id];
+            }
+            unset($registered[$id]);
+        }
+        foreach (array_keys($registered) as $id) $issues[] = ['code' => 'cutoff_physical_unmatched_registry', 'posting_id' => $id];
+        ksort($expected, SORT_NUMERIC);
+        return ['matched' => $issues === [], 'rows' => $issues === [] ? array_values($expected) : [], 'issues' => $issues];
+    }
+
     public function inspect(array $cash, array $bank, array $subscriber, array $movement): array
     {
         $issues = [];
