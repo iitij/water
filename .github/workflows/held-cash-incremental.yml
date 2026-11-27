@@ -40,7 +40,7 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
       - name: Verify close control privilege isolation
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_close_control_isolation_rejects_broad_and_direct_writes tests/Unit/RuntimeDatabasePrivilegesTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_control_isolation_rejects_broad_and_direct_writes|test_only_exact_schema_lock_tables_is_allowed_without_close_control_dml' tests/Unit/RuntimeDatabasePrivilegesTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -109,7 +109,7 @@ jobs:
           php artisan migrate --force
           php artisan ledger:protect --install
           php artisan financial:database-preflight --guards
-          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "CREATE USER 'water_close_runtime'@'%' IDENTIFIED BY 'disposable_close_password'; GRANT EXECUTE ON PROCEDURE water_test.financial_read_trigger_metadata TO 'water_close_runtime'@'%';"
+          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "CREATE USER 'water_close_runtime'@'%' IDENTIFIED BY 'disposable_close_password'; GRANT EXECUTE ON PROCEDURE water_test.financial_read_trigger_metadata TO 'water_close_runtime'@'%'; GRANT LOCK TABLES ON \`water\\_test\`.* TO 'water_close_runtime'@'%';"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -N -B -e "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='water_test' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME" | while IFS= read -r table; do
             [[ "$table" =~ ^[a-zA-Z0-9_]+$ ]]
             case "$table" in
