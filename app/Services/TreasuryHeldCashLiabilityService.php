@@ -45,6 +45,7 @@ final class TreasuryHeldCashLiabilityService
     public function recognize(int $adjustmentId, string $uuid, bool $created): int
     {
         $this->lock();
+        $this->requireWriteProtection();
         [$adjustment, $posting, $leg, $operation] = $this->source($adjustmentId);
         $this->need($operation->operation_uuid === $uuid, 'held_cash_source_operation');
         $record = ['treasury_cash_adjustment_id' => $adjustmentId,
@@ -76,6 +77,7 @@ final class TreasuryHeldCashLiabilityService
         return $this->gate->withinOpenPeriod('water', $date, $now,
             function (array $context) use ($actor, $liabilityId, $subscriberId, $minor, $reference, $evidence, $uuid, $date, $now): array {
                 $this->lock();
+                $this->requireWriteProtection();
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
                 $this->treasury->authorize($actor);
                 $lot = $this->lot($liabilityId);
@@ -129,6 +131,7 @@ final class TreasuryHeldCashLiabilityService
         return $this->gate->withinOpenPeriod('water', $date, $now,
             function (array $context) use ($authorizer, $executor, $assignmentUuid, $minor, $reference, $evidence, $uuid, $date, $now): array {
                 $this->lock();
+                $this->requireWriteProtection();
                 $users = User::query()->whereIn('id', [$authorizer->id, $executor->id])->orderBy('id')->lockForUpdate()->get()->keyBy('id');
                 $authorizer = $users->get($authorizer->id);
                 $executor = $users->get($executor->id);
@@ -186,6 +189,7 @@ final class TreasuryHeldCashLiabilityService
         return $this->gate->withinOpenPeriod('water', $date, $now,
             function (array $context) use ($actor, $uuid, $evidence, $date): array {
                 $this->lock();
+                $this->requireWriteProtection();
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
                 $this->treasury->authorize($actor);
                 $auth = DB::table('treasury_held_cash_payout_authorizations')->where('operation_uuid', $uuid)->lockForUpdate()->first();
@@ -318,6 +322,7 @@ final class TreasuryHeldCashLiabilityService
         return $this->gate->withinOpenPeriod('water', $date, $now,
             function (array $context) use ($actor, $assignmentUuid, $minor, $reference, $evidence, $uuid, $date, $now): array {
                 $this->lock();
+                $this->requireWriteProtection();
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
                 $this->treasury->authorize($actor);
                 $assignment = DB::table('treasury_held_cash_assignments')->where('operation_uuid', $assignmentUuid)->lockForUpdate()->first();
@@ -382,6 +387,7 @@ final class TreasuryHeldCashLiabilityService
         return $this->gate->withinOpenPeriod('water', $date, $now,
             function (array $context) use ($actor, $assignmentUuid, $minor, $reference, $evidence, $uuid, $date, $now): array {
                 $this->lock();
+                $this->requireWriteProtection();
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
                 $this->treasury->authorize($actor);
                 $assignment = DB::table('treasury_held_cash_assignments')->where('operation_uuid', $assignmentUuid)->lockForUpdate()->first();
@@ -801,6 +807,15 @@ final class TreasuryHeldCashLiabilityService
         ] as $table => $column) {
             $this->need(! DB::table($table)->where($column, $reference)->exists(), $reason);
         }
+    }
+
+    /** A trusted application writer must fail closed if live held-cash
+     * guards are absent or altered. Read-only reconstruction remains separate. */
+    private function requireWriteProtection(): void
+    {
+        $this->need(app(HeldCashDocumentProtection::class)->active()
+            && app(HeldCashDestinationProtection::class)->active()
+            && app(HeldRegistryLinkProtection::class)->active(), 'held_cash_write_protection_missing');
     }
 
     private function lock(): void
