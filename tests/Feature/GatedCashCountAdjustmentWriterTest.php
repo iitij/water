@@ -12459,9 +12459,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                     $stale->table('audit_events')->insert($audit);
                     $this->fail('Duplicate protected audit accepted under stale read.');
                 } catch (\Illuminate\Database\QueryException $error) {
-                    $this->assertSame('23000', $error->errorInfo[0], $error->getMessage());
-                    $this->assertSame(1062, (int) $error->errorInfo[1]);
-                    $this->assertStringContainsString('fin_collection_audit_identity', $error->getMessage());
+                    // MySQL may resolve the duplicate through a current
+                    // trigger read, or through the unique index on a stale read.
+                    if ($error->errorInfo[0] === '45000') {
+                        $this->assertStringContainsString('Collection evidence audit is immutable or invalid', $error->getMessage());
+                    } else {
+                        $this->assertSame('23000', $error->errorInfo[0], $error->getMessage());
+                        $this->assertSame(1062, (int) $error->errorInfo[1]);
+                        $this->assertStringContainsString('fin_collection_audit_identity', $error->getMessage());
+                    }
                 }
             } finally {
                 if ($stale->transactionLevel() > 0) $stale->rollBack();

@@ -105,3 +105,10 @@ jobs:
       - name: Verify bank evidence range and existing cutoff proofs
         run: |
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_audit_identity_survives_stale_snapshot_and_unrelated_duplicates|test_collection_cutoff_audit_is_immutable_and_rejects_forged_identity|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+
+      - name: Verify collection audit identity metadata on failure
+        if: failure()
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          docker exec "$QA_CONTAINER" mysql -uwater_qa -pdisposable_qa_password water_test -e "SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, EXTRA, GENERATION_EXPRESSION FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'audit_events' AND COLUMN_NAME = 'fin_collection_event_key'; SELECT COLUMN_NAME, NON_UNIQUE, SUB_PART FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'audit_events' AND INDEX_NAME = 'fin_collection_audit_identity' ORDER BY SEQ_IN_INDEX;"

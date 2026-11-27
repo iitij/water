@@ -27,26 +27,44 @@ final class CollectionEvidenceAuditProtection
 
     private function normalizeExpression(string $expression): string
     {
-        return preg_replace('/[\s\x60()]+/', '', strtolower(preg_replace('/_[a-zA-Z0-9]+(?=\x27)/', '', $expression)));
+        // MySQL renders charset introducers and redundant parentheses in
+        // information_schema. Preserve every byte inside quoted event names.
+        preg_match_all("/(?:_[a-zA-Z0-9]+)?'[^']*'|[a-zA-Z_][a-zA-Z0-9_]*|[^\s\x60()]/", $expression, $matches);
+        return implode('', array_map(static function (string $token): string {
+            $quoted = strpos($token, "'");
+            return $quoted !== false ? substr($token, $quoted) : strtolower($token);
+        }, $matches[0]));
+    }
+
+    /** Return a specific failed invariant, not raw schema or credentials. */
+    private function identityIssue(): ?string
+    {
+        if (DB::getDriverName() === 'sqlite') {
+            $row = DB::table('sqlite_master')->where('type', 'index')->where('name', self::IDENTITY_INDEX)->first();
+            return $row !== null && $row->tbl_name === 'audit_events' && $row->sql === $this->sqliteIndex()
+                ? null : 'sqlite_index_definition';
+        }
+        $column = DB::table('information_schema.COLUMNS')->whereRaw('TABLE_SCHEMA = DATABASE()')
+            ->where('TABLE_NAME', 'audit_events')->where('COLUMN_NAME', self::IDENTITY_COLUMN)
+            ->selectRaw('DATA_TYPE AS data_type, CHARACTER_MAXIMUM_LENGTH AS max_length, EXTRA AS extra, GENERATION_EXPRESSION AS generation_expression')->first();
+        if ($column === null) return 'generated_column_missing';
+        if (strtolower((string) $column->data_type) !== 'varchar' || (int) $column->max_length !== 80) return 'generated_column_type';
+        if (! str_contains(strtoupper((string) $column->extra), 'VIRTUAL')
+            || ! str_contains(strtoupper((string) $column->extra), 'INVISIBLE')) return 'generated_column_attributes';
+        if ($this->normalizeExpression((string) $column->generation_expression) !== $this->normalizeExpression($this->expression())) {
+            return 'generated_column_expression';
+        }
+        $index = DB::table('information_schema.STATISTICS')->whereRaw('TABLE_SCHEMA = DATABASE()')
+            ->where('TABLE_NAME', 'audit_events')->where('INDEX_NAME', self::IDENTITY_INDEX)->orderBy('SEQ_IN_INDEX')
+            ->selectRaw('COLUMN_NAME AS column_name, NON_UNIQUE AS non_unique, SUB_PART AS sub_part')->get();
+        if ($index->count() !== 2 || $index->pluck('column_name')->all() !== [self::IDENTITY_COLUMN, 'entity_id']) return 'index_columns';
+        if (! $index->every(fn ($row) => (int) $row->non_unique === 0 && $row->sub_part === null)) return 'index_uniqueness';
+        return null;
     }
 
     private function identityActive(): bool
     {
-        if (DB::getDriverName() === 'sqlite') {
-            $row = DB::table('sqlite_master')->where('type', 'index')->where('name', self::IDENTITY_INDEX)->first();
-            return $row !== null && $row->tbl_name === 'audit_events' && $row->sql === $this->sqliteIndex();
-        }
-        $column = DB::table('information_schema.COLUMNS')->whereRaw('TABLE_SCHEMA = DATABASE()')
-            ->where('TABLE_NAME', 'audit_events')->where('COLUMN_NAME', self::IDENTITY_COLUMN)->first();
-        if ($column === null || $column->DATA_TYPE !== 'varchar' || (int) $column->CHARACTER_MAXIMUM_LENGTH !== 80
-            || ! str_contains(strtoupper($column->EXTRA), 'VIRTUAL') || ! str_contains(strtoupper($column->EXTRA), 'INVISIBLE')
-            || $this->normalizeExpression((string) $column->GENERATION_EXPRESSION) !== $this->normalizeExpression($this->expression())) {
-            return false;
-        }
-        $index = DB::table('information_schema.STATISTICS')->whereRaw('TABLE_SCHEMA = DATABASE()')
-            ->where('TABLE_NAME', 'audit_events')->where('INDEX_NAME', self::IDENTITY_INDEX)->orderBy('SEQ_IN_INDEX')->get();
-        return $index->count() === 2 && $index->pluck('COLUMN_NAME')->all() === [self::IDENTITY_COLUMN, 'entity_id']
-            && $index->every(fn ($row) => (int) $row->NON_UNIQUE === 0 && $row->SUB_PART === null);
+        return $this->identityIssue() === null;
     }
 
     public function installIdentity(): void
@@ -61,9 +79,14 @@ final class CollectionEvidenceAuditProtection
                 DB::unprepared('ALTER TABLE audit_events ADD COLUMN '.self::IDENTITY_COLUMN
                     .' VARCHAR(80) GENERATED ALWAYS AS ('.$this->expression().') VIRTUAL INVISIBLE');
             }
-            DB::unprepared('CREATE UNIQUE INDEX '.self::IDENTITY_INDEX.' ON audit_events ('.self::IDENTITY_COLUMN.', entity_id)');
+            $index = DB::table('information_schema.STATISTICS')->whereRaw('TABLE_SCHEMA = DATABASE()')
+                ->where('TABLE_NAME', 'audit_events')->where('INDEX_NAME', self::IDENTITY_INDEX)->exists();
+            if (! $index) {
+                DB::unprepared('CREATE UNIQUE INDEX '.self::IDENTITY_INDEX.' ON audit_events ('.self::IDENTITY_COLUMN.', entity_id)');
+            }
         }
-        if (! $this->identityActive()) throw new \LogicException('Collection audit identity index incomplete.');
+        $issue = $this->identityIssue();
+        if ($issue !== null) throw new \LogicException('Collection audit identity index incomplete: '.$issue);
     }
 
     private function definitions(): array
