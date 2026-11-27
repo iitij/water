@@ -60,7 +60,7 @@ final class CustodyShortageLossDecision
                 || (int) $proposal->actor_user_id === (int) $actor->id) {
                 throw new DomainException('shortage_loss_independence');
             }
-            if (($p['prior_recovery'] ?? null) !== $recovery) throw new DomainException('shortage_loss_recovery_changed');
+            if (! $this->sameRecovery($p['prior_recovery'] ?? null, $recovery)) throw new DomainException('shortage_loss_recovery_changed');
             $amount = SignedMinor::subtract($source['shortage_minor'], $recovery['recovered_minor'] ?? 0);
             $hash = $this->decisionHash($source, $p, $recovery);
             $event = ['source' => 'loss:'.$sessionId, 'minor' => $amount,
@@ -113,7 +113,7 @@ final class CustodyShortageLossDecision
             || (int) $proposal->actor_user_id === $source['collector_id']) {
             throw new DomainException('shortage_loss_document_mismatch');
         }
-        if (($p['prior_recovery'] ?? null) !== $recovery
+        if (! $this->sameRecovery($p['prior_recovery'] ?? null, $recovery)
             || ($recovery !== null && $recovery['effective_on'] > $p['proposed_on'])) {
             throw new DomainException('shortage_loss_recovery_changed');
         }
@@ -178,6 +178,15 @@ final class CustodyShortageLossDecision
             return $action($actor, ['session_id' => $sessionId, 'collector_id' => (int) $session->user_id,
                 'count_approval_id' => (int) $approval->id, 'shortage_minor' => $shortage], $date, $recovery);
         });
+    }
+
+    private function sameRecovery(mixed $stored, ?array $expected): bool
+    {
+        if ($expected === null) return $stored === null;
+        if (! is_array($stored)) return false;
+        ksort($stored);
+        ksort($expected);
+        return $stored === $expected;
     }
 
     private function decisionHash(array $source, array $proposal, ?array $recovery): string
