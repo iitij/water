@@ -80,6 +80,30 @@ final class FinancialPostingRegistryTest extends TestCase
         }
     }
 
+    public function test_held_document_guard_detects_same_name_wrong_body_and_refuses_install(): void
+    {
+        $guard = app(\App\Services\HeldCashDocumentProtection::class);
+        $this->assertTrue($guard->active());
+        DB::unprepared('DROP TRIGGER held_assignment_reject_update');
+        $body = DB::getDriverName() === 'sqlite' ? 'BEGIN SELECT 1; END' : 'FOR EACH ROW SET NEW.amount_minor = NEW.amount_minor';
+        DB::unprepared('CREATE TRIGGER held_assignment_reject_update BEFORE UPDATE ON treasury_held_cash_assignments '.$body);
+        try {
+            $this->assertFalse($guard->active());
+            $this->assertFalse(app(\App\Services\FinancialGuardInventory::class)->inspect()['held_documents']);
+            try {
+                $guard->install();
+                $this->fail('Accepted wrong trigger body.');
+            } catch (\LogicException $error) {
+                $this->assertSame('Unexpected held cash protection: held_assignment_reject_update', $error->getMessage());
+            }
+        } finally {
+            DB::unprepared('DROP TRIGGER held_assignment_reject_update');
+            $guard->install();
+        }
+        $this->assertTrue($guard->active());
+        $this->assertTrue(app(\App\Services\FinancialGuardInventory::class)->inspect()['held_documents']);
+    }
+
     public function test_registry_protection_rejects_direct_mutation_and_fenced_inserts(): void
     {
         $this->assertTrue(app(\App\Services\FinancialPostingRegistryProtection::class)->active());

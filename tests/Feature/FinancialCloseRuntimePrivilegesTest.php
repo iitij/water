@@ -213,6 +213,23 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
                 }
             }
             $useAdmin();
+            DB::unprepared('DROP TRIGGER held_assignment_reject_update');
+            DB::unprepared('CREATE TRIGGER held_assignment_reject_update BEFORE UPDATE ON treasury_held_cash_assignments FOR EACH ROW SET NEW.amount_minor = NEW.amount_minor');
+            try {
+                $useRuntime();
+                $damaged = $inventory();
+                $this->assertTrue($damaged['runtime_grant_allowlist_accepted']);
+                $this->assertFalse($damaged['guards']['held_documents']);
+                $this->assertFalse($damaged['listed_guards_active']);
+                $this->assertFalse($damaged['closure_authorized']);
+                $this->artisan('financial:database-preflight', ['--guards' => true])
+                    ->expectsOutput('held_documents: missing or unverifiable')->assertExitCode(1);
+            } finally {
+                $useAdmin();
+                DB::unprepared('DROP TRIGGER held_assignment_reject_update');
+                app(\App\Services\HeldCashDocumentProtection::class)->install();
+            }
+            $useAdmin();
             DB::unprepared('DROP TRIGGER ledger_reject_update');
             try {
                 $useRuntime();
