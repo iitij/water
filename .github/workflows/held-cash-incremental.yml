@@ -101,5 +101,20 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify close control privilege isolation
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_close_control_isolation_rejects_broad_and_direct_writes tests/Unit/RuntimeDatabasePrivilegesTest.php
+      - name: Prepare isolated runtime privileges
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          php artisan migrate --force
+          php artisan ledger:protect --install
+          php artisan financial:database-preflight --guards
+          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "CREATE USER 'water_close_runtime'@'%' IDENTIFIED BY 'disposable_close_password'; GRANT SELECT ON water\\_test.* TO 'water_close_runtime'@'%'; GRANT EXECUTE ON PROCEDURE water_test.financial_read_trigger_metadata TO 'water_close_runtime'@'%';"
+          docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -N -B -e "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='water_test' AND TABLE_TYPE='BASE TABLE' AND TABLE_NAME NOT IN ('financial_scopes','financial_periods','financial_close_commands','financial_period_closures') ORDER BY TABLE_NAME" | while IFS= read -r table; do
+            [[ "$table" =~ ^[a-zA-Z0-9_]+$ ]]
+            docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "GRANT INSERT, UPDATE, DELETE ON water_test.$table TO 'water_close_runtime'@'%';"
+          done
+      - name: Verify actual isolated close control identity
+        env:
+          WATER_QA_CLOSE_CONTROL: '1'
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_close_control_read_only_runtime_can_post_but_cannot_write_close_control tests/Feature/FinancialCloseRuntimePrivilegesTest.php
