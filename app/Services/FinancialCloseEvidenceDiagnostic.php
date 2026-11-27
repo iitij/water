@@ -134,7 +134,11 @@ final class FinancialCloseEvidenceDiagnostic
             $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements, $physicalMovements, $settlement) : null;
         // Keep operational readiness separate from the financial cutoff fingerprint.
         // This inventory is diagnostic, including when its blockers are nonempty.
-        $readiness = ['format_version' => 1, 'scope' => 'water', 'period_id' => $periodId,
+        $readiness = ['format_version' => 2, 'scope' => 'water', 'period_id' => $periodId,
+            'fence_epoch' => (string) $scope->fence_epoch, 'active_freeze_uuid' => $scope->active_freeze_uuid,
+            'calendar_version' => (string) $scope->calendar_version,
+            'refund_incidents_hash' => hash('sha256', json_encode($incident, JSON_THROW_ON_ERROR)),
+            'refund_batch_coverage_hash' => hash('sha256', json_encode($batchCoverage, JSON_THROW_ON_ERROR)),
             'period_state' => $period->state, 'period_version' => (string) $period->version,
             'as_of' => $today, 'cutoff_manifest_hash' => $manifest['manifest_hash'] ?? null,
             'writer_inventory_hash' => hash('sha256', json_encode($writerCoverage, JSON_THROW_ON_ERROR)),

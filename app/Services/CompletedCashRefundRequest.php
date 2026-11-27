@@ -2113,6 +2113,7 @@ final class CompletedCashRefundRequest
         $this->guard();
         $groups = $members = 0;
         $seen = [];
+        $identities = [];
         foreach (AuditEvent::query()->where('event', self::BATCH_APPROVED)->orderBy('id')->lockForUpdate()->get() as $group) {
             $p = $group->after;
             $countId = $p['count_id'] ?? null;
@@ -2138,9 +2139,13 @@ final class CompletedCashRefundRequest
                 $seen[$uuid] = true;
                 $members++;
             }
+            $identities[] = ['audit_id' => (int) $group->id, 'actor_id' => (int) $group->actor_user_id,
+                'count_id' => $countId, 'evidence' => $p];
             $groups++;
         }
-        return ['groups' => $groups, 'members' => $members, 'batch_audits_verified' => true, 'closure_authorized' => false];
+        return ['groups' => $groups, 'members' => $members, 'batch_audits_verified' => true,
+            'verified_batch_identity_hash' => hash('sha256', json_encode($identities, JSON_THROW_ON_ERROR)),
+            'closure_authorized' => false];
     }
 
     /** A closed review is not a cash recovery. Caller owns the issuance fence. */

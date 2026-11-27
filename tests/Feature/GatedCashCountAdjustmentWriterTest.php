@@ -10030,6 +10030,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $before = $snapshot();
         $result = $diagnostic->inspect($actor, $periodId, $this->nowAt());
         $this->assertSame(0, $result['refund_batch_coverage']['groups']);
+        $this->assertSame(hash('sha256', '[]'), $result['refund_batch_coverage']['verified_batch_identity_hash']);
+        $this->assertSame(hash('sha256', json_encode($result['refund_incidents'], JSON_THROW_ON_ERROR)), $result['readiness_inventory']['refund_incidents_hash']);
+        $this->assertSame(hash('sha256', json_encode($result['refund_batch_coverage'], JSON_THROW_ON_ERROR)), $result['readiness_inventory']['refund_batch_coverage_hash']);
         $this->assertSame(2, $result['refund_incidents']['count']);
         $this->assertSame(10, $result['refund_incidents']['claimed_minor']);
         $this->assertSame(0, $result['refund_incidents']['unposted_cash_refund_minor']);
@@ -10044,6 +10047,12 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(1, $resolved['refund_batch_coverage']['groups']);
         $this->assertSame(2, $resolved['refund_batch_coverage']['members']);
         $this->assertTrue($resolved['refund_batch_coverage']['batch_audits_verified']);
+        $this->assertNotSame($result['refund_batch_coverage']['verified_batch_identity_hash'], $resolved['refund_batch_coverage']['verified_batch_identity_hash']);
+        $this->assertNotSame($result['readiness_inventory']['refund_incidents_hash'], $resolved['readiness_inventory']['refund_incidents_hash']);
+        $this->assertNotSame($result['readiness_inventory']['refund_batch_coverage_hash'], $resolved['readiness_inventory']['refund_batch_coverage_hash']);
+        $this->assertNotSame($result['readiness_inventory']['inventory_hash'], $resolved['readiness_inventory']['inventory_hash']);
+        $this->assertSame(hash('sha256', json_encode($resolved['refund_batch_coverage'], JSON_THROW_ON_ERROR)), $resolved['readiness_inventory']['refund_batch_coverage_hash']);
+        $this->assertSame(hash('sha256', json_encode($resolved['refund_incidents'], JSON_THROW_ON_ERROR)), $resolved['readiness_inventory']['refund_incidents_hash']);
         $this->assertSame(0, $resolved['refund_incidents']['count']);
         $this->assertSame(0, $resolved['refund_incidents']['claimed_minor']);
         $this->assertNotContains('unresolved_refund_incidents', $resolved['blockers']);
@@ -10334,7 +10343,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         unset($manifest['manifest_hash']);
         $this->assertSame(hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)), $hash);
         $readiness = $report['readiness_inventory'];
-        $this->assertSame(1, $readiness['format_version']);
+        $this->assertSame(2, $readiness['format_version']);
+        $this->assertSame('5', $readiness['fence_epoch']);
+        $this->assertNull($readiness['active_freeze_uuid']);
+        $this->assertSame('1', $readiness['calendar_version']);
         $this->assertSame($hash, $readiness['cutoff_manifest_hash']);
         $this->assertSame($report['blockers'], $readiness['blockers']);
         $this->assertSame(hash('sha256', json_encode($report['writer_coverage'], JSON_THROW_ON_ERROR)), $readiness['writer_inventory_hash']);

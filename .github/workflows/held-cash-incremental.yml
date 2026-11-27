@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Retry only counted cash capacity after explicit collector fixture correction
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_exact_capacity_across_subscribers_and_replay_after_later_allocation tests/Feature/GatedCountedCashWriterTest.php
+      - name: Verify readiness fingerprint binds refund resolution and scope fence
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_evidence_unresolved_cash_claims_remain_visible_until_signed_settlement|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Retry only counted cash capacity after explicit collector fixture correction
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_exact_capacity_across_subscribers_and_replay_after_later_allocation tests/Feature/GatedCountedCashWriterTest.php
+      - name: Verify readiness fingerprint binds refund resolution and scope fence
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_close_evidence_unresolved_cash_claims_remain_visible_until_signed_settlement|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
