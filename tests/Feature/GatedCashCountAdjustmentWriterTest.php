@@ -9425,6 +9425,70 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_period_closures', 0);
     }
 
+    public function test_custody_source_coverage_rejects_independently_counted_but_unregistered_funding(): void
+    {
+        [, , $account] = $this->fixture('100.00');
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->openFunded($collector, $reviewer, (int) $account['id'], '5.00',
+            'QA-CUSTODY-LEGACY-FUND', self::EVIDENCE);
+        $sessions->decide($sessions->close($session, '5.00'), true, $reviewer);
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $result = DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($period));
+        $this->assertFalse($result['custody']['recorded_rollforward_verified']);
+        $this->assertContains(['code' => 'outstanding_source_unregistered', 'session_id' => (int) $session->id], $result['custody']['issues']);
+        $this->assertFalse($result['custody']['all_count_variances_resolved']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertDatabaseCount('cash_session_fundings', 1);
+        $this->assertDatabaseCount('financial_posting_events', 1);
+    }
+
+    public function test_custody_source_coverage_keeps_shortage_visible_after_full_handover(): void
+    {
+        [, , $account, , , $subscriber] = $this->held();
+        $collector = $this->actor();
+        $reviewer = $this->actor();
+        $fund = app(GatedTreasuryOpeningFundingWriter::class)->fund($collector, $reviewer, (int) $account['id'], '5.00',
+            'QA-CUSTODY-SHORT-FUND', self::EVIDENCE, '55555555-5555-4555-8555-555555555555', $this->nowAt());
+        $session = $fund['session'];
+        $receipts = app(GatedCashReceiptWriter::class);
+        $receipts->collect($collector, (int) $subscriber->id, '1.00',
+            '66666666-6666-4666-8666-666666666666', $this->nowAt(), (int) $session->id);
+        $voided = $receipts->collect($collector, (int) $subscriber->id, '0.30',
+            '77777777-7777-4777-8777-777777777777', $this->nowAt(), (int) $session->id)['payment'];
+        \App\Models\Setting::set('void_approval_threshold', '0.00');
+        app(\App\Services\GatedReceiptVoidWriter::class)->request($collector, (int) $voided->id,
+            'Independent documented current receipt cancellation', $this->nowAt(), '88888888-8888-4888-8888-888888888888');
+        $sessions = app(CashSessionService::class);
+        $session = $sessions->decide($sessions->close($session, '5.80'), true, $reviewer);
+        app(\App\Services\GatedCashHandoverWriter::class)->receive($reviewer, (int) $session->id, (int) $account['id'],
+            '5.80', 'QA-CUSTODY-SHORT-RETURN', '2026-11-25', self::EVIDENCE,
+            '99999999-9999-4999-8999-999999999999', $this->nowAt());
+        $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $dec = (int) DB::table('financial_periods')->insertGetId(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $inspect = fn ($id) => DB::transaction(fn () => app(\App\Services\FinancialOutstandingPeriodEvidence::class)->inspect($id));
+        foreach ([$nov, $dec] as $period) {
+            $proof = $inspect($period);
+            $this->assertTrue($proof['custody']['recorded_rollforward_verified'], json_encode($proof));
+            $this->assertFalse($proof['custody']['all_count_variances_resolved']);
+            $this->assertSame(0, $proof['custody']['recorded_closing_minor']);
+            $row = $proof['custody']['rows'][0];
+            $this->assertTrue($row['collection_coverage_verified']);
+            $this->assertSame(500, $row['source_evidence']['funding_minor']);
+            $this->assertSame(130, $row['source_evidence']['gross_collections_minor']);
+            $this->assertSame(30, $row['source_evidence']['voided_minor']);
+            $this->assertSame(600, $row['source_evidence']['expected_minor']);
+            $this->assertSame(20, $row['source_evidence']['shortage_minor']);
+            $this->assertSame(0, $row['source_evidence']['surplus_minor']);
+            $this->assertFalse($row['source_evidence']['variance_disposition_verified']);
+            $this->assertFalse($proof['closure_authorized']);
+        }
+    }
+
     public function test_outstanding_period_evidence_refuses_unapproved_session(): void
     {
         $collector = $this->actor();
