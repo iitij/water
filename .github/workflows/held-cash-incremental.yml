@@ -39,6 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
+      - name: Verify exact shortage disposition arithmetic
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/CustodyShortageSettlementPolicyTest.php
       - name: Verify combined outstanding period evidence and affected close diagnostics
         run: |
           vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_outstanding_rejects_late_recorded_prior_month_transfer|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_custody_source_coverage_keeps_shortage_visible_after_full_handover' tests/Feature/GatedCashCountAdjustmentWriterTest.php
