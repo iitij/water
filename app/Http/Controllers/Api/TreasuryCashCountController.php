@@ -47,7 +47,8 @@ final class TreasuryCashCountController extends ApiController
             'amount' => ['prohibited'], 'effective_on' => ['prohibited'], 'account_id' => ['prohibited'],
         ]);
         try {
-            if (config('financial_candidate.cash_count_adjustments') === true) {
+            if (config('financial_candidate.cash_count_adjustments') === true
+                || \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
                 abort_unless(app()->environment(['testing', 'staging']), 503);
                 $request->validate(['operation_uuid' => ['required', 'uuid']]);
                 $result = app(\App\Services\GatedCashCountAdjustmentWriter::class)->adjust(

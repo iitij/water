@@ -296,6 +296,11 @@ final class TreasuryCashCountService
             throw ValidationException::withMessages(['adjustment' => 'يلزم تصنيف محدد وسبب مثبت ومرجع مستقل.']);
         }
         return DB::transaction(function () use ($actor, $id, $reference, $classification, $reason, $evidence, $writer): array {
+            // Serialize against scope configuration and require the registered writer.
+            $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
+            if ($scope && ! ($writer !== null && $writer->allowsMutation($id, (int) $actor->id))) {
+                throw new \DomainException('gated_cash_count_adjustment_writer_required');
+            }
             $this->lock();
             $count = DB::table('treasury_cash_counts')->where('id', $id)->lockForUpdate()->first();
             abort_unless($count, 404);

@@ -125,7 +125,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         }
     }
 
-    public function test_cash_count_filament_full_observation_review_and_settlement_cycle(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_cash_count_filament_full_observation_review_and_settlement_cycle(bool $enabled): void
     {
         $counter = $this->actor();
         $reviewer = $this->actor();
@@ -134,7 +135,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'opening_on' => '2026-11-25', 'opening_amount' => '100.00',
             'opening_reference' => 'QA-WEB-COUNT-OPEN', 'opening_evidence' => self::EVIDENCE,
         ], self::UUID, $this->nowAt())['account'];
-        config(['financial_candidate.cash_count_adjustments' => true]);
+        config(['financial_candidate.cash_count_adjustments' => $enabled]);
         $page = \App\Filament\Pages\TreasuryCashAdjustments::class;
         \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
         $this->actingAs($counter, 'web');
@@ -174,14 +175,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('transactions', 0);
     }
 
-    public function test_cash_count_adjustment_filament_shares_gate_and_api_replay(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_cash_count_adjustment_filament_shares_gate_and_api_replay(bool $enabled): void
     {
         [$counter, $reviewer, , $count] = $this->fixture();
         $page = \App\Filament\Pages\TreasuryCashAdjustments::class;
         \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
         $this->actingAs($reviewer, 'web');
-        $this->assertFalse($page::canAccess());
-        config(['financial_candidate.cash_count_adjustments' => true]);
+        config(['financial_candidate.cash_count_adjustments' => $enabled]);
+        $this->assertTrue($page::canAccess());
         $other = User::factory()->create(['role' => 'admin']);
         $this->actingAs($other, 'web');
         $this->assertFalse($page::canAccess());
@@ -206,14 +208,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('financial_posting_events', 2);
     }
 
-    public function test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass(bool $enabled): void
     {
         [$counter, $reviewer, , $count] = $this->fixture();
         $id = (int) $count['id'];
         $url = '/api/treasury/cash-counts/'.$id.'/adjustment';
         $payload = ['reference' => 'QA-ADJUST-01', 'classification' => 'confirmed_cash_loss',
             'reason' => self::REASON, 'evidence' => self::EVIDENCE];
-        config(['financial_candidate.cash_count_adjustments' => true]);
+        config(['financial_candidate.cash_count_adjustments' => $enabled]);
         \Laravel\Sanctum\Sanctum::actingAs($reviewer);
         $this->postJson($url, $payload)->assertUnprocessable();
         $this->rejects('gated_cash_count_adjustment_writer_required', fn () =>
@@ -234,9 +237,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('treasury_postings', 1);
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => self::ADJUST, 'amount_minor' => -25]);
         config(['financial_candidate.cash_count_adjustments' => false]);
-        $this->postJson($url, $payload)->assertConflict();
+        $this->postJson($url, $payload)->assertOk();
         unset($payload['operation_uuid']);
-        $this->postJson($url, $payload)->assertConflict();
+        $this->postJson($url, $payload)->assertUnprocessable();
         $this->assertDatabaseCount('treasury_cash_adjustments', 1);
         $this->assertDatabaseCount('financial_posting_events', 2);
     }
@@ -363,8 +366,27 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     public function test_legacy_adjustment_and_conflicting_replay_are_not_adopted(): void
     {
         [, $reviewer, , $count] = $this->fixture();
-        app(TreasuryCashCountService::class)->adjust($reviewer, (int) $count['id'], 'QA-ADJUST-01',
-            'confirmed_cash_loss', self::REASON, self::EVIDENCE);
+        config(['financial_candidate.cash_count_adjustments' => false]);
+        $this->rejects('gated_cash_count_adjustment_writer_required', fn () =>
+            app(TreasuryCashCountService::class)->adjust($reviewer, (int) $count['id'], 'QA-ADJUST-01',
+                'confirmed_cash_loss', self::REASON, self::EVIDENCE));
+        $this->assertDatabaseCount('treasury_cash_adjustments', 0);
+        $this->assertDatabaseCount('treasury_postings', 0);
+        // Synthetic imported legacy row: never create it through the now-fenced service.
+        $review = DB::table('treasury_cash_count_reviews')->where('treasury_cash_count_id', $count['id'])->sole();
+        $adjustmentId = DB::table('treasury_cash_adjustments')->insertGetId([
+            'treasury_account_id' => $count['treasury_account_id'], 'treasury_cash_count_id' => $count['id'],
+            'treasury_cash_count_review_id' => $review->id, 'amount_minor' => -25,
+            'classification' => 'confirmed_cash_loss', 'reference' => 'QA-ADJUST-01',
+            'reason' => self::REASON, 'evidence' => self::EVIDENCE, 'approved_by' => $reviewer->id,
+            'adjusted_on' => '2026-11-25', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('treasury_postings')->insert([
+            'treasury_account_id' => $count['treasury_account_id'], 'treasury_cash_adjustment_id' => $adjustmentId,
+            'kind' => 'cash_count_adjustment', 'amount_minor' => -25, 'effective_on' => '2026-11-25',
+            'evidence_reference' => 'QA-ADJUST-01', 'posted_by' => $reviewer->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
         $this->rejects('gated_cash_count_operation_conflict', fn () => $this->postAdjustment($reviewer, $count));
         $this->assertDatabaseCount('treasury_cash_adjustments', 1);
         $this->assertDatabaseCount('financial_posting_events', 1);

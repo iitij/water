@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify mandatory cash receipt and receipt void gates
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_cash_api_all_four_entrypoints_share_registry_and_exact_replay|test_release_cash_api_deferred_identity_gate_and_late_review_no_fallback|test_release_cash_filament_create_keeps_identity_on_conflict_and_replays_once|test_release_cash_filament_omitted_original_till_refuses_without_posting|test_release_void_api_uses_exact_request_identity_and_gate_without_legacy_fallback|test_release_void_filament_mounts_exact_request_and_refuses_stale_modal|test_release_void_service_fence_blocks_legacy_paths_even_when_flag_disabled' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify mandatory treasury cash count adjustment gates
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_filament_full_observation_review_and_settlement_cycle|test_cash_count_adjustment_filament_shares_gate_and_api_replay|test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass|test_legacy_adjustment_and_conflicting_replay_are_not_adopted|test_confirmed_shortage_posts_exact_negative_variance_and_replays_once|test_registry_failure_rolls_back_adjustment_and_audit_then_retries' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify mandatory cash receipt and receipt void gates
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_release_cash_api_all_four_entrypoints_share_registry_and_exact_replay|test_release_cash_api_deferred_identity_gate_and_late_review_no_fallback|test_release_cash_filament_create_keeps_identity_on_conflict_and_replays_once|test_release_cash_filament_omitted_original_till_refuses_without_posting|test_release_void_api_uses_exact_request_identity_and_gate_without_legacy_fallback|test_release_void_filament_mounts_exact_request_and_refuses_stale_modal|test_release_void_service_fence_blocks_legacy_paths_even_when_flag_disabled' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify mandatory treasury cash count adjustment gates
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_filament_full_observation_review_and_settlement_cycle|test_cash_count_adjustment_filament_shares_gate_and_api_replay|test_cash_count_adjustment_api_uses_gate_and_refuses_legacy_bypass|test_legacy_adjustment_and_conflicting_replay_are_not_adopted|test_confirmed_shortage_posts_exact_negative_variance_and_replays_once|test_registry_failure_rolls_back_adjustment_and_audit_then_retries' tests/Feature/GatedCashCountAdjustmentWriterTest.php

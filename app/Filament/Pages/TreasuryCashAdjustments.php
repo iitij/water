@@ -34,7 +34,8 @@ final class TreasuryCashAdjustments extends Page
     {
         $actor = Auth::guard('web')->user();
         return app()->environment(['testing', 'staging'])
-            && config('financial_candidate.cash_count_adjustments') === true
+            && (config('financial_candidate.cash_count_adjustments') === true
+                || DB::table('financial_scopes')->where('scope_key', 'water')->exists())
             && $actor instanceof User && ! $actor->isCurrentlyDisabled() && $actor->hasRole('super_admin');
     }
 
