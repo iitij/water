@@ -8983,10 +8983,11 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
 
     public function test_close_evidence_actual_coordinator_refuses_incomplete_proof(): void
     {
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        // Establish the initial journal version before registering any posting.
+        DB::table('financial_periods')->where('id', $periodId)->update(['version' => 0]);
         [, $actor] = $this->fixture('95.00', funded: true);
         \Laravel\Sanctum\Sanctum::actingAs($actor);
-        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
-        DB::table('financial_periods')->where('id', $periodId)->update(['version' => 0]);
         $this->travelTo(\Carbon\Carbon::parse('2026-12-01T08:00:00+03:00'));
         $now = now()->toDateTimeImmutable();
         $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
