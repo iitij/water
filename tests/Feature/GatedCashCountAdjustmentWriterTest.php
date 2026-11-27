@@ -9010,6 +9010,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'available_minor' => 0, 'allocated_minor' => 0, 'unallocated_minor' => 0,
             'allocation_hash' => app(\App\Services\AllocationSnapshotIntegrity::class)->fingerprint((int) $boundary->id, 0, 0, 0, [])];
         $reject(fn () => DB::table('payment_allocation_revisions')->insert($empty + ['created_at' => '2026-11-30 20:59:59']));
+        $reject(fn () => DB::table('payment_allocation_revisions')->insert($empty + ['created_at' => '2026-12-31 21:00:00']));
         DB::table('payment_allocation_revisions')->insert($empty + ['created_at' => '2026-11-30 21:00:00']);
         $this->assertDatabaseCount('held_cash_shadow_reinstatements', 0);
         $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
@@ -13053,10 +13054,6 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'amount' => '0.35', 'payment_method' => 'cash', 'payment_date' => '2026-11-25']);
         $this->assertTrue(app(\App\Services\CollectionEvidencePeriodProtection::class)->active());
         $snapshots = ['noncash_collection_claims' => $claim, 'late_receipt_reviews' => $review];
-        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
-        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
-            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
-        $this->travelTo(\Carbon\Carbon::parse('2026-12-02T08:30:00Z'));
         $reject = function (callable $action): void {
             try {
                 $action();
@@ -13066,6 +13063,16 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 if (DB::getDriverName() === 'mysql') $this->assertSame('45000', $error->errorInfo[0]);
             }
         };
+        foreach ($snapshots as $table => $row) {
+            foreach (['created_at', 'updated_at', 'decided_at'] as $column) {
+                $reject(fn () => DB::table($table)->where('id', $row['id'])->update([$column => '2026-11-30 21:00:00']));
+            }
+            $this->assertSame($row, (array) DB::table($table)->sole());
+        }
+        DB::table('financial_periods')->where('month', '2026-11')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-02T08:30:00Z'));
         foreach ($snapshots as $table => $row) {
             $source = $table === 'noncash_collection_claims' ? 'amount_minor' : 'amount';
             $insert = $row;
@@ -13277,6 +13284,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $newCount = $countRow;
         unset($newCount['id']);
         $newCount['reference'] = 'QA-RAW-COUNT-FENCE';
+        $this->assertTrue(app(\App\Services\FinancialEvidenceDestinationProtection::class)->active());
+        foreach (['observed_at', 'created_at'] as $column) {
+            $reject(fn () => DB::table('treasury_cash_counts')->insert(array_replace($newCount, [$column => '2026-11-30 21:00:00'])));
+            $reject(fn () => DB::table('treasury_cash_counts')->where('id', $countRow['id'])->update([$column => '2026-10-31 08:30:00']));
+        }
+        $reject(fn () => DB::table('treasury_cash_count_reviews')->where('id', $reviewRow['id'])->update(['created_at' => '2026-11-30 21:00:00']));
+        $this->assertSame($before, $snapshot());
         foreach (['FROZEN', 'CLOSED'] as $state) {
             DB::table('financial_periods')->where('month', '2026-11')->update(['state' => $state]);
             $reject(fn () => DB::table('treasury_cash_counts')->insert($newCount));

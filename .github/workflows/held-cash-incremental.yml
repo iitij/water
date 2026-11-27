@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify dated source destinations
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_insert_fence_blocks_direct_documents_and_allows_later_open_period|test_source_treasury_fence_protects_eight_dated_documents|test_source_void_fence_allows_later_invoice_reversal_without_rewriting_original' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify financial evidence destinations
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_database_fence_preserves_cutoff_evidence|test_collection_evidence_database_fence_preserves_prior_source_and_later_decision|test_source_allocation_fence_preserves_closed_revisions_and_allows_later_reinstatement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +101,5 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify dated source destinations
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_source_insert_fence_blocks_direct_documents_and_allows_later_open_period|test_source_treasury_fence_protects_eight_dated_documents|test_source_void_fence_allows_later_invoice_reversal_without_rewriting_original' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify financial evidence destinations
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_cash_count_database_fence_preserves_cutoff_evidence|test_collection_evidence_database_fence_preserves_prior_source_and_later_decision|test_source_allocation_fence_preserves_closed_revisions_and_allows_later_reinstatement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
