@@ -17,7 +17,21 @@ final class RuntimeDatabasePrivileges
         $pdo = DB::connection()->getPdo();
         $database = $pdo->query('SELECT DATABASE()')->fetchColumn();
         $grants = $pdo->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(\PDO::FETCH_COLUMN);
-        return $this->evaluate((string) $database, $grants);
+        $result = $this->evaluate((string) $database, $grants);
+        // SHOW GRANTS alone is insufficient where server-mandatory roles
+        // or session roles add effective rights to the runtime identity.
+        $roles = $pdo->query('SELECT CURRENT_ROLE()')->fetchColumn();
+        if (! $this->noActiveRoles($roles)) {
+            $result['accepted'] = false;
+            $result['issues'][] = 'runtime_active_roles_unverified';
+        }
+        return $result;
+    }
+
+    public function noActiveRoles(mixed $roles): bool
+    {
+        // MySQL returns NONE; MariaDB may return SQL NULL.
+        return $roles === null || $roles === 'NONE';
     }
 
     /** No raw grant strings are returned: MariaDB can include credential hashes. */

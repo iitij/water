@@ -39,9 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify bank evidence range and existing cutoff proofs
-        run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_audit_expression_metadata_accepts_only_exact_event_literals|test_collection_audit_identity_survives_stale_snapshot_and_unrelated_duplicates|test_collection_cutoff_audit_is_immutable_and_rejects_forged_identity|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify grant parser and session role policy
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -102,9 +101,23 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify bank evidence range and existing cutoff proofs
+      - name: Verify grant parser and session role policy
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
+      - name: Migrate disposable schema and create restricted runtime account
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
         run: |
-          vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_collection_audit_expression_metadata_accepts_only_exact_event_literals|test_collection_audit_identity_survives_stale_snapshot_and_unrelated_duplicates|test_collection_cutoff_audit_is_immutable_and_rejects_forged_identity|test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+          set -euo pipefail
+          php artisan migrate:fresh --force
+          docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password <<'SQL'
+          CREATE USER 'water_runtime'@'%' IDENTIFIED BY 'disposable_runtime_password';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON `water\_test`.* TO 'water_runtime'@'%';
+          GRANT EXECUTE ON PROCEDURE `water_test`.`financial_read_trigger_metadata` TO 'water_runtime'@'%';
+          SQL
+      - name: Verify actual restricted runtime and live collection protection
+        env:
+          WATER_QA_RUNTIME: '1'
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/FinancialCloseRuntimePrivilegesTest.php
 
       - name: Verify collection audit identity metadata on failure
         if: failure()

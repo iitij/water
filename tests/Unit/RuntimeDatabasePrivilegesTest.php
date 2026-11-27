@@ -11,6 +11,16 @@ final class RuntimeDatabasePrivilegesTest extends TestCase
 {
     private const USAGE = "GRANT USAGE ON *.* TO 'runtime'@'localhost'";
 
+    public function test_active_or_unverifiable_session_roles_are_not_accepted(): void
+    {
+        $service = new RuntimeDatabasePrivileges();
+        self::assertTrue($service->noActiveRoles('NONE'));
+        self::assertTrue($service->noActiveRoles(null));
+        foreach (['', false, 'admin_role', 'readonly_role', 'role_a,role_b', 'NONE,admin_role'] as $roles) {
+            self::assertFalse($service->noActiveRoles($roles));
+        }
+    }
+
     public function test_accepts_exact_dml_scopes_without_global_access(): void
     {
         $service = new RuntimeDatabasePrivileges();

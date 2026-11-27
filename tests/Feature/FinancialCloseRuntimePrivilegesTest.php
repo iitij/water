@@ -50,6 +50,8 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
         ]);
         $actor = User::factory()->create(['role' => 'admin']);
         $actor->assignRole(Role::findOrCreate('super_admin', 'web'));
+        $reviewer = User::factory()->create(['role' => 'admin']);
+        $reviewer->assignRole(Role::findOrCreate('super_admin', 'web'));
         $subscriber = Subscriber::create(['name' => 'Synthetic runtime subscriber',
             'square_id' => Square::create(['name' => 'Synthetic runtime square'])->id, 'status' => 'active']);
         Tariff::create(['name' => 'Synthetic runtime tariff', 'unit_price' => '0.10', 'is_active' => true]);
@@ -96,8 +98,28 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             $this->assertTrue($receipt['registry_created']);
             $this->assertDatabaseCount('financial_posting_operations', 2);
             $this->assertDatabaseCount('financial_posting_events', 2);
+            config(['financial_candidate.collection_evidence' => true]);
+            $claims = app(\App\Services\NonCashClaimService::class);
+            $claim = $claims->submit($actor, ['sync_uuid' => '88888888-8888-4888-8888-888888888888',
+                'subscriber_id' => $subscriber->id, 'amount' => '0.25', 'payment_method' => 'check',
+                'instrument_reference' => 'QA-RUNTIME-CHECK', 'instrument_on' => '2026-11-25']);
+            $this->assertSame('pending', $claim['status']);
+            $rejected = $claims->reject($reviewer, (int) $claim['id'], 'Independent runtime claim rejection evidence');
+            $this->assertSame('rejected', $rejected['status']);
+            $this->assertDatabaseCount('financial_posting_events', 2);
+            $audit = DB::table('audit_events')->where('event', 'noncash_claim.submitted')->sole();
+            try {
+                DB::table('audit_events')->where('id', $audit->id)->delete();
+                $this->fail('Restricted runtime deleted collection evidence.');
+            } catch (QueryException $error) {
+                $this->assertSame('45000', $error->errorInfo[0]);
+                $this->assertStringContainsString('Collection evidence audit is immutable or invalid', $error->getMessage());
+            }
+            $this->assertEquals($audit, DB::table('audit_events')->where('id', $audit->id)->sole());
             foreach ([
                 'DROP TRIGGER fin_source_invoices_insert',
+                'DROP TRIGGER fin_collection_audit_insert',
+                'DROP INDEX fin_collection_audit_identity ON audit_events',
                 'ALTER TABLE invoices ADD COLUMN qa_forbidden INT NULL',
                 'TRUNCATE TABLE financial_posting_events',
                 'DROP PROCEDURE financial_read_trigger_metadata',
@@ -152,6 +174,21 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             } finally {
                 $useAdmin();
                 app(\App\Services\CustodyShortageDecisionProtection::class)->install();
+            }
+            $useAdmin();
+            DB::unprepared('DROP INDEX fin_collection_audit_identity ON audit_events');
+            try {
+                $useRuntime();
+                $damaged = $inventory();
+                $this->assertTrue($damaged['runtime_grant_allowlist_accepted']);
+                $this->assertFalse($damaged['guards']['collection_evidence_audit']);
+                $this->assertFalse($damaged['listed_guards_active']);
+                $this->assertFalse($damaged['closure_authorized']);
+                $this->artisan('financial:database-preflight', ['--guards' => true])
+                    ->expectsOutput('collection_evidence_audit: missing or unverifiable')->assertExitCode(1);
+            } finally {
+                $useAdmin();
+                app(\App\Services\CollectionEvidenceAuditProtection::class)->installIdentity();
             }
             $useRuntime();
             $exit = \Illuminate\Support\Facades\Artisan::call('financial:database-preflight', ['--guards' => true]);
