@@ -83,7 +83,8 @@ final class CustodyShortageLossDecision
      */
     public function verifiedThrough(CashSession $session, AuditEvent $count, int $shortage, string $next, ?array $recovery = null): ?array
     {
-        if (DB::transactionLevel() <= 0 || ! app(CustodyShortageDecisionProtection::class)->active()) {
+        if (DB::transactionLevel() <= 0 || ! app(CustodyShortageDecisionProtection::class)->active()
+                || ! app(CustodyShortagePeriodProtection::class)->active()) {
             throw new DomainException('shortage_loss_protection_required');
         }
         $id = (int) $session->id;
@@ -139,7 +140,8 @@ final class CustodyShortageLossDecision
         $date = $now->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $date, $now, function () use ($actor, $sessionId, $date, $action): array {
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()
-                || ! app(CustodyShortageDecisionProtection::class)->active()) {
+                || ! app(CustodyShortageDecisionProtection::class)->active()
+                || ! app(CustodyShortagePeriodProtection::class)->active()) {
                 throw new DomainException('shortage_loss_protection_required');
             }
             $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
