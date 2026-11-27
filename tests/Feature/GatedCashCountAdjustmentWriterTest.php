@@ -10305,6 +10305,27 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $hash = $manifest['manifest_hash'];
         unset($manifest['manifest_hash']);
         $this->assertSame(hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)), $hash);
+        $readiness = $report['readiness_inventory'];
+        $this->assertSame(1, $readiness['format_version']);
+        $this->assertSame($hash, $readiness['cutoff_manifest_hash']);
+        $this->assertSame($report['blockers'], $readiness['blockers']);
+        $this->assertSame(hash('sha256', json_encode($report['writer_coverage'], JSON_THROW_ON_ERROR)), $readiness['writer_inventory_hash']);
+        $this->assertFalse($readiness['closure_authorized']);
+        $inventoryHash = $readiness['inventory_hash'];
+        unset($readiness['inventory_hash']);
+        $this->assertSame(hash('sha256', json_encode($readiness, JSON_THROW_ON_ERROR)), $inventoryHash);
+        $flag = 'financial_candidate.cash_receipts';
+        $originalFlag = config($flag);
+        try {
+            config([$flag => $originalFlag !== true]);
+            $changed = $diagnostic->inspect($reviewer, $period, $now);
+            $this->assertNotSame($inventoryHash, $changed['readiness_inventory']['inventory_hash']);
+            $this->assertNotSame($readiness['writer_inventory_hash'], $changed['readiness_inventory']['writer_inventory_hash']);
+            $this->assertContains('complete_writer_coverage_unverified', $changed['blockers']);
+            $this->assertFalse($changed['closure_authorized']);
+        } finally {
+            config([$flag => $originalFlag]);
+        }
         $this->assertFalse($report['writer_coverage']['complete_writer_coverage_verified']);
         $this->assertFalse($report['closure_authorized']);
         $coordinator = new \App\Services\FinancialCloseCoordinator(new \App\Support\FinancialClosePolicy(),

@@ -132,12 +132,20 @@ final class FinancialCloseEvidenceDiagnostic
         sort($blockers, SORT_STRING);
         $manifest = $ended ? $this->cutoffManifest($period, $cashEvidence,
             $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements, $physicalMovements, $settlement) : null;
+        // Keep operational readiness separate from the financial cutoff fingerprint.
+        // This inventory is diagnostic, including when its blockers are nonempty.
+        $readiness = ['format_version' => 1, 'scope' => 'water', 'period_id' => $periodId,
+            'period_state' => $period->state, 'period_version' => (string) $period->version,
+            'as_of' => $today, 'cutoff_manifest_hash' => $manifest['manifest_hash'] ?? null,
+            'writer_inventory_hash' => hash('sha256', json_encode($writerCoverage, JSON_THROW_ON_ERROR)),
+            'blockers' => $blockers, 'closure_authorized' => false];
+        $readiness['inventory_hash'] = hash('sha256', json_encode($readiness, JSON_THROW_ON_ERROR));
         return ['period_id' => $periodId, 'month' => $period->month, 'state' => $period->state,
             'as_of' => $today, 'settlement_through' => $through, 'period_ended' => $ended,
             'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
             'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'subscriber_period_evidence' => $subscriberCutoff, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity,
             'collection_period_evidence' => $claims,
-            'cutoff_account_movements' => $accountMovements, 'cutoff_held_movements' => $heldMovements, 'cutoff_physical_movements' => $physicalMovements, 'cutoff_evidence_manifest' => $manifest, 'blockers' => $blockers, 'source_coverage_verified' => false,
+            'cutoff_account_movements' => $accountMovements, 'cutoff_held_movements' => $heldMovements, 'cutoff_physical_movements' => $physicalMovements, 'cutoff_evidence_manifest' => $manifest, 'readiness_inventory' => $readiness, 'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
     }
 
