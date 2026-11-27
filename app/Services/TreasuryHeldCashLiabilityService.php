@@ -607,16 +607,34 @@ final class TreasuryHeldCashLiabilityService
             ->orderBy('id')->lockForUpdate()->get();
         $this->need($lots->count() === $adjustments->count(), 'held_cash_coverage_missing_recognition');
         $this->need(! DB::table('financial_posting_events as e')
-            ->leftJoin('treasury_held_cash_assignments as a', 'a.operation_uuid', '=', 'e.source_id')
-            ->where('e.source_type', 'held_cash_assignment')->whereNull('a.operation_uuid')->first(),
+            ->leftJoin('treasury_held_cash_assignments as a', function ($join): void {
+                $join->on('a.operation_uuid', '=', 'e.operation_uuid')
+                    ->whereRaw('HEX(a.operation_uuid) = HEX(e.source_id)')
+                    ->whereRaw('HEX(a.operation_uuid) = HEX(e.operation_uuid)');
+            })
+            ->where('e.source_type', 'held_cash_assignment')->where(function ($query): void {
+                $query->whereNull('a.operation_uuid')->orWhereNotIn('e.leg', ['identified_liability', 'unidentified_liability']);
+            })->first(),
             'held_cash_coverage_orphan_event');
         $this->need(! DB::table('financial_posting_events as e')
-            ->leftJoin('treasury_held_cash_payouts as p', 'p.operation_uuid', '=', 'e.source_id')
-            ->where('e.source_type', 'held_cash_payout')->whereNull('p.operation_uuid')->first(),
+            ->leftJoin('treasury_held_cash_payouts as p', function ($join): void {
+                $join->on('p.operation_uuid', '=', 'e.operation_uuid')
+                    ->whereRaw('HEX(p.operation_uuid) = HEX(e.source_id)')
+                    ->whereRaw('HEX(p.operation_uuid) = HEX(e.operation_uuid)');
+            })
+            ->where('e.source_type', 'held_cash_payout')->where(function ($query): void {
+                $query->whereNull('p.operation_uuid')->orWhereNotIn('e.leg', ['identified_liability', 'treasury']);
+            })->first(),
             'held_cash_coverage_orphan_event');
         $this->need(! DB::table('financial_posting_events as e')
-            ->leftJoin('treasury_held_cash_credits as c', 'c.operation_uuid', '=', 'e.operation_uuid')
-            ->where('e.source_type', 'held_cash_credit')->whereNull('c.id')->first(), 'held_cash_coverage_orphan_event');
+            ->leftJoin('treasury_held_cash_credits as c', function ($join): void {
+                $join->on('c.operation_uuid', '=', 'e.operation_uuid')
+                    ->whereRaw('HEX(c.operation_uuid) = HEX(e.operation_uuid)')
+                    ->whereRaw('HEX(CAST(c.id AS CHAR)) = HEX(e.source_id)');
+            })
+            ->where('e.source_type', 'held_cash_credit')->where(function ($query): void {
+                $query->whereNull('c.id')->orWhere('e.leg', '<>', 'identified_liability');
+            })->first(), 'held_cash_coverage_orphan_event');
         foreach (['treasury.held_cash_payout_authorized' => 'treasury_held_cash_payout_authorizations',
             'treasury.held_cash_payout_cancelled' => 'treasury_held_cash_payout_cancellations'] as $event => $table) {
             $proofs = \App\Models\AuditEvent::query()->where('event', $event)->lockForUpdate()->get();
