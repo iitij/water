@@ -8981,6 +8981,40 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertEquals($after, $snapshot());
     }
 
+    public function test_close_evidence_actual_coordinator_refuses_incomplete_proof(): void
+    {
+        [, $actor] = $this->fixture('95.00', funded: true);
+        \Laravel\Sanctum\Sanctum::actingAs($actor);
+        $periodId = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $periodId)->update(['version' => 0]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T08:00:00+03:00'));
+        $now = now()->toDateTimeImmutable();
+        $diagnostic = app(\App\Services\FinancialCloseEvidenceDiagnostic::class);
+        $proof = app(\App\Services\FinancialCloseReadinessProofSource::class);
+        $coordinator = new \App\Services\FinancialCloseCoordinator(new \App\Support\FinancialClosePolicy(), $proof);
+        $tables = ['financial_scopes', 'financial_periods', 'financial_close_commands', 'financial_period_closures',
+            'financial_posting_operations', 'financial_posting_events', 'treasury_accounts',
+            'treasury_postings', 'cash_sessions', 'cash_session_fundings', 'audit_events'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $report = $diagnostic->inspect($actor, $periodId, $now);
+        $this->assertSame($report, DB::transaction(fn () => $diagnostic->inspectLocked($actor, $periodId, $now)));
+        $this->assertContains('complete_writer_coverage_unverified', $report['blockers']);
+        $this->assertFalse($report['closure_authorized']);
+        $command = ['uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'version' => 0,
+            'reason' => 'Independent monthly close review'];
+        $this->rejects('close_readiness_unverified:'.implode(',', $report['blockers']),
+            fn () => $coordinator->execute('water', '2026-11', 'freeze', (int) $actor->id, $command, $now));
+        $other = $this->actor();
+        $this->rejects('close_unauthorized',
+            fn () => $coordinator->execute('water', '2026-11', 'freeze', (int) $other->id, $command, $now));
+        $this->assertFalse($proof->authorize('water', 'request', (int) $actor->id));
+        $this->assertFalse(app()->bound(\App\Services\FinancialCloseProofSource::class));
+        $this->assertEquals($before, $snapshot());
+        $this->assertDatabaseCount('financial_close_commands', 0);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+    }
+
     public function test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure(): void
     {
         $actor = $this->actor();
