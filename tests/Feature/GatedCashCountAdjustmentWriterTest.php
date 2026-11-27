@@ -9425,7 +9425,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
     {
         $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialWriterCoverageDiagnostic::class)->inspect());
         $before = $inspect();
-        $this->assertCount(32, $before['guards']);
+        $this->assertCount(33, $before['guards']);
+        $this->assertTrue($before['guards']['cash_count_period']);
         $this->assertCount(17, $before['writers']);
         $this->assertTrue($before['guards']['registry']);
         $this->assertArrayHasKey('completed_refund_batch_approval', $before['guards']);
@@ -13047,6 +13048,56 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseCount('transactions', 0);
         $this->assertDatabaseCount('treasury_postings', 0);
         $this->assertDatabaseCount('financial_posting_events', 0);
+    }
+
+    public function test_cash_count_database_fence_preserves_cutoff_evidence(): void
+    {
+        [$counter, $reviewer, $account, $count] = $this->fixture('100.00');
+        $guard = app(\App\Services\CashCountPeriodProtection::class);
+        $this->assertTrue($guard->active());
+        $countRow = (array) DB::table('treasury_cash_counts')->where('id', $count['id'])->sole();
+        $reviewRow = (array) DB::table('treasury_cash_count_reviews')->where('treasury_cash_count_id', $count['id'])->sole();
+        $snapshot = fn () => [
+            DB::table('treasury_cash_counts')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all(),
+            DB::table('treasury_cash_count_reviews')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all(),
+        ];
+        $before = $snapshot();
+        $reject = function (callable $write): void {
+            try {
+                $write();
+                $this->fail('Cash count evidence mutation unexpectedly accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Cash count evidence period is fenced', $error->getMessage());
+                if (DB::getDriverName() === 'mysql') $this->assertSame('45000', (string) $error->errorInfo[0]);
+            }
+        };
+        $newCount = $countRow;
+        unset($newCount['id']);
+        $newCount['reference'] = 'QA-RAW-COUNT-FENCE';
+        foreach (['FROZEN', 'CLOSED'] as $state) {
+            DB::table('financial_periods')->where('month', '2026-11')->update(['state' => $state]);
+            $reject(fn () => DB::table('treasury_cash_counts')->insert($newCount));
+            $reject(fn () => DB::table('treasury_cash_counts')->where('id', $countRow['id'])->update(['evidence' => 'Changed evidence']));
+            $reject(fn () => DB::table('treasury_cash_counts')->where('id', $countRow['id'])->delete());
+            $reject(fn () => DB::table('treasury_cash_count_reviews')->where('id', $reviewRow['id'])->update(['accepted' => false]));
+            $reject(fn () => DB::table('treasury_cash_count_reviews')->where('id', $reviewRow['id'])->delete());
+            if (DB::getDriverName() === 'sqlite') {
+                $replace = function (string $table, array $row): void {
+                    DB::statement("INSERT OR REPLACE INTO {$table} (".implode(', ', array_keys($row)).") VALUES ("
+                        .implode(', ', array_fill(0, count($row), '?')).")", array_values($row));
+                };
+                $reject(fn () => $replace('treasury_cash_counts', $countRow));
+                $reject(fn () => $replace('treasury_cash_count_reviews', $reviewRow));
+            }
+            $this->assertSame($before, $snapshot());
+        }
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        app(TreasuryCashCountService::class)->record($counter, (int) $account['id'], '100.00', 'QA-DEC-COUNT', self::EVIDENCE);
+        $this->assertDatabaseCount('treasury_cash_counts', 2);
+        $this->assertSame($countRow, (array) DB::table('treasury_cash_counts')->where('id', $countRow['id'])->sole());
+        $this->assertSame($reviewRow, (array) DB::table('treasury_cash_count_reviews')->where('id', $reviewRow['id'])->sole());
     }
 
     public function test_cash_count_observation_and_review_require_open_scope_with_flag_disabled(): void
