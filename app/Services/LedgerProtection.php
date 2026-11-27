@@ -7,19 +7,24 @@ use Illuminate\Support\Facades\Schema;
 
 final class LedgerProtection
 {
-    private function names(): array
+    /** null = missing; false = present but not the required definition. */
+    private function verified(string $name, string $definition): ?bool
     {
-        return DB::getDriverName() === 'sqlite'
-            ? ['ledger_reject_update', 'ledger_reject_delete', 'ledger_guard_subscriber_delete', 'ledger_guard_meter_delete', 'ledger_reject_replace']
-            : ['ledger_reject_update', 'ledger_reject_delete'];
-    }
-
-    private function exists(string $name): bool
-    {
-        return DB::getDriverName() === 'sqlite'
-            ? DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)->exists()
-            : FinancialTriggerMetadata::query()
-                ->where('TRIGGER_NAME', $name)->isNotEmpty();
+        $normalize = static fn (string $sql): string => preg_replace('/\s+/', ' ', trim($sql));
+        if (DB::getDriverName() === 'sqlite') {
+            $row = DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)->first();
+            return $row === null ? null
+                : $normalize($row->sql) === $normalize("CREATE TRIGGER $name $definition");
+        }
+        $row = FinancialTriggerMetadata::query()->where('TRIGGER_NAME', $name)->first();
+        if ($row === null) return null;
+        if (! preg_match('/\ABEFORE (INSERT|UPDATE|DELETE) ON (\w+) FOR EACH ROW (.+)\z/s', $definition, $parts)) {
+            throw new \LogicException('Invalid expected ledger trigger definition.');
+        }
+        return $row->EVENT_OBJECT_TABLE === $parts[2]
+            && $row->EVENT_MANIPULATION === $parts[1]
+            && $row->ACTION_TIMING === 'BEFORE'
+            && $normalize($row->ACTION_STATEMENT) === $normalize($parts[3]);
     }
 
     public function active(): bool
@@ -28,8 +33,8 @@ final class LedgerProtection
             || ! Schema::hasIndex('transactions', 'transactions_reference_posting_unique', 'unique')) {
             return false;
         }
-        foreach ($this->names() as $name) {
-            if (! $this->exists($name)) return false;
+        foreach ($this->definitions() as $name => $definition) {
+            if ($this->verified($name, $definition) !== true) return false;
         }
         if (DB::getDriverName() !== 'sqlite') {
             // InnoDB cascades do not invoke child triggers.
@@ -46,7 +51,7 @@ final class LedgerProtection
         return true;
     }
 
-    public function install(): void
+    private function definitions(): array
     {
         $driver = DB::getDriverName();
         if (! in_array($driver, ['sqlite', 'mysql', 'mariadb'], true)) {
@@ -101,10 +106,22 @@ final class LedgerProtection
                     SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Ledger posting is immutable'",
             ];
         }
-        foreach ($definitions as $name => $definition) {
-            if (! $this->exists($name)) {
-                DB::unprepared("CREATE TRIGGER $name $definition");
+        return $definitions;
+    }
+
+    public function install(): void
+    {
+        $missing = [];
+        foreach ($this->definitions() as $name => $definition) {
+            $verified = $this->verified($name, $definition);
+            if ($verified === false) {
+                throw new \LogicException('Unexpected ledger protection trigger: '.$name);
             }
+            if ($verified === null) $missing[$name] = $definition;
+        }
+        // Verify all existing guards before issuing any DDL.
+        foreach ($missing as $name => $definition) {
+            DB::unprepared("CREATE TRIGGER $name $definition");
         }
     }
 }
