@@ -26,7 +26,8 @@ final class CustodyShortageRecoveryWriter
         return app(FinancialWriteGate::class)->withinOpenPeriod('water', $local->format('Y-m-d'), $now,
             function (array $context) use ($actor, $sessionId, $now, $local): array {
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null
-                    && app(CustodyShortageRecoveryProposalProtection::class)->active(), 'shortage_recovery_protection_required');
+                    && app(CustodyShortageRecoveryProposalProtection::class)->active()
+                    && app(CustodyShortageRecoveryProtection::class)->active(), 'shortage_recovery_protection_required');
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
                 CompletedCashRefundRequest::authenticated($actor);
                 $actor->setRelation('roles', $actor->roles()->lockForUpdate()->get());
@@ -98,7 +99,8 @@ final class CustodyShortageRecoveryWriter
     /** Check actual persisted cash source and its independent decision. */
     public function leg(int $postingId): array
     {
-        $this->need(DB::transactionLevel() > 0 && app(CustodyShortageRecoveryProposalProtection::class)->active(),
+        $this->need(DB::transactionLevel() > 0 && app(CustodyShortageRecoveryProposalProtection::class)->active()
+                    && app(CustodyShortageRecoveryProtection::class)->active(),
             'shortage_recovery_protection_required');
         $posting = DB::table('treasury_postings')->where('id', $postingId)->lockForUpdate()->first();
         $r = DB::table('custody_shortage_recoveries')->where('treasury_posting_id', $postingId)->lockForUpdate()->first();
