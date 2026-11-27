@@ -312,7 +312,10 @@ class CashSessionService
             // Read and check the state under the same row lock as the decision.
             // A stale web form or a retried mobile request must not reverse a
             // decision already made by another supervisor.
+            $approver = User::query()->lockForUpdate()->findOrFail($approver->id);
             $session = CashSession::query()->lockForUpdate()->findOrFail($session->id);
+            abort_if($approver->isDisabled() || (int) $approver->id === (int) $session->user_id,
+                403, 'يجب أن يتخذ قرار الصندوق مشرف نشط مستقل عن المحصل.');
             if ($session->isOpen()) {
                 throw ValidationException::withMessages([
                     'state' => ['أغلق الصندوق قبل اعتماده.'],
