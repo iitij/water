@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\DB;
 /** Immutable clean-start evidence; not authorization for arbitrary inserts or a DDL privilege fence. */
 final class FinancialCleanStartAuditProtection
 {
+    public function __construct(private readonly bool $review = false) {}
+
     private function definitions(): array
     {
         $driver = DB::getDriverName();
@@ -16,7 +18,8 @@ final class FinancialCleanStartAuditProtection
             throw new \LogicException('Unsupported financial clean-start audit engine.');
         }
         $sqlite = $driver === 'sqlite';
-        $types = ['financial.clean_start_initialized' => 'financial_scope'];
+        $types = [$this->review ? 'financial.clean_start_reviewed' : 'financial.clean_start_initialized'];
+        $types = [$types[0] => 'financial_scope'];
         $events = implode(', ', array_map(fn ($event) => "'{$event}'", array_keys($types)));
         $scope = static fn (string $a): string => "{$a}.event IN ({$events})";
         $identity = [];
@@ -50,6 +53,9 @@ final class FinancialCleanStartAuditProtection
             $add('fin_start_actor_replace', 'users', 'INSERT',
                 "EXISTS (SELECT 1 FROM users u JOIN audit_events a ON a.actor_user_id = u.id
                     WHERE (u.id = NEW.id OR u.email = NEW.email) AND {$scope('a')})");
+        }
+        if ($this->review) {
+            return array_combine(array_map(fn ($name) => str_replace('fin_start_', 'fin_start_review_', $name), array_keys($defs)), array_values($defs));
         }
         return $defs;
     }
