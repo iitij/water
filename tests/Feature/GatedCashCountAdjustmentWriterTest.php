@@ -12471,7 +12471,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
-    public function test_release_void_api_uses_exact_request_identity_and_gate_without_legacy_fallback(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_void_api_uses_exact_request_identity_and_gate_without_legacy_fallback(bool $enabled): void
     {
         [, , $account, , , $subscriber] = $this->held();
         $issuer = $this->actor();
@@ -12480,7 +12481,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
         \App\Models\Setting::set('void_approval_threshold', '0.30');
-        config(['financial_candidate.void_api' => true]);
+        config(['financial_candidate.void_api' => $enabled]);
         $url = '/api/payments/'.$receipt->id;
         $reason = 'Independent documented receipt cancellation';
         \Laravel\Sanctum\Sanctum::actingAs($outsider);
@@ -12504,7 +12505,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $approve = ['approve' => true, 'request_id' => $second, 'operation_uuid' => $uuid, 'notes' => 'Approved independently'];
         $this->postJson($url.'/void-decision', array_replace($approve, ['request_id' => $first]))->assertConflict();
         $this->postJson($url.'/void-decision', array_diff_key($approve, ['operation_uuid' => true]))->assertUnprocessable();
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->postJson($url.'/void-decision', $approve)->assertConflict();
         $this->assertTrue($receipt->fresh()->hasPendingVoidRequest());
         $this->assertDatabaseMissing('financial_posting_operations', ['operation_uuid' => $uuid]);
@@ -12541,7 +12542,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $data['operation_uuid'], 'amount_minor' => -100]);
     }
 
-    public function test_release_void_filament_mounts_exact_request_and_refuses_stale_modal(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_void_filament_mounts_exact_request_and_refuses_stale_modal(bool $enabled): void
     {
         [, , $account, , , $subscriber] = $this->held();
         $issuer = $this->actor();
@@ -12553,7 +12555,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $receipt = app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '1.00',
             '66666666-6666-4666-8666-666666666666', $this->nowAt())['payment'];
         \App\Models\Setting::set('void_approval_threshold', '0.30');
-        config(['financial_candidate.void_api' => true]);
+        config(['financial_candidate.void_api' => $enabled]);
         \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
         $page = \App\Filament\Resources\PaymentResource\Pages\ListPayments::class;
         $action = fn (string $name) => \Filament\Actions\Testing\TestAction::make($name)->table($receipt);
@@ -13379,7 +13381,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(0, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
 
-    public function test_release_cash_api_all_four_entrypoints_share_registry_and_exact_replay(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_cash_api_all_four_entrypoints_share_registry_and_exact_replay(bool $enabled): void
     {
         [, , $account, , , $subscriber] = $this->held();
         $actor = $this->actor();
@@ -13390,7 +13393,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $invoice = app(\App\Services\GatedInvoiceTransferWriter::class)->issue($actor, (int) $subscriber->id, (int) $meter->id,
             '66666666-6666-4666-8666-666666666666', $this->nowAt())['invoice'];
         \Laravel\Sanctum\Sanctum::actingAs($actor);
-        config(['financial_candidate.cash_receipts' => true]);
+        config(['financial_candidate.cash_receipts' => $enabled]);
         $data = ['subscriber_id' => $subscriber->id, 'amount' => '0.25', 'payment_method' => 'cash',
             'payment_date' => '2026-11-25', 'sync_uuid' => '88888888-8888-4888-8888-888888888888',
             'notes' => 'Synthetic office collection'];
@@ -13414,13 +13417,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
-    public function test_release_cash_api_deferred_identity_gate_and_late_review_no_fallback(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_cash_api_deferred_identity_gate_and_late_review_no_fallback(bool $enabled): void
     {
         [, , , , , $subscriber] = $this->held();
         $actor = $this->actor();
         $session = app(CashSessionService::class)->open($actor);
         \Laravel\Sanctum\Sanctum::actingAs($actor);
-        config(['financial_candidate.cash_receipts' => true]);
+        config(['financial_candidate.cash_receipts' => $enabled]);
+        $this->rejects('gated_cash_writer_required', fn () => app(PaymentService::class)->collectPayment($subscriber, '0.50', userId: $actor->id));
         $data = ['subscriber_id' => $subscriber->id, 'amount' => '0.50', 'payment_method' => 'cash',
             'payment_date' => '2026-11-25', 'sync_uuid' => '88888888-8888-4888-8888-888888888888',
             'cash_session_id' => $session->id, 'deferred_sync' => true];
@@ -13429,7 +13434,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->postJson('/api/payments', array_replace($data, ['payment_date' => '2026-11-24']))->assertConflict();
         $this->postJson('/api/payments', array_replace($data, ['payment_method' => 'check']))->assertUnprocessable();
         $this->postJson('/api/payments', array_replace($data, ['amount' => '0.501']))->assertUnprocessable();
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $this->postJson('/api/payments', $data)->assertConflict();
         $this->assertDatabaseCount('payments', 0);
         DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'OPEN']);
@@ -13443,7 +13448,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(50, app(\App\Services\TransactionService::class)->accountBalanceMinor($subscriber));
     }
 
-    public function test_release_cash_filament_create_keeps_identity_on_conflict_and_replays_once(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_cash_filament_create_keeps_identity_on_conflict_and_replays_once(bool $enabled): void
     {
         [, , $account, , , $subscriber] = $this->held();
         $actor = $this->actor();
@@ -13451,7 +13457,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
         }
         $session = app(CashSessionService::class)->open($actor);
-        config(['financial_candidate.cash_receipts' => true]);
+        config(['financial_candidate.cash_receipts' => $enabled]);
         \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
         $this->actingAs($actor, 'web');
         $page = \App\Filament\Resources\PaymentResource\Pages\CreatePayment::class;
@@ -13462,7 +13468,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'payment_date' => '2026-11-25', 'payment_method' => 'cash',
             'cash_session_id' => $session->id, 'notes' => 'Synthetic Filament receipt', 'sync_uuid' => $uuid];
         $component->fillForm($data);
-        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'CLOSED']);
+        DB::table('financial_periods')->where('scope_key', 'water')->update(['state' => 'FROZEN']);
         $component->call('create')->assertHasErrors(['data.amount']);
         $this->assertSame($uuid, $component->get('data.sync_uuid'));
         $this->assertDatabaseCount('payments', 0);
@@ -13482,7 +13488,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(25, DB::transaction(fn () => app(\App\Services\HeldCashReservation::class)->protectedForAccount((int) $account['id'])));
     }
 
-    public function test_release_cash_filament_omitted_original_till_refuses_without_posting(): void
+    #[\PHPUnit\Framework\Attributes\DataProvider('candidateSwitchStates')]
+    public function test_release_cash_filament_omitted_original_till_refuses_without_posting(bool $enabled): void
     {
         [, , , , , $subscriber] = $this->held();
         $actor = $this->actor();
@@ -13490,7 +13497,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $actor->givePermissionTo(\Spatie\Permission\Models\Permission::findOrCreate($permission, 'web'));
         }
         app(CashSessionService::class)->open($actor);
-        config(['financial_candidate.cash_receipts' => true]);
+        config(['financial_candidate.cash_receipts' => $enabled]);
         \Filament\Facades\Filament::setCurrentPanel(\Filament\Facades\Filament::getPanel('admin'));
         $this->actingAs($actor, 'web');
         $page = \App\Filament\Resources\PaymentResource\Pages\CreatePayment::class;
