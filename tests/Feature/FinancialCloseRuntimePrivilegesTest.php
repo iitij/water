@@ -82,6 +82,7 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             $this->assertTrue($verified['runtime_grant_allowlist_accepted'], json_encode($verified));
             $this->assertSame([], $verified['runtime_grant_issues']);
             $this->assertTrue($verified['listed_guards_active'], json_encode($verified['guards']));
+            $this->assertTrue($verified['guards']['custody_shortage_decisions']);
             $this->assertFalse($verified['complete_writer_coverage_verified']);
             $this->assertFalse($verified['closure_authorized']);
             $this->artisan('financial:database-preflight', ['--runtime' => true])->assertExitCode(0);
@@ -138,6 +139,19 @@ final class FinancialCloseRuntimePrivilegesTest extends TestCase
             } finally {
                 $useAdmin();
                 app(FinancialSourceInsertProtection::class)->install();
+            }
+            $useAdmin();
+            DB::unprepared('DROP TRIGGER fin_shortage_audit_delete');
+            try {
+                $useRuntime();
+                $damaged = $inventory();
+                $this->assertFalse($damaged['guards']['custody_shortage_decisions']);
+                $this->assertFalse($damaged['listed_guards_active']);
+                $this->artisan('financial:database-preflight', ['--guards' => true])
+                    ->expectsOutput('custody_shortage_decisions: missing or unverifiable')->assertExitCode(1);
+            } finally {
+                $useAdmin();
+                app(\App\Services\CustodyShortageDecisionProtection::class)->install();
             }
             $useRuntime();
             $exit = \Illuminate\Support\Facades\Artisan::call('financial:database-preflight', ['--guards' => true]);
