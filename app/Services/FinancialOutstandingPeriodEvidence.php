@@ -261,10 +261,12 @@ final class FinancialOutstandingPeriodEvidence
                 $amount = SignedMinor::parseUnsigned($transfer->amount_minor);
                 $received = $receipt && $receipt->received_on < $next;
                 $receiptHash = null;
+                $receiptPostingId = null;
                 if ($received) {
                     $posting = DB::table('treasury_postings')->where('treasury_transfer_receipt_id', $receipt->id)->lockForUpdate()->first();
                     if (! $posting) throw new DomainException('transit_receipt_missing');
                     $receiptHash = $this->registered($posting, $this->transfers->leg((int) $posting->id));
+                    $receiptPostingId = (int) $posting->id;
                 }
                 $opening = $transfer->dispatched_on < $start ? $amount : 0;
                 $sent = $opening === 0 ? $amount : 0;
@@ -273,7 +275,8 @@ final class FinancialOutstandingPeriodEvidence
                 $rows[] = ['transfer_id' => $id, 'from_account_id' => (int) $transfer->from_account_id,
                     'to_account_id' => (int) $transfer->to_account_id, 'sender_id' => (int) $transfer->dispatched_by,
                     'opening_minor' => $opening, 'dispatched_minor' => $sent, 'received_minor' => $arrived,
-                    'closing_minor' => $closing, 'dispatch_hash' => $hash, 'receipt_hash' => $receiptHash];
+                    'closing_minor' => $closing, 'dispatch_hash' => $hash, 'receipt_hash' => $receiptHash,
+                    'dispatch_posting_id' => (int) $dispatch->id, 'receipt_posting_id' => $receiptPostingId];
             } catch (DomainException $error) {
                 $issues[] = ['code' => $error->getMessage(), 'transfer_id' => $id];
             }
@@ -320,13 +323,19 @@ final class FinancialOutstandingPeriodEvidence
                 }
                 $source = $this->sessionSources($session, $audits[0], $target, $next);
                 $received = 0;
-                $hashes = [];
+                $hashes = $periodHandovers = [];
                 foreach ($handovers as $handover) {
                     $date = $handover->received_on->toDateString();
                     if ($date >= $next) continue;
                     $posting = DB::table('treasury_postings')->where('cash_handover_id', $handover->id)->lockForUpdate()->first();
                     if (! $posting) throw new DomainException('custody_period_handover_unposted');
                     $hashes[] = $this->registered($posting, $this->custody->leg((int) $posting->id));
+                    if ($date >= $start) {
+                        $periodHandovers[] = ['kind' => 'cash_handover', 'posting_id' => (int) $posting->id,
+                            'account_id' => (int) $posting->treasury_account_id,
+                            'amount_minor' => Cash::positiveStored($handover->getRawOriginal('amount'), $driver, DecimalDomain::D14),
+                            'source_hash' => end($hashes)];
+                    }
                     if ($date >= $start) $received = SignedMinor::add($received, Cash::positiveStored(
                         $handover->getRawOriginal('amount'), $driver, DecimalDomain::D14));
                 }
@@ -365,7 +374,7 @@ final class FinancialOutstandingPeriodEvidence
                     'approval_audit_id' => (int) $audits[0]->id, 'approval_before_period' => $approved < $from,
                     'opening_minor' => $opening,
                     'recognized_counted_minor' => $recognized, 'received_minor' => $received,
-                    'closing_minor' => $closing, 'handover_hashes' => $hashes,
+                    'closing_minor' => $closing, 'handover_hashes' => $hashes, 'period_handovers' => $periodHandovers,
                     'collection_coverage_verified' => true, 'source_evidence' => $source];
             } catch (DomainException $error) {
                 $issues[] = ['code' => $error->getMessage(), 'session_id' => $id];
