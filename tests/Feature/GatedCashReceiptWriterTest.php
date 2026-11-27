@@ -41,6 +41,7 @@ final class GatedCashReceiptWriterTest extends TestCase
         }
         RefreshDatabaseState::$migrated = false;
         $this->artisan('migrate:fresh', ['--force' => true])->assertExitCode(0);
+        app(\App\Services\LedgerProtection::class)->install();
         DB::table('financial_scopes')->insert([
             'scope_key' => 'water', 'currency' => 'YER', 'timezone' => 'Asia/Aden',
             'mode' => 'ACTIVE', 'calendar_version' => 1, 'fence_epoch' => 5,
@@ -106,6 +107,8 @@ final class GatedCashReceiptWriterTest extends TestCase
             'payment_allocation_revisions', 'financial_posting_operations', 'financial_posting_events', 'audit_events'];
         $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
         foreach ([
+            ['ledger_reject_update', \App\Services\LedgerProtection::class],
+            ['ledger_reject_delete', \App\Services\LedgerProtection::class],
             ['fin_ledger_source_insert', \App\Services\LedgerSourceInsertProtection::class],
             ['fin_registry_source_identity_insert', \App\Services\RegistrySourceIdentityProtection::class],
             ['reg_invoice_projection_update', \App\Services\InvoiceProjectionProtection::class],

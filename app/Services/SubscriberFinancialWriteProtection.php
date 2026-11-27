@@ -14,7 +14,8 @@ final class SubscriberFinancialWriteProtection
     public function requireActive(): void
     {
         try {
-            $active = app(FinancialSourceInsertProtection::class)->active()
+            $active = app(LedgerProtection::class)->active()
+                && app(FinancialSourceInsertProtection::class)->active()
                 && app(LedgerSourceInsertProtection::class)->active()
                 && app(FinancialPostingRegistryProtection::class)->active()
                 && app(RegistrySourceIdentityProtection::class)->active()
