@@ -40,6 +40,16 @@ final class SubscriberBirthIdentityProtection
             : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF locked_scope IS NOT NULL AND ({$invalid}) THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END";
         $defs['fin_subscriber_birth_insert'] = ['subscribers', 'INSERT',
             "BEFORE INSERT ON subscribers FOR EACH ROW {$body}", $body];
+        // SQLite stores timestamps as text. A parseable but noncanonical
+        // value (for example ISO 8601 with T/Z) can cross a lexical cutoff.
+        // Keep the original required-timestamp trigger unchanged on upgrade.
+        if ($sqlite) {
+            $canonical = "strftime('%Y-%m-%d %H:%M:%S', NEW.created_at, '+0 seconds')";
+            $condition = "{$scope} AND NEW.created_at IS NOT NULL AND NEW.created_at IS NOT {$canonical}";
+            $body = "WHEN {$condition} BEGIN SELECT RAISE(ABORT, 'Subscriber birth timestamp must be canonical UTC'); END";
+            $defs['fin_subscriber_birth_canonical'] = ['subscribers', 'INSERT',
+                "BEFORE INSERT ON subscribers FOR EACH ROW {$body}", $body];
+        }
         // Preserve account identity even when no posting exists. InnoDB
         // cascades bypass child triggers, so also protect the square parent.
         // Let the existing freeze guard own the error during a real freeze.

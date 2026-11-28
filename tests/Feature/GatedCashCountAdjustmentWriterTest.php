@@ -10472,6 +10472,53 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertFalse($report['closure_authorized']);
     }
 
+    public function test_subscriber_cutoff_requires_canonical_birth_timestamp(): void
+    {
+        $subscriber = Subscriber::create(['name' => 'Synthetic canonical birth',
+            'square_id' => Square::create(['name' => 'Synthetic canonical square'])->id, 'status' => 'active']);
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($period));
+        $before = $inspect();
+        $this->assertTrue($before['all_cutoff_accounts_match'], json_encode($before));
+        $this->assertSame([(int) $subscriber->id], array_column($before['rows'], 'subscriber_id'));
+        $raw = (array) DB::table('subscribers')->where('id', $subscriber->id)->sole();
+        unset($raw['id']);
+        $raw['name'] = 'Synthetic cutoff boundary';
+        $raw['created_at'] = '2026-11-30 20:59:59';
+        $id = DB::table('subscribers')->insertGetId($raw);
+        $this->assertSame([(int) $subscriber->id, (int) $id], array_column($inspect()['rows'], 'subscriber_id'));
+        if (DB::getDriverName() === 'sqlite') {
+            $raw['created_at'] = '2026-11-30T20:59:59Z';
+            try {
+                DB::table('subscribers')->insert($raw);
+                $this->fail('Noncanonical timestamp was accepted.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Subscriber birth timestamp must be canonical UTC', $error->getMessage());
+                $this->assertSame(19, (int) $error->errorInfo[1]);
+            }
+            $this->assertDatabaseCount('subscribers', 2);
+            $guard = app(\App\Services\SubscriberBirthIdentityProtection::class);
+            // Synthetic legacy fixture only: prove a parseable ISO timestamp
+            // cannot silently disappear from a text-based cutoff.
+            DB::unprepared('DROP TRIGGER fin_subscriber_birth_canonical');
+            try {
+                $legacy = DB::table('subscribers')->insertGetId($raw);
+                $this->assertFalse($inspect()['all_cutoff_accounts_match']);
+            } finally {
+                $guard->install();
+            }
+            $report = $inspect();
+            $this->assertFalse($report['all_cutoff_accounts_match']);
+            $this->assertFalse($report['allocation_policy_verified']);
+            $this->assertContains(['code' => 'subscriber_cutoff_birth_timestamp_unverified',
+                'subscriber_id' => (int) $legacy], $report['issues']);
+            $this->assertDatabaseHas('subscribers', ['id' => $legacy, 'created_at' => $raw['created_at']]);
+            $this->assertFalse($report['closure_authorized']);
+        }
+        $this->assertDatabaseCount('transactions', 0);
+    }
+
     public function test_subscriber_birth_identity_cannot_shift_across_cutoff(): void
     {
         $actor = $this->actor();

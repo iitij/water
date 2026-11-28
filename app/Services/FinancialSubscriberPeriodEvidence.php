@@ -48,7 +48,7 @@ final class FinancialSubscriberPeriodEvidence
         $invalidBirth = DB::table('subscribers')->where(function ($query) {
             $query->whereNull('created_at');
             if (DB::getDriverName() === 'sqlite') {
-                $query->orWhereRaw("strftime('%Y-%m-%d %H:%M:%S', created_at) IS NULL");
+                $query->orWhereRaw("created_at IS NOT strftime('%Y-%m-%d %H:%M:%S', created_at, '+0 seconds')");
             } else {
                 $query->orWhereRaw('YEAR(created_at) = 0');
             }
