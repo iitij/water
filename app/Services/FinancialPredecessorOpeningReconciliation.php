@@ -67,6 +67,15 @@ final class FinancialPredecessorOpeningReconciliation
             $add($key, $available);
             $allocationSplits[$key] = ['allocated' => $allocated, 'surplus' => $surplus];
         }
+        // No current custody shortage writer recognizes a receivable.
+        // A predecessor recoverable row (even zero) cannot be silently ignored
+        // or adopted as an opening merely because its journal is structurally valid.
+        foreach ($predecessor['rows'] as $key => $row) {
+            if (str_starts_with($key, 'recoverable:')) {
+                $base['issues'][] = ['code' => 'opening_recoverable_source_unverified', 'row' => $key,
+                    'prior_closing_minor' => SignedMinor::parse($row['closing'])];
+            }
+        }
         // Pending payout authority is a subset, not a second liability row.
         $saved = array_filter($predecessor['rows'], static fn ($key) =>
             in_array(explode(':', $key, 2)[0], self::SECTORS, true), ARRAY_FILTER_USE_KEY);

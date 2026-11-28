@@ -80,6 +80,21 @@ final class FinancialPredecessorOpeningReconciliationTest extends TestCase
             (new FinancialPredecessorOpeningReconciliation())->inspect(...$f)['issues']);
     }
 
+    public function test_unsupported_recoverable_predecessor_cannot_be_silently_adopted(): void
+    {
+        $f = $this->fixture();
+        $f[0]['rows']['recoverable:session-8'] = ['closing' => 25];
+        $f[0]['rows']['recoverable:session-9'] = ['closing' => 0];
+        $result = (new FinancialPredecessorOpeningReconciliation())->inspect(...$f);
+        self::assertFalse($result['matched']);
+        self::assertSame([
+            ['code' => 'opening_recoverable_source_unverified', 'row' => 'recoverable:session-8', 'prior_closing_minor' => 25],
+            ['code' => 'opening_recoverable_source_unverified', 'row' => 'recoverable:session-9', 'prior_closing_minor' => 0],
+        ], $result['issues']);
+        self::assertFalse($result['independent_opening_verified']);
+        self::assertFalse($result['closure_authorized']);
+    }
+
     public function test_missing_journal_unverified_source_and_duplicate_identity_fail_closed(): void
     {
         $service = new FinancialPredecessorOpeningReconciliation();

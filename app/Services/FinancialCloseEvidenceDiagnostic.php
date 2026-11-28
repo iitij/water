@@ -133,15 +133,18 @@ final class FinancialCloseEvidenceDiagnostic
         $predecessorOpenings = $ended ? app(FinancialPredecessorOpeningReconciliation::class)->inspect(
             $predecessor, $accountMovements, $outstanding, $physicalMovements, $heldMovements, $subscriberCutoff) : null;
         if ($predecessorOpenings !== null && ! $predecessorOpenings['matched']) $blockers[] = 'predecessor_opening_rows_unmatched';
+        $recoverable = $ended ? $outstanding['recoverable_recognition'] : null;
+        if ($recoverable !== null && ! $recoverable['recoverable_balance_verified']) $blockers[] = 'recoverable_recognition_unverified';
         sort($blockers, SORT_STRING);
         $manifest = $ended ? $this->cutoffManifest($period, $cashEvidence,
             $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements, $physicalMovements, $settlement) : null;
         // Keep operational readiness separate from the financial cutoff fingerprint.
         // This inventory is diagnostic, including when its blockers are nonempty.
-        $readiness = ['format_version' => 5, 'scope' => 'water', 'period_id' => $periodId,
+        $readiness = ['format_version' => 6, 'scope' => 'water', 'period_id' => $periodId,
             'predecessor_evidence_hash' => $predecessor === null ? null : hash('sha256', json_encode($predecessor, JSON_THROW_ON_ERROR)),
             'predecessor_journal_verified' => $predecessor['predecessor_journal_verified'] ?? false,
             'predecessor_opening_rows_matched' => $predecessorOpenings['matched'] ?? false,
+            'recoverable_recognition_hash' => $recoverable === null ? null : hash('sha256', json_encode($recoverable, JSON_THROW_ON_ERROR)),
             'predecessor_opening_rows_hash' => $predecessorOpenings === null ? null : hash('sha256', json_encode($predecessorOpenings, JSON_THROW_ON_ERROR)),
             'adjacent_carry_evidence_hash' => $outstanding === null ? null : hash('sha256', json_encode($outstanding['adjacent_carry'], JSON_THROW_ON_ERROR)),
             'adjacent_carry_recorded_matched' => $outstanding['adjacent_carry']['recorded_adjacent_rollforward_verified'] ?? false,

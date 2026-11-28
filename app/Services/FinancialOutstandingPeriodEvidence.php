@@ -58,7 +58,32 @@ final class FinancialOutstandingPeriodEvidence
         $variance = $this->varianceExposure($custody, $start);
         return $base + ['transit' => $transit, 'custody' => $custody, 'liability' => $liability,
             'variance_exposure' => $variance,
+            'recoverable_recognition' => $this->recoverableRecognition($custody, $variance),
             'adjacent_carry' => $this->adjacentCarry($period, $transit, $custody, $held, $variance)];
+    }
+
+    /** Recovery writers record actual cash and loss decisions only. A proposal,
+     * shortage or partial recovery does not itself recognize a debtor asset.
+     * Never certify zero recoverable balance or adopt an unsupported opening.
+     */
+    private function recoverableRecognition(array $custody, array $variance): array
+    {
+        $rows = [];
+        foreach ($variance['rows'] as $row) {
+            if ($row['shortage_minor'] === 0) continue;
+            $rows[] = ['session_id' => $row['session_id'], 'collector_id' => $row['collector_id'],
+                'opening_unresolved_minor' => $row['opening_unresolved_shortage_minor'],
+                'new_shortage_minor' => $row['new_shortage_minor'],
+                'cash_recovered_minor' => $row['recovered_minor'],
+                'confirmed_loss_minor' => $row['confirmed_loss_minor'],
+                'unresolved_minor' => $row['unresolved_shortage_minor'],
+                'recognized_receivable_minor' => null];
+        }
+        return ['policy' => 'cash_recovery_and_confirmed_loss_only',
+            'recorded_shortage_rollforward_verified' => $custody['recorded_rollforward_verified'],
+            'rows' => $rows, 'unresolved_shortage_minor' => $variance['unresolved_shortage_minor'],
+            'recoverable_recognition_supported' => false, 'recoverable_balance_verified' => false,
+            'closure_authorized' => false];
     }
 
     private function varianceExposure(array $custody, string $start): array

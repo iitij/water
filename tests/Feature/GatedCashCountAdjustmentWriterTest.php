@@ -10361,7 +10361,17 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         unset($manifest['manifest_hash']);
         $this->assertSame(hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)), $hash);
         $readiness = $report['readiness_inventory'];
-        $this->assertSame(3, $readiness['format_version']);
+        $this->assertSame(6, $readiness['format_version']);
+        $recoverable = $outstanding['recoverable_recognition'];
+        $this->assertTrue($recoverable['recorded_shortage_rollforward_verified']);
+        $this->assertSame(0, $recoverable['unresolved_shortage_minor']);
+        $this->assertCount(1, $recoverable['rows']);
+        $this->assertSame(120, $recoverable['rows'][0]['cash_recovered_minor']);
+        $this->assertSame(80, $recoverable['rows'][0]['confirmed_loss_minor']);
+        $this->assertNull($recoverable['rows'][0]['recognized_receivable_minor']);
+        $this->assertFalse($recoverable['recoverable_balance_verified']);
+        $this->assertContains('recoverable_recognition_unverified', $report['blockers']);
+        $this->assertSame(hash('sha256', json_encode($recoverable, JSON_THROW_ON_ERROR)), $readiness['recoverable_recognition_hash']);
         $this->assertFalse($readiness['predecessor_journal_verified']);
         $this->assertFalse($readiness['adjacent_carry_recorded_matched']);
         $this->assertSame([['code' => 'independent_predecessor_required']], $report['predecessor_evidence']['issues']);
@@ -11906,6 +11916,16 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(80, $january['variance_exposure']['opening_unresolved_shortage_minor']);
         $this->assertSame(0, $january['variance_exposure']['recovered_minor']);
         $this->assertSame(80, $january['variance_exposure']['unresolved_shortage_minor']);
+        foreach ([$november, $december, $january] as $proof) {
+            $recognition = $proof['recoverable_recognition'];
+            $this->assertTrue($recognition['recorded_shortage_rollforward_verified']);
+            $this->assertSame($proof['variance_exposure']['unresolved_shortage_minor'], $recognition['unresolved_shortage_minor']);
+            $this->assertCount(1, $recognition['rows']);
+            $this->assertNull($recognition['rows'][0]['recognized_receivable_minor']);
+            $this->assertFalse($recognition['recoverable_recognition_supported']);
+            $this->assertFalse($recognition['recoverable_balance_verified']);
+            $this->assertFalse($recognition['closure_authorized']);
+        }
         $this->assertFalse($january['custody']['all_count_variances_resolved']);
         $period = $dec;
         $coverage = DB::transaction(fn () => app(\App\Services\FinancialSourceCoverageDiagnostic::class)->inspect($period));
