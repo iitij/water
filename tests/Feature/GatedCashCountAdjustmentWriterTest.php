@@ -6051,12 +6051,19 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $guard = app(\App\Services\ObservationGraphFreezeProtection::class);
         $this->assertTrue($guard->active());
         DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => self::OTHER]);
-        $reject = function (callable $write) use ($before, $snapshot): void {
+        $reject = function (callable $write, bool $subscriberReplacement = false) use ($before, $snapshot): void {
             try {
                 $write();
                 $this->fail('Raw observation graph mutation accepted during freeze.');
             } catch (\Illuminate\Database\QueryException $error) {
-                $this->assertStringContainsString('Observation graph is frozen', $error->getMessage());
+                // SQLite may execute the immutable identity trigger before the freeze trigger.
+                if ($subscriberReplacement && DB::getDriverName() === 'sqlite') {
+                    $this->assertTrue(str_contains($error->getMessage(), 'Observation graph is frozen')
+                        || str_contains($error->getMessage(), 'Subscriber birth identity is immutable'), $error->getMessage());
+                    $this->assertSame(19, (int) $error->errorInfo[1]);
+                } else {
+                    $this->assertStringContainsString('Observation graph is frozen', $error->getMessage());
+                }
                 if (DB::getDriverName() === 'mysql') $this->assertSame('45000', $error->errorInfo[0]);
             }
             $this->assertEquals($before, $snapshot());
@@ -6071,7 +6078,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             if (DB::getDriverName() === 'sqlite') {
                 $columns = implode(', ', array_keys($row));
                 $params = implode(', ', array_fill(0, count($row), '?'));
-                $reject(fn () => DB::statement("INSERT OR REPLACE INTO {$table} ({$columns}) VALUES ({$params})", array_values($row)));
+                $reject(fn () => DB::statement("INSERT OR REPLACE INTO {$table} ({$columns}) VALUES ({$params})", array_values($row)), $table === 'subscribers');
             }
         }
         DB::table('financial_scopes')->where('scope_key', 'water')->update(['active_freeze_uuid' => null]);
