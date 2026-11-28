@@ -50,6 +50,24 @@ final class SubscriberBirthIdentityProtection
             $defs['fin_subscriber_birth_canonical'] = ['subscribers', 'INSERT',
                 "BEFORE INSERT ON subscribers FOR EACH ROW {$body}", $body];
         }
+        // Inserting a previously nonexistent identity before a terminal
+        // cutoff changes even a zero-balance account inventory retroactively.
+        // A gap before a closed period is not permission to backdate a birth.
+        $current = $sqlite ? '' : ' FOR UPDATE';
+        $date = $sqlite ? "date(NEW.created_at, '+3 hours')"
+            : "DATE(DATE_ADD('1970-01-01 00:00:00', INTERVAL (UNIX_TIMESTAMP(NEW.created_at) + 10800) SECOND))";
+        $condition = "EXISTS (SELECT 1 FROM financial_scopes WHERE scope_key = 'water' AND active_freeze_uuid IS NULL{$current})"
+            ." AND EXISTS (SELECT 1 FROM financial_periods p WHERE p.scope_key = 'water' AND {$date} < p.next_on"
+            ." AND (p.state = 'CLOSED' OR EXISTS (SELECT 1 FROM financial_period_closures c WHERE c.period_id = p.id{$current})"
+            ." OR EXISTS (SELECT 1 FROM financial_close_commands j WHERE j.period_id = p.id AND j.action = 'approve'{$current})){$current})";
+        // The existing immutable-identity trigger already rejects a replacement
+        // of a known SQLite identity, independently of its recorded date.
+        if ($sqlite) $condition .= ' AND NOT EXISTS (SELECT 1 FROM subscribers WHERE id = NEW.id)';
+        $message = 'Subscriber birth precedes a closed cutoff';
+        $body = $sqlite ? "WHEN {$condition} BEGIN SELECT RAISE(ABORT, '{$message}'); END"
+            : "BEGIN DECLARE locked_scope VARCHAR(64) DEFAULT NULL; SELECT scope_key INTO locked_scope FROM financial_scopes WHERE scope_key = 'water' FOR UPDATE; IF {$condition} THEN SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$message}'; END IF; END";
+        $defs['fin_subscriber_birth_closed_cutoff'] = ['subscribers', 'INSERT',
+            "BEFORE INSERT ON subscribers FOR EACH ROW {$body}", $body];
         // Preserve account identity even when no posting exists. InnoDB
         // cascades bypass child triggers, so also protect the square parent.
         // Let the existing freeze guard own the error during a real freeze.

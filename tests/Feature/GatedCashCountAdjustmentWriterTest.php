@@ -9501,6 +9501,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             'allocation_hash' => $revision->allocation_hash, 'before_minor' => 10, 'applied_minor' => 0, 'after_minor' => 0,
         ]));
         // UTC 21:00 is midnight in the financial scope Asia/Aden.
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
         $boundary = Subscriber::create(['name' => 'Synthetic cutoff control', 'square_id' => $subscriber->square_id, 'status' => 'active']);
         $empty = ['subscriber_id' => $boundary->id, 'revision' => 1,
             'available_minor' => 0, 'allocated_minor' => 0, 'unallocated_minor' => 0,
@@ -10470,6 +10471,42 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertDatabaseHas('subscribers', ['id' => $id, 'created_at' => null]);
         $this->assertDatabaseCount('transactions', 0);
         $this->assertFalse($report['closure_authorized']);
+    }
+
+    public function test_subscriber_birth_insert_cannot_change_closed_cutoff_inventory(): void
+    {
+        $subscriber = Subscriber::create(['name' => 'Synthetic original cutoff account',
+            'square_id' => Square::create(['name' => 'Synthetic terminal birth square'])->id, 'status' => 'active']);
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $inspect = fn () => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($period));
+        $before = $inspect();
+        $this->assertTrue($before['all_cutoff_accounts_match'], json_encode($before));
+        $this->assertSame([(int) $subscriber->id], array_column($before['rows'], 'subscriber_id'));
+        DB::table('financial_periods')->where('id', $period)->update(['state' => 'CLOSED']);
+        $raw = (array) DB::table('subscribers')->where('id', $subscriber->id)->sole();
+        unset($raw['id']);
+        $raw['name'] = 'Synthetic additional account';
+        foreach (['2026-11-30 20:59:59', '2026-10-01 00:00:00'] as $date) {
+            try {
+                DB::table('subscribers')->insert(array_replace($raw, ['created_at' => $date]));
+                $this->fail('New identity changed a closed cutoff.');
+            } catch (\Illuminate\Database\QueryException $error) {
+                $this->assertStringContainsString('Subscriber birth precedes a closed cutoff', $error->getMessage());
+                $this->assertSame(DB::getDriverName() === 'sqlite' ? '23000' : '45000', $error->errorInfo[0]);
+            }
+            $this->assertDatabaseCount('subscribers', 1);
+            $this->assertSame($before, $inspect());
+        }
+        DB::table('financial_periods')->insert(['scope_key' => 'water', 'month' => '2026-12',
+            'start_on' => '2026-12-01', 'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0]);
+        $next = Subscriber::create(['name' => 'Synthetic next period account',
+            'square_id' => $subscriber->square_id, 'status' => 'active']);
+        $this->assertSame('2026-11-30 21:00:00', $next->getRawOriginal('created_at'));
+        $this->assertDatabaseCount('subscribers', 2);
+        $this->assertSame($before, $inspect());
+        $this->assertDatabaseCount('transactions', 0);
+        $this->assertTrue(app(\App\Services\SubscriberBirthIdentityProtection::class)->active());
     }
 
     public function test_subscriber_cutoff_requires_canonical_birth_timestamp(): void
