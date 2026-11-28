@@ -41,8 +41,8 @@ jobs:
           git diff --exit-code -- composer.lock
       - name: Verify direct writer guard inventory
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/FinancialDirectWriterInventoryTest.php
-      - name: Verify held cash recognition and discharge fences
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_held_cash_recognition_requires_actual_matching_gate|test_held_cash_owner_assignment_conserves_cash_and_total_liability|test_source_held_fence_blocks_closed_liability_and_discharge_insertions' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify financial gate transaction state and integrated posting
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_financial_gate_rolls_back_callback_control_state_changes|test_held_cash_recognition_requires_actual_matching_gate|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -105,5 +105,5 @@ jobs:
 
       - name: Verify direct writer guard inventory
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/FinancialDirectWriterInventoryTest.php
-      - name: Verify held cash recognition and discharge fences
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_held_cash_recognition_requires_actual_matching_gate|test_held_cash_owner_assignment_conserves_cash_and_total_liability|test_source_held_fence_blocks_closed_liability_and_discharge_insertions' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify financial gate transaction state and integrated posting
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_financial_gate_rolls_back_callback_control_state_changes|test_held_cash_recognition_requires_actual_matching_gate|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php

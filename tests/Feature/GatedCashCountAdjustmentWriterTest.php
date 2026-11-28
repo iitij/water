@@ -508,6 +508,29 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $uuid, '2026-11-25', $this->nowAt());
     }
 
+    public function test_financial_gate_rolls_back_callback_control_state_changes(): void
+    {
+        $scope = DB::table('financial_scopes')->where('scope_key', 'water')->sole();
+        $period = DB::table('financial_periods')->where('scope_key', 'water')->sole();
+        $before = DB::table('financial_posting_events')->count();
+        foreach ([
+            ['financial_scopes', 'scope_key', 'water', ['fence_epoch' => 6], 'financial_gate_scope_changed'],
+            ['financial_periods', 'id', $period->id, ['version' => 3], 'financial_gate_period_changed'],
+            ['financial_periods', 'id', $period->id, ['state' => 'CLOSED'], 'financial_gate_period_changed'],
+        ] as [$table, $column, $id, $changes, $reason]) {
+            $this->rejects($reason, fn () => $this->gate(function () use ($table, $column, $id, $changes) {
+                DB::table($table)->where($column, $id)->update($changes);
+                return 'must_not_commit';
+            }));
+            $this->assertEquals($scope, DB::table('financial_scopes')->where('scope_key', 'water')->sole());
+            $this->assertEquals($period, DB::table('financial_periods')->where('id', $period->id)->sole());
+            $this->assertSame(0, DB::transactionLevel());
+        }
+        $this->assertSame($before, DB::table('financial_posting_events')->count());
+        $this->assertSame('accepted', $this->gate(fn () => 'accepted'));
+        $this->assertSame(0, DB::transactionLevel());
+    }
+
     public function test_held_cash_recognition_requires_actual_matching_gate(): void
     {
         [, $reviewer, , $count, $lot] = $this->held();

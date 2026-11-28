@@ -92,11 +92,40 @@ final class FinancialWriteGate
             try {
                 $result = $writer($context);
                 app(FinancialConnectionIntegrity::class)->requireActive();
+                $this->assertUnchanged($context, $expected);
                 return $result;
             } finally {
                 self::$current = null;
             }
         }, 1);
+    }
+
+    /** The callback must not mutate the financial control plane, including
+     * via an internal service on the same locked connection. Recheck before
+     * commit, not only when recording an individual posting.
+     */
+    private function assertUnchanged(array $context, array $expected): void
+    {
+        if (DB::transactionLevel() !== 1 || self::$current === null
+            || self::$current['pdo'] !== spl_object_id(DB::connection()->getPdo())) {
+            throw new DomainException('financial_gate_transaction_changed');
+        }
+        $gate = DB::table('financial_scopes')->where('scope_key', $context['scope'])->lockForUpdate()->first();
+        if (! $gate || $gate->mode !== 'ACTIVE' || $gate->active_freeze_uuid !== null
+            || $gate->currency !== 'YER' || $gate->timezone !== 'Asia/Aden'
+            || $this->counter($gate->calendar_version) !== 1
+            || $this->counter($gate->fence_epoch) !== $context['epoch']) {
+            throw new DomainException('financial_gate_scope_changed');
+        }
+        $period = DB::table('financial_periods')->where('id', $context['period_id'])->lockForUpdate()->first();
+        if (! $period || $period->scope_key !== $context['scope'] || $period->month !== substr($context['effective_on'], 0, 7)
+            || $period->state !== 'OPEN' || $period->start_on !== $expected['start']
+            || $period->next_on !== $expected['next'] || $this->counter($period->version) !== $context['version']
+            || DB::table('financial_period_closures')->where('period_id', $context['period_id'])->lockForUpdate()->first()
+            || DB::table('financial_close_commands')->where('period_id', $context['period_id'])
+                ->where('action', 'approve')->lockForUpdate()->first()) {
+            throw new DomainException('financial_gate_period_changed');
+        }
     }
 
     private function counter(mixed $raw): int
