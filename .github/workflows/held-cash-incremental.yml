@@ -39,10 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify direct writer guard inventory
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/FinancialDirectWriterInventoryTest.php
-      - name: Verify financial gate transaction state and integrated posting
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_financial_gate_rolls_back_callback_control_state_changes|test_held_cash_recognition_requires_actual_matching_gate|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify runtime privilege parser
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -103,7 +101,33 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify direct writer guard inventory
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/FinancialDirectWriterInventoryTest.php
-      - name: Verify financial gate transaction state and integrated posting
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_financial_gate_rolls_back_callback_control_state_changes|test_held_cash_recognition_requires_actual_matching_gate|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify runtime privilege parser
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
+      - name: Prepare disposable financial control schema
+        run: |
+          set -euo pipefail
+          php artisan migrate:fresh --force
+      - name: Provision restricted QA runtime identity
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          test -n "$QA_CONTAINER"
+          docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password water_test <<'SQL'
+          INSERT INTO financial_scopes (scope_key, currency, timezone, mode, calendar_version, fence_epoch)
+            VALUES ('water', 'YER', 'Asia/Aden', 'ACTIVE', 1, 5);
+          INSERT INTO financial_periods (scope_key, month, start_on, next_on, state, version)
+            VALUES ('water', '2026-11', '2026-11-01', '2026-12-01', 'OPEN', 2);
+          CREATE USER 'water_runtime_qa'@'%' IDENTIFIED BY 'disposable_runtime_password';
+          GRANT LOCK TABLES ON `water\_test`.* TO 'water_runtime_qa'@'%';
+          GRANT SELECT ON `water_test`.`financial_scopes` TO 'water_runtime_qa'@'%';
+          GRANT SELECT ON `water_test`.`financial_periods` TO 'water_runtime_qa'@'%';
+          GRANT SELECT ON `water_test`.`financial_close_commands` TO 'water_runtime_qa'@'%';
+          GRANT SELECT ON `water_test`.`financial_period_closures` TO 'water_runtime_qa'@'%';
+          GRANT SELECT, INSERT, UPDATE, DELETE ON `water_test`.`payments` TO 'water_runtime_qa'@'%';
+          SQL
+      - name: Verify actual runtime locks and denied financial control writes
+        env:
+          DB_USERNAME: water_runtime_qa
+          DB_PASSWORD: disposable_runtime_password
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/RuntimeCloseControlIsolationTest.php
