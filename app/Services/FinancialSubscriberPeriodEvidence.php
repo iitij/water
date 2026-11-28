@@ -312,6 +312,11 @@ final class FinancialSubscriberPeriodEvidence
             'allocation_opening_unallocated_minor' => 0,
             'allocated_minor' => $paid, 'unallocated_minor' => $unallocated,
             'recorded_balance_minor' => SignedMinor::subtract($available, $billed),
+            // The verified birth-period replay begins at zero. For a multi-period
+            // chain reconcileChain replaces these cumulative fields with the
+            // independently replayed prior cutoff and current-period movement.
+            'opening_minor' => 0, 'net_movement_minor' => SignedMinor::subtract($available, $billed),
+            'closing_minor' => SignedMinor::subtract($available, $billed),
             'revision_id' => $revision ? (int) $revision->id : null,
             'revision_hash' => $revision?->allocation_hash, 'allocation_policy_matched' => true, 'registry_sources' => $hashes];
         $row['source_hash'] = hash('sha256', json_encode($row, JSON_THROW_ON_ERROR));

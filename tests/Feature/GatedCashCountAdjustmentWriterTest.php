@@ -10747,6 +10747,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $first = $inspect($nov);
         $this->assertTrue($first['all_cutoff_accounts_match'], json_encode($first));
         $this->assertSame(-60, $first['rows'][0]['recorded_balance_minor']);
+        $this->assertSame(0, $first['rows'][0]['opening_minor']);
+        $this->assertSame(-60, $first['rows'][0]['net_movement_minor']);
+        $this->assertSame(-60, $first['rows'][0]['closing_minor']);
         $this->assertSame(40, $first['rows'][0]['allocated_minor']);
         $this->assertSame(0, $first['rows'][0]['unallocated_minor']);
         $later = new DateTimeImmutable('2026-12-02T08:30:00Z');

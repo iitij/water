@@ -121,6 +121,8 @@ final class RuntimeCloseControlIsolationTest extends TestCase
         $this->assertTrue($proof['all_cutoff_accounts_match'], json_encode($proof));
         $this->assertTrue($proof['allocation_policy_verified']);
         $this->assertSame(40, $proof['rows'][0]['allocated_minor']);
+        $this->assertSame(0, $proof['rows'][0]['opening_minor']);
+        $this->assertSame(-60, $proof['rows'][0]['net_movement_minor']);
         $this->assertSame(-60, $proof['rows'][0]['closing_minor']);
         $this->assertFalse($proof['closure_authorized']);
         $this->assertDatabaseCount('financial_period_closures', 0);

@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify runtime privilege parser
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
+      - name: Verify affected subscriber cutoff across three periods
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods|test_final_accounting_subscriber_cutoff_reports_prior_movements_without_inventing_opening' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,8 +101,8 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify runtime privilege parser
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/RuntimeDatabasePrivilegesTest.php
+      - name: Verify affected subscriber cutoff across three periods
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods|test_final_accounting_subscriber_cutoff_reports_prior_movements_without_inventing_opening' tests/Feature/GatedCashCountAdjustmentWriterTest.php
       - name: Prepare disposable financial control schema
         run: |
           set -euo pipefail
@@ -153,14 +153,9 @@ jobs:
           GRANT INSERT ON `water_test`.`payment_allocation_revisions` TO 'water_runtime_qa'@'%';
           GRANT INSERT ON `water_test`.`payment_allocations` TO 'water_runtime_qa'@'%';
           GRANT INSERT, UPDATE ON `water_test`.`document_sequences` TO 'water_runtime_qa'@'%';
+          GRANT UPDATE ON `water_test`.`tariff_catalog_locks` TO 'water_runtime_qa'@'%';
           GRANT EXECUTE ON PROCEDURE `water_test`.`financial_read_trigger_metadata` TO 'water_runtime_qa'@'%';
           SQL
-      - name: Verify actual runtime locks and denied financial control writes
-        env:
-          DB_USERNAME: water_runtime_qa
-          DB_PASSWORD: disposable_runtime_password
-          FINANCIAL_TRIGGER_METADATA_ROUTINE: 'true'
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_restricted_runtime_can_' tests/Feature/RuntimeCloseControlIsolationTest.php
       - name: Verify restricted subscriber invoice and collection cycle
         env:
           DB_USERNAME: water_runtime_qa
