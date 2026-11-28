@@ -33,6 +33,20 @@ final class FinancialWriterCoverageDiagnostic
         'active_held_release' => 'held_cash_release',
     ];
 
+    // Directly gated families are independent of optional candidate flags.
+    // Guard presence is a prerequisite, not exclusive entry-point proof.
+    private const DIRECT = [
+        'held_cash_assignment' => ['held_documents', 'held_cash_destinations', 'held_registry_links'],
+        'held_cash_payout_authorization' => ['held_documents', 'held_cash_destinations', 'held_registry_links'],
+        'held_cash_payout_cancellation' => ['held_documents', 'held_cash_destinations', 'held_registry_links'],
+        'held_cash_payout' => ['held_documents', 'held_cash_destinations', 'held_registry_links'],
+        'held_cash_credit' => ['held_documents', 'held_cash_destinations', 'held_registry_links', 'ledger', 'allocation_history'],
+        'custody_shortage_recovery_proposal' => ['custody_shortage_recovery_proposals', 'custody_shortage_period'],
+        'custody_shortage_recovery_approval' => ['custody_shortage_recovery_proposals', 'custody_shortage_recoveries',
+            'custody_shortage_period', 'source_period', 'dated_source_destinations', 'session_transfer_destinations', 'registry', 'registry_source_identity'],
+        'custody_shortage_loss_proposal_and_approval' => ['custody_shortage_decisions', 'custody_shortage_period'],
+    ];
+
     public function inspect(): array
     {
         if (DB::transactionLevel() !== 1) throw new DomainException('writer_coverage_requires_locked_transaction');
@@ -44,12 +58,14 @@ final class FinancialWriterCoverageDiagnostic
                 'exclusive_entrypoints_verified' => false];
         }
         $guards = app(FinancialGuardInventory::class)->inspect();
+        $direct = $this->directWriterInventory($guards);
         try {
             $grantReport = app(RuntimeDatabasePrivileges::class)->inspect();
         } catch (\Throwable) {
             $grantReport = ['accepted' => false, 'issues' => ['runtime_grants_unverifiable']];
         }
-        return ['writers' => $writers, 'guards' => $guards,
+        return ['writers' => $writers, 'direct_writers' => $direct, 'guards' => $guards,
+            'listed_direct_writer_guards_active' => ! in_array(false, array_column($direct, 'listed_guards_active'), true),
             'all_candidate_switches_enabled' => ! in_array(false, array_column($writers, 'candidate_enabled'), true),
             'listed_guards_active' => ! in_array(false, $guards, true),
             'runtime_grant_allowlist_accepted' => $grantReport['accepted'],
@@ -58,5 +74,19 @@ final class FinancialWriterCoverageDiagnostic
             'runtime_close_control_issues' => $grantReport['close_control_issues'] ?? ['runtime_grants_unverifiable'],
             'exclusive_entrypoints_verified' => false, 'runtime_privileges_verified' => false,
             'complete_writer_coverage_verified' => false, 'closure_authorized' => false];
+    }
+
+    /** Missing or non-boolean guard results fail closed. */
+    public function directWriterInventory(array $guards): array
+    {
+        $rows = [];
+        foreach (self::DIRECT as $family => $required) {
+            $missing = array_values(array_filter($required, static fn ($guard) => ($guards[$guard] ?? false) !== true));
+            $rows[] = ['family' => $family, 'gate_type' => 'direct_period_gate',
+                'required_guards' => $required, 'missing_guards' => $missing,
+                'listed_guards_active' => $missing === [],
+                'exclusive_entrypoints_verified' => false];
+        }
+        return $rows;
     }
 }

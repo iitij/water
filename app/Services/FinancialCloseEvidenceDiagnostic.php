@@ -98,6 +98,7 @@ final class FinancialCloseEvidenceDiagnostic
             'trusted_close_proof_not_bound'];
         if (! $writerCoverage['all_candidate_switches_enabled']) $blockers[] = 'candidate_writer_switches_incomplete';
         if (! $writerCoverage['listed_guards_active']) $blockers[] = 'financial_guard_inventory_unverified';
+        if (! $writerCoverage['listed_direct_writer_guards_active']) $blockers[] = 'direct_writer_guard_inventory_unverified';
         if (! $writerCoverage['runtime_grant_allowlist_accepted']) $blockers[] = 'runtime_grant_allowlist_unverified';
         if (! $writerCoverage['runtime_close_control_write_isolated']) $blockers[] = 'runtime_close_control_write_isolation_unverified';
         if (! $ended) $blockers[] = 'period_not_ended';
