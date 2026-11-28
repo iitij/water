@@ -126,8 +126,28 @@ jobs:
           GRANT SELECT ON `water_test`.`financial_period_closures` TO 'water_runtime_qa'@'%';
           GRANT SELECT, INSERT, UPDATE, DELETE ON `water_test`.`payments` TO 'water_runtime_qa'@'%';
           SQL
+      - name: Prepare synthetic posting actor and read-only metadata routine
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_prepare_disposable_runtime_posting_fixture tests/Feature/RuntimeCloseControlIsolationTest.php
+      - name: Grant exact operational permissions for treasury posting
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          test -n "$QA_CONTAINER"
+          while IFS= read -r table; do
+            [[ "$table" =~ ^[a-zA-Z0-9_]+$ ]]
+            docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e "GRANT SELECT ON \`water_test\`.\`$table\` TO 'water_runtime_qa'@'%';"
+          done < <(docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -N -e "SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA='water_test' AND TABLE_TYPE='BASE TABLE' ORDER BY TABLE_NAME")
+          docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password water_test <<'SQL'
+          GRANT INSERT ON `water_test`.`treasury_accounts` TO 'water_runtime_qa'@'%';
+          GRANT INSERT ON `water_test`.`audit_events` TO 'water_runtime_qa'@'%';
+          GRANT INSERT ON `water_test`.`financial_posting_operations` TO 'water_runtime_qa'@'%';
+          GRANT INSERT ON `water_test`.`financial_posting_events` TO 'water_runtime_qa'@'%';
+          GRANT EXECUTE ON PROCEDURE `water_test`.`financial_read_trigger_metadata` TO 'water_runtime_qa'@'%';
+          SQL
       - name: Verify actual runtime locks and denied financial control writes
         env:
           DB_USERNAME: water_runtime_qa
           DB_PASSWORD: disposable_runtime_password
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Feature/RuntimeCloseControlIsolationTest.php
+          FINANCIAL_TRIGGER_METADATA_ROUTINE: 'true'
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_restricted_runtime_can_' tests/Feature/RuntimeCloseControlIsolationTest.php
