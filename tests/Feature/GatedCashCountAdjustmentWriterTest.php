@@ -508,6 +508,23 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
             $uuid, '2026-11-25', $this->nowAt());
     }
 
+    public function test_held_cash_recognition_requires_actual_matching_gate(): void
+    {
+        [, $reviewer, , $count, $lot] = $this->held();
+        $row = DB::table('treasury_held_cash_liabilities')->where('id', $lot)->sole();
+        $service = app(\App\Services\TreasuryHeldCashLiabilityService::class);
+        $call = fn () => $service->recognize((int) $row->treasury_cash_adjustment_id, $row->operation_uuid, false);
+        $before = DB::table('financial_posting_events')->count();
+        $this->rejects('held_cash_recognition_requires_gate', $call);
+        $this->rejects('held_cash_recognition_requires_gate', fn () => DB::transaction($call));
+        $this->rejects('held_cash_recognition_gate_mismatch', fn () =>
+            app(\App\Services\FinancialWriteGate::class)->withinOpenPeriod('water', '2026-11-24', $this->nowAt(), $call));
+        $this->assertSame($lot, $this->postAdjustment($reviewer, $count, 'unattributed_cash_held')['held_liability_id']);
+        $this->assertDatabaseCount('treasury_held_cash_liabilities', 1);
+        $this->assertEquals($row, DB::table('treasury_held_cash_liabilities')->where('id', $lot)->sole());
+        $this->assertSame($before, DB::table('financial_posting_events')->count());
+    }
+
     public function test_held_cash_owner_assignment_conserves_cash_and_total_liability(): void
     {
         [, $reviewer, , $count, $lot, $subscriber] = $this->held();

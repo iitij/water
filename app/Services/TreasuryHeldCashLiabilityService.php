@@ -44,10 +44,21 @@ final class TreasuryHeldCashLiabilityService
 
     public function recognize(int $adjustmentId, string $uuid, bool $created): int
     {
+        try {
+            $context = FinancialWriteGate::currentContext();
+        } catch (DomainException $error) {
+            throw new DomainException('held_cash_recognition_requires_gate', 0, $error);
+        }
         $this->lock();
         $this->requireWriteProtection();
         [$adjustment, $posting, $leg, $operation] = $this->source($adjustmentId);
         $this->need($operation->operation_uuid === $uuid, 'held_cash_source_operation');
+        $this->need($context['scope'] === 'water'
+            && $context['period_id'] === (int) $operation->period_id
+            && $context['effective_on'] === $operation->effective_on
+            && $context['epoch'] === (int) $operation->fence_epoch
+            && $context['version'] === (int) $operation->period_version,
+            'held_cash_recognition_gate_mismatch');
         $record = ['treasury_cash_adjustment_id' => $adjustmentId,
             'treasury_posting_id' => (int) $posting->id, 'operation_uuid' => $uuid,
             'amount_minor' => $leg['amount_minor'], 'source_hash' => $leg['source_hash']];
