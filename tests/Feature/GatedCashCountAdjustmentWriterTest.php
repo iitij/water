@@ -10719,7 +10719,20 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($proof, $inspectDec());
     }
 
-    public function test_persisted_test_close_journal_binds_prospective_subscriber_predecessor(): void
+    public static function persistedPredecessorCases(): array
+    {
+        return [
+            'matching rows' => ['matching', null],
+            'missing subscriber' => ['missing_subscriber', 'subscriber_cutoff_predecessor_row_missing'],
+            'missing allocation' => ['missing_allocation', 'subscriber_cutoff_predecessor_row_missing'],
+            'wrong balance' => ['wrong_balance', 'subscriber_cutoff_predecessor_mismatch'],
+            'same total wrong allocation split' => ['wrong_split', 'subscriber_cutoff_predecessor_allocation_mismatch'],
+            'missing existing zero balance' => ['missing_zero', 'subscriber_cutoff_predecessor_row_missing'],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('persistedPredecessorCases')]
+    public function test_persisted_test_close_journal_binds_prospective_subscriber_predecessor(string $variant, ?string $expectedIssue): void
     {
         $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
         DB::table('financial_periods')->where('id', $nov)->update(['version' => 0]);
@@ -10732,6 +10745,8 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $subscriber = Subscriber::create(['name' => 'Synthetic journal subscriber',
             'square_id' => Square::create(['name' => 'Journal QA square'])->id, 'status' => 'active']);
         \App\Models\Tariff::create(['name' => 'Synthetic journal tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $zero = $variant === 'missing_zero' ? Subscriber::create(['name' => 'Existing zero QA subscriber',
+            'square_id' => $subscriber->square_id, 'status' => 'active']) : null;
         $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-JOURNAL-PREDECESSOR']);
         $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
             'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
@@ -10761,6 +10776,20 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                     'opening' => 0, 'movement' => $row['available_minor'], 'closing' => $row['available_minor'],
                     'allocated' => $row['allocated_minor'], 'surplus' => $row['unallocated_minor'], 'source_hash' => $row['source_hash']],
             ], 'carries' => []];
+        // A self-consistent journal hash is not evidence that its source
+        // rows were complete or correct. Persist intentionally wrong fixtures
+        // through the same coordinator to exercise that distinction.
+        if ($variant === 'missing_subscriber') {
+            $snapshot['rows'] = [$snapshot['rows'][1]];
+        } elseif ($variant === 'missing_allocation') {
+            $snapshot['rows'] = [$snapshot['rows'][0]];
+        } elseif ($variant === 'wrong_balance') {
+            $snapshot['rows'][0]['movement'] = -61;
+            $snapshot['rows'][0]['closing'] = -61;
+        } elseif ($variant === 'wrong_split') {
+            $snapshot['rows'][1]['allocated'] = 39;
+            $snapshot['rows'][1]['surplus'] = 1;
+        }
         $proof = new class($root, $manifest, $snapshot) implements \App\Services\FinancialCloseProofSource {
             public function __construct(private string $root, private string $manifest, private array $snapshot) {}
             public function authorize(string $scope, string $capability, int $actorId): bool
@@ -10793,8 +10822,10 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $predecessor = DB::transaction(fn () => app(\App\Services\FinancialOpeningContinuityDiagnostic::class)->predecessor($dec));
         $this->assertTrue($predecessor['predecessor_journal_verified']);
         $this->assertSame($closed['closure']['hash'], $predecessor['predecessor_hash']);
-        $this->assertSame(-60, $predecessor['rows']['subscriber:'.$subscriber->id]['closing']);
-        $this->assertSame(40, $predecessor['rows']['allocation:'.$subscriber->id]['allocated']);
+        if ($variant === 'matching') {
+            $this->assertSame(-60, $predecessor['rows']['subscriber:'.$subscriber->id]['closing']);
+            $this->assertSame(40, $predecessor['rows']['allocation:'.$subscriber->id]['allocated']);
+        }
         $this->assertFalse($predecessor['opening_source_verified']);
         $this->assertFalse($predecessor['closure_authorized']);
         $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
@@ -10802,6 +10833,15 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $writer->cancel($approver, (int) $invoice->id, 'Independent documented prospective cancellation', self::NEXT, $later);
         $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
         $after = $inspect($dec);
+        if ($expectedIssue !== null) {
+            $this->assertFalse($after['all_cutoff_accounts_match']);
+            $this->assertFalse($after['allocation_policy_verified']);
+            $this->assertSame([['code' => $expectedIssue, 'subscriber_id' => (int) ($zero?->id ?? $subscriber->id)]], $after['issues']);
+            $this->assertFalse($after['closure_authorized']);
+            $this->assertSame($before, $inspect($nov));
+            $this->assertDatabaseCount('financial_period_closures', 1);
+            return;
+        }
         $this->assertTrue($after['all_cutoff_accounts_match'], json_encode($after));
         $next = $after['rows'][0];
         $this->assertSame(-60, $next['opening_minor']);
@@ -10811,6 +10851,7 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(40, $next['unallocated_minor']);
         $this->assertSame($predecessor['predecessor_hash'], $next['predecessor_journal_hash']);
         $this->assertSame($row['source_hash'], $next['prior_source_hash']);
+        $this->assertTrue($next['predecessor_rows_matched']);
         $this->assertFalse($next['predecessor_verified']);
         $this->assertFalse($after['closure_authorized']);
         $this->assertSame($before, $inspect($nov));

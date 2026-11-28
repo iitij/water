@@ -40,7 +40,7 @@ jobs:
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
       - name: Verify persisted synthetic close journal and source-derived predecessor
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_persisted_test_close_journal_binds_prospective_subscriber_predecessor tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_persisted_test_close_journal_binds_prospective_subscriber_predecessor|test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -103,4 +103,4 @@ jobs:
 
 
       - name: Verify persisted synthetic close journal and source-derived predecessor
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_persisted_test_close_journal_binds_prospective_subscriber_predecessor tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_persisted_test_close_journal_binds_prospective_subscriber_predecessor|test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods' tests/Feature/GatedCashCountAdjustmentWriterTest.php

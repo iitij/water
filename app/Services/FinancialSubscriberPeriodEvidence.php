@@ -186,9 +186,24 @@ final class FinancialSubscriberPeriodEvidence
             if ($previous !== null) {
                 $priorJournal = $pid === $periodId ? $predecessor
                     : app(FinancialOpeningContinuityDiagnostic::class)->predecessor($pid);
-                $saved = $priorJournal['rows']['subscriber:'.$id] ?? null;
-                if ($saved !== null && $saved['closing'] !== $previous['recorded_balance_minor']) {
-                    throw new DomainException('subscriber_cutoff_predecessor_mismatch');
+                $journalMatched = false;
+                if ($priorJournal['predecessor_journal_verified'] === true) {
+                    $saved = $priorJournal['rows']['subscriber:'.$id] ?? null;
+                    $allocation = $priorJournal['rows']['allocation:'.$id] ?? null;
+                    // This account existed at the previous cutoff, even if
+                    // its balance was zero. Neither row may disappear.
+                    if ($saved === null || $allocation === null) {
+                        throw new DomainException('subscriber_cutoff_predecessor_row_missing');
+                    }
+                    if ($saved['closing'] !== $previous['recorded_balance_minor']) {
+                        throw new DomainException('subscriber_cutoff_predecessor_mismatch');
+                    }
+                    if ($allocation['closing'] !== $previous['available_minor']
+                        || $allocation['allocated'] !== $previous['allocated_minor']
+                        || $allocation['surplus'] !== $previous['unallocated_minor']) {
+                        throw new DomainException('subscriber_cutoff_predecessor_allocation_mismatch');
+                    }
+                    $journalMatched = true;
                 }
                 $row['allocation_opening_available_minor'] = $previous['available_minor'];
                 $row['allocation_opening_allocated_minor'] = $previous['allocated_minor'];
@@ -200,6 +215,7 @@ final class FinancialSubscriberPeriodEvidence
                 $row['prior_revision_hash'] = $previous['revision_hash'];
                 $row['prospective_chain_verified'] = true;
                 $row['predecessor_journal_hash'] = $priorJournal['predecessor_hash'];
+                $row['predecessor_rows_matched'] = $journalMatched;
                 $row['predecessor_verified'] = false;
                 unset($row['source_hash']);
                 $row['source_hash'] = hash('sha256', json_encode($row, JSON_THROW_ON_ERROR));
