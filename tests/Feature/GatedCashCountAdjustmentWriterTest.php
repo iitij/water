@@ -10719,6 +10719,104 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame($proof, $inspectDec());
     }
 
+    public function test_persisted_test_close_journal_binds_prospective_subscriber_predecessor(): void
+    {
+        $nov = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::table('financial_periods')->where('id', $nov)->update(['version' => 0]);
+        $dec = (int) DB::table('financial_periods')->insertGetId([
+            'scope_key' => 'water', 'month' => '2026-12', 'start_on' => '2026-12-01',
+            'next_on' => '2027-01-01', 'state' => 'OPEN', 'version' => 0,
+        ]);
+        $issuer = $this->actor();
+        $approver = $this->actor();
+        $subscriber = Subscriber::create(['name' => 'Synthetic journal subscriber',
+            'square_id' => Square::create(['name' => 'Journal QA square'])->id, 'status' => 'active']);
+        \App\Models\Tariff::create(['name' => 'Synthetic journal tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-JOURNAL-PREDECESSOR']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $invoice = $writer->issue($issuer, (int) $subscriber->id, (int) $meter->id, self::UUID, $this->nowAt())['invoice'];
+        app(GatedCashReceiptWriter::class)->collect($issuer, (int) $subscriber->id, '0.40', self::OTHER,
+            $this->nowAt(), invoiceId: (int) $invoice->id);
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T08:00:00+03:00'));
+        $now = now()->toDateTimeImmutable();
+        $inspect = fn (int $id) => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($id));
+        $before = $inspect($nov);
+        $this->assertTrue($before['all_cutoff_accounts_match'], json_encode($before));
+        $row = $before['rows'][0];
+        $this->assertSame(-60, $row['closing_minor']);
+        // This deliberately synthetic proof is local to this disposable test,
+        // never container-bound and never a certification of the other sectors.
+        // Its subscriber and allocation rows are derived from actual replay.
+        $root = str_repeat('a', 64);
+        $manifest = hash('sha256', json_encode($before, JSON_THROW_ON_ERROR));
+        $snapshot = ['manifest_hash' => $manifest,
+            'coverage' => array_fill_keys(['allocation', 'bank', 'cash', 'custody', 'liability', 'recoverable', 'subscriber', 'transit'], true),
+            'rows' => [
+                ['sector' => 'subscriber', 'key' => (string) $subscriber->id,
+                    'opening' => $row['opening_minor'], 'movement' => $row['net_movement_minor'],
+                    'closing' => $row['closing_minor'], 'source_hash' => $row['source_hash']],
+                ['sector' => 'allocation', 'key' => (string) $subscriber->id,
+                    'opening' => 0, 'movement' => $row['available_minor'], 'closing' => $row['available_minor'],
+                    'allocated' => $row['allocated_minor'], 'surplus' => $row['unallocated_minor'], 'source_hash' => $row['source_hash']],
+            ], 'carries' => []];
+        $proof = new class($root, $manifest, $snapshot) implements \App\Services\FinancialCloseProofSource {
+            public function __construct(private string $root, private string $manifest, private array $snapshot) {}
+            public function authorize(string $scope, string $capability, int $actorId): bool
+            {
+                return app()->environment('testing') && $scope === 'water' && $actorId > 0;
+            }
+            public function evidence(string $action, array $period, int $actorId): array
+            {
+                return ['facts' => ['predecessor_verified' => true, 'predecessor_hash' => $this->root,
+                    'writers_drained' => true, 'coverage_verified' => true, 'no_unexplained_variance' => true,
+                    'carry_evidence_verified' => true, 'manifest_hash' => $this->manifest,
+                    'snapshot_verified' => true, 'snapshot_hash' => $period['attempt']['prepared']['hash'] ?? null,
+                    'persisted_effects_verified' => true], 'snapshot' => $this->snapshot];
+            }
+        };
+        $coordinator = new \App\Services\FinancialCloseCoordinator(new \App\Support\FinancialClosePolicy(), $proof);
+        $freeze = 'e138e340-1c32-4ab4-8c46-68dbdb5f6720';
+        $prepare = 'e138e341-1c32-4ab4-8c46-68dbdb5f6720';
+        $approve = 'e138e342-1c32-4ab4-8c46-68dbdb5f6720';
+        $this->assertSame('FROZEN', $coordinator->execute('water', '2026-11', 'freeze', (int) $issuer->id,
+            ['uuid' => $freeze, 'version' => 0, 'reason' => 'Disposable journal adapter test only'], $now)['current_state']);
+        $prepared = $coordinator->execute('water', '2026-11', 'prepare', (int) $issuer->id,
+            ['uuid' => $prepare, 'version' => 1, 'attempt_uuid' => $freeze], $now)['result'];
+        $command = ['uuid' => $approve, 'version' => 2, 'attempt_uuid' => $freeze,
+            'snapshot_hash' => $prepared['attempt']['prepared']['hash']];
+        $closed = $coordinator->execute('water', '2026-11', 'approve', (int) $approver->id, $command, $now)['result'];
+        $this->assertSame('CLOSED', $closed['state']);
+        $this->assertDatabaseCount('financial_close_commands', 3);
+        $this->assertDatabaseCount('financial_period_closures', 1);
+        $predecessor = DB::transaction(fn () => app(\App\Services\FinancialOpeningContinuityDiagnostic::class)->predecessor($dec));
+        $this->assertTrue($predecessor['predecessor_journal_verified']);
+        $this->assertSame($closed['closure']['hash'], $predecessor['predecessor_hash']);
+        $this->assertSame(-60, $predecessor['rows']['subscriber:'.$subscriber->id]['closing']);
+        $this->assertSame(40, $predecessor['rows']['allocation:'.$subscriber->id]['allocated']);
+        $this->assertFalse($predecessor['opening_source_verified']);
+        $this->assertFalse($predecessor['closure_authorized']);
+        $later = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($later));
+        $writer->cancel($approver, (int) $invoice->id, 'Independent documented prospective cancellation', self::NEXT, $later);
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $after = $inspect($dec);
+        $this->assertTrue($after['all_cutoff_accounts_match'], json_encode($after));
+        $next = $after['rows'][0];
+        $this->assertSame(-60, $next['opening_minor']);
+        $this->assertSame(100, $next['net_movement_minor']);
+        $this->assertSame(40, $next['closing_minor']);
+        $this->assertSame(40, $next['allocation_opening_allocated_minor']);
+        $this->assertSame(40, $next['unallocated_minor']);
+        $this->assertSame($predecessor['predecessor_hash'], $next['predecessor_journal_hash']);
+        $this->assertSame($row['source_hash'], $next['prior_source_hash']);
+        $this->assertFalse($next['predecessor_verified']);
+        $this->assertFalse($after['closure_authorized']);
+        $this->assertSame($before, $inspect($nov));
+        $this->assertDatabaseCount('financial_period_closures', 1);
+    }
+
     public function test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods(): void
     {
         $actor = $this->actor();
