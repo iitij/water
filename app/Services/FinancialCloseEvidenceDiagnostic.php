@@ -134,6 +134,9 @@ final class FinancialCloseEvidenceDiagnostic
         $predecessorOpenings = $ended ? app(FinancialPredecessorOpeningReconciliation::class)->inspect(
             $predecessor, $accountMovements, $outstanding, $physicalMovements, $heldMovements, $subscriberCutoff) : null;
         if ($predecessorOpenings !== null && ! $predecessorOpenings['matched']) $blockers[] = 'predecessor_opening_rows_unmatched';
+        $candidateRows = $ended ? app(FinancialCloseCandidateRows::class)->inspect(
+            $accountMovements, $outstanding, $physicalMovements, $heldMovements, $subscriberCutoff) : null;
+        if ($candidateRows !== null && ! $candidateRows['matched']) $blockers[] = 'candidate_snapshot_rows_unmatched';
         $recoverable = $ended ? $outstanding['recoverable_recognition'] : null;
         if ($recoverable !== null && ! $recoverable['recoverable_balance_verified']) $blockers[] = 'recoverable_recognition_unverified';
         sort($blockers, SORT_STRING);
@@ -141,7 +144,8 @@ final class FinancialCloseEvidenceDiagnostic
             $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements, $physicalMovements, $settlement) : null;
         // Keep operational readiness separate from the financial cutoff fingerprint.
         // This inventory is diagnostic, including when its blockers are nonempty.
-        $readiness = ['format_version' => 6, 'scope' => 'water', 'period_id' => $periodId,
+        $readiness = ['format_version' => 7, 'scope' => 'water', 'period_id' => $periodId,
+            'candidate_snapshot_rows_hash' => $candidateRows === null ? null : hash('sha256', json_encode($candidateRows, JSON_THROW_ON_ERROR)),
             'predecessor_evidence_hash' => $predecessor === null ? null : hash('sha256', json_encode($predecessor, JSON_THROW_ON_ERROR)),
             'predecessor_journal_verified' => $predecessor['predecessor_journal_verified'] ?? false,
             'predecessor_opening_rows_matched' => $predecessorOpenings['matched'] ?? false,
@@ -165,6 +169,7 @@ final class FinancialCloseEvidenceDiagnostic
             'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'subscriber_period_evidence' => $subscriberCutoff, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity, 'predecessor_evidence' => $predecessor,
             'collection_period_evidence' => $claims,
             'predecessor_opening_reconciliation' => $predecessorOpenings,
+            'candidate_snapshot_rows' => $candidateRows,
             'cutoff_account_movements' => $accountMovements, 'cutoff_held_movements' => $heldMovements, 'cutoff_physical_movements' => $physicalMovements, 'cutoff_evidence_manifest' => $manifest, 'readiness_inventory' => $readiness, 'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
     }

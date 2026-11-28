@@ -10401,7 +10401,28 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         unset($manifest['manifest_hash']);
         $this->assertSame(hash('sha256', json_encode($manifest, JSON_THROW_ON_ERROR)), $hash);
         $readiness = $report['readiness_inventory'];
-        $this->assertSame(6, $readiness['format_version']);
+        $this->assertSame(7, $readiness['format_version']);
+        $candidate = $report['candidate_snapshot_rows'];
+        $this->assertTrue($candidate['matched'], json_encode($candidate));
+        $this->assertFalse($candidate['closure_authorized']);
+        $this->assertSame(['recoverable'], $candidate['uncovered_sectors']);
+        $this->assertSame(hash('sha256', json_encode($candidate, JSON_THROW_ON_ERROR)), $readiness['candidate_snapshot_rows_hash']);
+        $this->assertSame(hash('sha256', json_encode($candidate['rows'], JSON_THROW_ON_ERROR)), $candidate['rows_hash']);
+        $totals = [];
+        foreach ($candidate['rows'] as $item) {
+            $this->assertSame($item['closing'], $item['opening'] + $item['movement']);
+            $totals[$item['sector']] = ($totals[$item['sector']] ?? 0) + $item['closing'];
+        }
+        $this->assertSame(['allocation' => 320, 'bank' => 10000, 'cash' => 9785, 'custody' => 60,
+            'liability' => 5, 'subscriber' => 310, 'transit' => 400], $totals);
+        $bad = $report['subscriber_period_evidence'];
+        $bad['rows'][0]['allocated_minor']++;
+        $failed = app(\App\Services\FinancialCloseCandidateRows::class)->inspect($report['cutoff_account_movements'],
+            $outstanding, $report['cutoff_physical_movements'], $report['cutoff_held_movements'], $bad);
+        $this->assertFalse($failed['matched']);
+        $this->assertSame([], $failed['rows']);
+        $this->assertNull($failed['rows_hash']);
+        $this->assertContains('candidate_allocation_source_mismatch', array_column($failed['issues'], 'code'));
         $recoverable = $outstanding['recoverable_recognition'];
         $this->assertTrue($recoverable['recorded_shortage_rollforward_verified']);
         $this->assertSame(0, $recoverable['unresolved_shortage_minor']);
