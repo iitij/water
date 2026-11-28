@@ -48,6 +48,9 @@ final class PaymentRefundService
         $amount = $money->decimal();
 
         return DB::transaction(function () use ($payment, $actor, $amount, $money, $reference, $method, $date, $reason, $evidence, $gatedWriter) {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_refund_writer_required');
+            }
             // Share the issuance fence before subscriber/business locks. This
             // records a completed disbursement; it is not prior authorization.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {

@@ -97,11 +97,12 @@ class Invoice extends Model
         if ($this->exists && ! $cancelling) return parent::save($options);
 
         return DB::transaction(function () use ($options, $writer, $cancelling) {
+            $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
             }
             Subscriber::query()->lockForUpdate()->findOrFail($this->subscriber_id);
-            $required = config('financial_candidate.invoices') === true
+            $required = $scope !== null || config('financial_candidate.invoices') === true
                 || ($cancelling && $this->hasRegisteredLedger()) || $writer !== null;
             if ($required) {
                 $allowed = $writer instanceof \App\Services\GatedInvoiceTransferWriter

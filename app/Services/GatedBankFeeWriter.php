@@ -31,15 +31,26 @@ final class GatedBankFeeWriter
     {
         return $this->gate->withinOpenPeriod('water', $date, $now,
             function (array $context) use ($actor, $statementId, $lineId, $reference, $reason, $evidence, $uuid, $now): array {
+                app(TreasuryFinancialWriteProtection::class)->requireActive();
+                try {
+                    $active = app(BankEvidencePeriodProtection::class)->active()
+                        && app(BankRangeDestinationProtection::class)->active();
+                } catch (\LogicException $error) {
+                    throw new DomainException('bank_fee_write_protection_missing', 0, $error);
+                }
+                $this->need($active, 'bank_fee_write_protection_missing');
                 $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
                 DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_bank_fee_issuance_lock');
                 $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
+                abort_if($actor->isDisabled(), 403);
+                $actor->setRelation('roles', $actor->roles()->lockForUpdate()->get());
                 $this->treasury->authorize($actor);
                 $statement = DB::table('bank_statements')->where('id', $statementId)->lockForUpdate()->first();
                 $line = DB::table('bank_statement_lines')->where('id', $lineId)->where('bank_statement_id', $statementId)->lockForUpdate()->first();
                 $this->need($statement !== null && $line !== null && $line->booked_on === $context['effective_on']
                     && (int) $line->treasury_account_id === (int) $statement->treasury_account_id, 'gated_bank_fee_effective_date');
+                $this->bank->assertEvidenceRangeOpen($statement->from_date, $statement->to_date);
                 $minor = TreasuryMoney::signed($line->amount_minor);
                 $this->need($minor < 0, 'gated_bank_fee_debit_required');
                 $account = DB::table('treasury_accounts')->where('id', $statement->treasury_account_id)->lockForUpdate()->first();

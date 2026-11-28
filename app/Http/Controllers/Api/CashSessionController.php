@@ -134,6 +134,7 @@ class CashSessionController extends ApiController
             $session,
             $data['counted_amount'],
             $data['notes'] ?? null,
+            $user,
         );
 
         return response()->json([

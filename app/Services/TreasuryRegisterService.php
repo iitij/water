@@ -84,6 +84,9 @@ final class TreasuryRegisterService
             'opening_reference' => $reference, 'opening_evidence' => $evidence, 'opened_by' => $actor->id,
         ];
         return DB::transaction(function () use ($record, $actor, $gatedWriter): array {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_treasury_opening_writer_required');
+            }
             $this->lockRegister();
             $existing = DB::table('treasury_accounts')->where('code', $record['code'])->lockForUpdate()->first();
             $registered = $existing !== null && DB::table('financial_posting_events')
@@ -117,6 +120,9 @@ final class TreasuryRegisterService
             $this->reject('kind', 'مصدر الحركة غير مدعوم في هذه المرحلة.');
         }
         return DB::transaction(function () use ($actor, $accountId, $kind, $sourceId, $gatedHandover): array {
+            if ($gatedHandover === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException($kind === 'cash_handover' ? 'gated_handover_writer_required' : 'gated_refund_writer_required');
+            }
             $this->lockRegister();
             $account = DB::table('treasury_accounts')->where('id', $accountId)->lockForUpdate()->first();
             abort_unless($account, 404);
@@ -254,6 +260,14 @@ final class TreasuryRegisterService
                 }
                 if ($row->treasury_bank_collection_id) {
                     $issues[] = ['code' => 'unexpected_bank_collection_source', 'posting_id' => $row->id];
+                }
+                if ($row->kind === 'custody_shortage_recovery') {
+                    try {
+                        app(CustodyShortageRecoveryWriter::class)->leg((int) $row->id);
+                    } catch (\DomainException $error) {
+                        $issues[] = ['code' => 'shortage_recovery_source_mismatch', 'posting_id' => $row->id];
+                    }
+                    continue;
                 }
                 if ($row->kind === 'cash_count_adjustment') {
                     if (! app(TreasuryCashCountService::class)->checkAdjustmentPosting($row)) {

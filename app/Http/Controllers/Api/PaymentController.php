@@ -461,7 +461,8 @@ class PaymentController extends ApiController
     /** Explicitly restricted candidate; never activate in a production environment. */
     private function prospectiveVoidApi(): bool
     {
-        if (config('financial_candidate.void_api') !== true) return false;
+        if (config('financial_candidate.void_api') !== true
+            && ! DB::table('financial_scopes')->where('scope_key', 'water')->exists()) return false;
         abort_unless(app()->environment(['testing', 'staging']), 503, 'مسار الاختبار المالي غير متاح في الإنتاج.');
         return true;
     }

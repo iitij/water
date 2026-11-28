@@ -33,6 +33,9 @@ final class PaymentAccountTransferService
             throw ValidationException::withMessages(['to_subscriber_id' => 'يجب اختيار مشترك مختلف.']);
         }
         return DB::transaction(function () use ($receipt, $destinationId, $actor, $reason, $evidence, $gatedWriter) {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_subscriber_transfer_writer_required');
+            }
             // Serialize allocation-changing corrections before taking account locks.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');

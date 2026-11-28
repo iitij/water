@@ -194,6 +194,15 @@ final class GatedReceiptVoidWriter
     {
         $date = $now->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
         return $this->gate->withinOpenPeriod('water', $date, $now, function (array $context) use ($actor, $id, $action): array {
+            app(SubscriberFinancialWriteProtection::class)->requireActive();
+            try {
+                $active = app(ReceiptVoidProtection::class)->active()
+                    && app(ReceiptVoidRequestProtection::class)->active()
+                    && app(DatedFinancialSourcePeriodProtection::class)->active();
+            } catch (\LogicException $error) {
+                throw new DomainException('receipt_void_write_protection_missing', 0, $error);
+            }
+            $this->need($active, 'receipt_void_write_protection_missing');
             DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
             $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_void_issuance_lock');
             $actor = User::query()->lockForUpdate()->findOrFail($actor->id);
@@ -230,7 +239,7 @@ final class GatedReceiptVoidWriter
     private function register(Payment $payment, ?string $uuid, array $context, DateTimeImmutable $now, bool $replay): array
     {
         $this->validUuid($uuid);
-        $this->need($payment->isVoided() && $payment->voided_at->toDateString() === $context['effective_on'], 'gated_void_effective_date');
+        $this->need($payment->isVoided() && $payment->voided_at->copy()->setTimezone('Asia/Aden')->toDateString() === $context['effective_on'], 'gated_void_effective_date');
         $leg = $this->ledger->leg((int) $this->entry((int) $payment->id, 'payment_reversal')->id);
         $this->need($leg['amount_minor'] === -AccountMoney::stored($payment), 'gated_void_effect_mismatch');
         if ($replay) {

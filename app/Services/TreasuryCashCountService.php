@@ -13,6 +13,42 @@ use Illuminate\Validation\ValidationException;
 /** Physical observations and independent review, not a balance adjustment or close. */
 final class TreasuryCashCountService
 {
+    /** Candidate observation and review use the same scope-first fence as posting.
+     * They still create evidence only, not a registry event or an accounting entry.
+     */
+    private function observationTransaction(User $actor, callable $work): array
+    {
+        $candidate = config('financial_candidate.cash_count_adjustments') === true;
+        if (! $candidate && ! DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
+            return DB::transaction(function () use ($actor, $work): array {
+                // Do not fall back if a scope was configured since the initial read.
+                if (DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                    throw new \DomainException('financial_scope_configured_retry');
+                }
+                return $work($actor);
+            }, 3);
+        }
+        abort_unless(app()->environment(['testing', 'staging']), 503);
+        $now = now()->toDateTimeImmutable();
+        return app(FinancialWriteGate::class)->withinOpenPeriod('water',
+            $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d'), $now,
+            function () use ($actor, $work): array {
+                try {
+                    $active = app(CashCountPeriodProtection::class)->active()
+                        && app(FinancialEvidenceDestinationProtection::class)->active();
+                } catch (\LogicException $error) {
+                    throw new \DomainException('cash_count_evidence_write_protection_missing', 0, $error);
+                }
+                if (! $active) throw new \DomainException('cash_count_evidence_write_protection_missing');
+                $this->lock();
+                $current = User::query()->lockForUpdate()->findOrFail($actor->id);
+                abort_if($current->isDisabled(), 403);
+                $current->setRelation('roles', $current->roles()->lockForUpdate()->get());
+                app(TreasuryRegisterService::class)->authorize($current);
+                return $work($current);
+            });
+    }
+
     private function lock(): void
     {
         if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
@@ -39,10 +75,11 @@ final class TreasuryCashCountService
         return $value;
     }
 
-    private function snapshot(object $account, ?int $beforePostingId = null): array
+    private function snapshot(object $account, ?int $beforePostingId = null, ?string $untilExclusive = null): array
     {
         $query = DB::table('treasury_postings')->where('treasury_account_id', $account->id);
         if ($beforePostingId !== null) $query->where('id', '<', $beforePostingId);
+        if ($untilExclusive !== null) $query->where('effective_on', '<', $untilExclusive)->lockForUpdate();
         $rows = $query->orderBy('id')->get();
         // Preserve existing hashes for rows preceding this migration.
         foreach ($rows as $row) {
@@ -61,6 +98,76 @@ final class TreasuryCashCountService
             'recorded_minor' => $balance,
             'ledger_hash' => hash('sha256', json_encode([(array) $account, $rows->toArray()], JSON_THROW_ON_ERROR)),
         ];
+    }
+
+    /** Recheck a last-day observation against the exact cutoff ledger.
+     * No current balance substitution or historical adjustment.
+     */
+    public function periodEndObservation(int $accountId, string $start, string $next): array
+    {
+        if (DB::transactionLevel() <= 0) throw new \DomainException('cash_period_requires_gate');
+        $zone = new \DateTimeZone('Asia/Aden');
+        $utc = new \DateTimeZone('UTC');
+        $end = new \DateTimeImmutable($next, $zone);
+        if ($end->format('Y-m-d') !== $next || now('Asia/Aden')->toDateString() < $next) {
+            throw new \DomainException('cash_period_not_ended');
+        }
+        $this->lock();
+        $account = $this->account($accountId);
+        $from = $end->modify('-1 day')->setTimezone($utc)->format('Y-m-d H:i:s');
+        $until = $end->setTimezone($utc)->format('Y-m-d H:i:s');
+        $count = DB::table('treasury_cash_counts')->where('treasury_account_id', $accountId)
+            ->where('observed_at', '>=', $from)->where('observed_at', '<', $until)
+            ->orderByDesc('observed_at')->orderByDesc('id')->lockForUpdate()->first();
+        if (! $count) throw new \DomainException('cash_period_final_count_missing');
+        $review = DB::table('treasury_cash_count_reviews')->where('treasury_cash_count_id', $count->id)
+            ->lockForUpdate()->first();
+        if (! $review || ! (bool) $review->accepted || (int) $review->reviewed_by <= 0
+            || (int) $count->counted_by <= 0 || (int) $review->reviewed_by === (int) $count->counted_by
+            || $review->created_at < $count->observed_at || $review->created_at >= $until) {
+            throw new \DomainException('cash_period_independent_review_missing');
+        }
+        $snapshot = $this->snapshot($account, untilExclusive: $next);
+        $counted = Money::document($count->counted_minor);
+        if (Money::signed($count->variance_minor) !== 0
+            || Money::signed($count->recorded_minor) !== $counted
+            || $snapshot['recorded_minor'] !== $counted
+            || ! hash_equals($count->ledger_hash, $snapshot['ledger_hash'])
+            || DB::table('treasury_cash_adjustments')->where('treasury_cash_count_id', $count->id)->lockForUpdate()->first()) {
+            throw new \DomainException('cash_period_count_not_equal_at_cutoff');
+        }
+        $audit = static function (string $event, string $type, int $id): \App\Models\AuditEvent {
+            $rows = \App\Models\AuditEvent::query()->where('event', $event)->where('entity_type', $type)
+                ->where('entity_id', (string) $id)->lockForUpdate()->get();
+            if ($rows->count() !== 1) throw new \DomainException('cash_period_count_audit_missing');
+            return $rows->first();
+        };
+        $observed = $audit('treasury.cash_count_recorded', 'treasury_cash_count', (int) $count->id);
+        $decision = $audit('treasury.cash_count_reviewed', 'treasury_cash_count_review', (int) $review->id);
+        if ((int) $observed->actor_user_id !== (int) $count->counted_by
+            || (int) ($observed->after['treasury_account_id'] ?? 0) !== $accountId
+            || ($observed->after['ledger_hash'] ?? null) !== $count->ledger_hash
+            || ($observed->after['counted_minor'] ?? null) !== $counted
+            || ($observed->after['recorded_minor'] ?? null) !== $counted
+            || ($observed->after['variance_minor'] ?? null) !== 0
+            || ($observed->after['reference'] ?? null) !== $count->reference
+            || ($observed->after['evidence'] ?? null) !== $count->evidence
+            || (int) $decision->actor_user_id !== (int) $review->reviewed_by
+            || (int) ($decision->after['treasury_cash_count_id'] ?? 0) !== (int) $count->id
+            || ($decision->after['accepted'] ?? null) !== true
+            || ($decision->after['evidence'] ?? null) !== $review->evidence
+            || ($decision->after['financial_adjustment_created'] ?? null) !== false
+            || $observed->getRawOriginal('occurred_at') < $from
+            || $observed->getRawOriginal('occurred_at') >= $until
+            || $decision->getRawOriginal('occurred_at') < $observed->getRawOriginal('occurred_at')
+            || $decision->getRawOriginal('occurred_at') >= $until) {
+            throw new \DomainException('cash_period_count_audit_mismatch');
+        }
+        return ['account_id' => $accountId, 'count_id' => (int) $count->id, 'review_id' => (int) $review->id,
+            'count_audit_id' => (int) $observed->id, 'review_audit_id' => (int) $decision->id,
+            'counted_by' => (int) $count->counted_by, 'reviewed_by' => (int) $review->reviewed_by,
+            'observed_at' => (string) $count->observed_at, 'ledger_hash' => $count->ledger_hash,
+            'closing_minor' => $counted];
     }
 
     /** Fresh reviewed equal observation, under the shared issuance fence. */
@@ -98,7 +205,7 @@ final class TreasuryCashCountService
             throw ValidationException::withMessages(['count' => 'مبلغ الجرد أو مرجع الإثبات غير صالح.']);
         }
         $minor = Cash::input($amount, 'count', DecimalDomain::D14, digitsOnly: true);
-        return DB::transaction(function () use ($actor, $id, $minor, $reference, $evidence): array {
+        return $this->observationTransaction($actor, function (User $actor) use ($id, $minor, $reference, $evidence): array {
             $this->lock();
             $account = $this->account($id);
             $existing = DB::table('treasury_cash_counts')->where('reference', $reference)->lockForUpdate()->first();
@@ -121,7 +228,7 @@ final class TreasuryCashCountService
                 'actor_user_id' => $actor->id, 'after' => $record,
             ]);
             return $this->report(DB::table('treasury_cash_counts')->find($countId), $account);
-        }, 3);
+        });
     }
 
     private function report(object $count, object $account): array
@@ -154,7 +261,7 @@ final class TreasuryCashCountService
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $evidence = $this->evidence($evidence);
-        return DB::transaction(function () use ($actor, $id, $accept, $evidence): array {
+        return $this->observationTransaction($actor, function (User $actor) use ($id, $accept, $evidence): array {
             $this->lock();
             $count = DB::table('treasury_cash_counts')->where('id', $id)->lockForUpdate()->first();
             abort_unless($count, 404);
@@ -180,11 +287,11 @@ final class TreasuryCashCountService
                 'actor_user_id' => $actor->id, 'after' => $record + ['financial_adjustment_created' => false],
             ]);
             return $this->report($count, $account);
-        }, 3);
+        });
     }
 
     /** Records a proven cause, not an arbitrary balancing plug or a complete GL journal. */
-    public function adjust(User $actor, int $id, string $reference, string $classification, string $reason, string $evidence): array
+    public function adjust(User $actor, int $id, string $reference, string $classification, string $reason, string $evidence, ?GatedCashCountAdjustmentWriter $writer = null): array
     {
         app(TreasuryRegisterService::class)->authorize($actor);
         $reference = mb_strtoupper(trim($reference));
@@ -195,7 +302,12 @@ final class TreasuryCashCountService
             || ! in_array($classification, ['confirmed_cash_loss', 'unattributed_cash_held'], true)) {
             throw ValidationException::withMessages(['adjustment' => 'يلزم تصنيف محدد وسبب مثبت ومرجع مستقل.']);
         }
-        return DB::transaction(function () use ($actor, $id, $reference, $classification, $reason, $evidence): array {
+        return DB::transaction(function () use ($actor, $id, $reference, $classification, $reason, $evidence, $writer): array {
+            // Serialize against scope configuration and require the registered writer.
+            $scope = DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first();
+            if ($scope && ! ($writer !== null && $writer->allowsMutation($id, (int) $actor->id))) {
+                throw new \DomainException('gated_cash_count_adjustment_writer_required');
+            }
             $this->lock();
             $count = DB::table('treasury_cash_counts')->where('id', $id)->lockForUpdate()->first();
             abort_unless($count, 404);
@@ -214,6 +326,15 @@ final class TreasuryCashCountService
                 'evidence' => $evidence, 'approved_by' => $actor->id,
             ];
             $existing = DB::table('treasury_cash_adjustments')->where('treasury_cash_count_id', $id)->lockForUpdate()->first();
+            $postingId = $existing === null ? null : DB::table('treasury_postings')
+                ->where('treasury_cash_adjustment_id', $existing->id)->value('id');
+            $registered = $postingId !== null && DB::table('financial_posting_events')->where('scope_key', 'water')
+                ->where('source_type', 'treasury_posting')->where('leg', 'treasury')
+                ->where('source_id', (string) $postingId)->exists();
+            if (! ($writer !== null && $writer->allowsMutation($id, (int) $actor->id))
+                && ($writer !== null || $registered || config('financial_candidate.cash_count_adjustments') === true)) {
+                throw new \DomainException('gated_cash_count_adjustment_writer_required');
+            }
             if ($existing) {
                 foreach ($record as $field => $value) {
                     abort_unless((string) $existing->$field === (string) $value, 409, 'سبق تسجيل تسوية مختلفة للجرد.');

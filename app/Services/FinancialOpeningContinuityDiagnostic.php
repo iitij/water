@@ -101,6 +101,28 @@ final class FinancialOpeningContinuityDiagnostic
             'carry_continuity_verified' => false, 'closure_authorized' => false];
     }
 
+    /** Read predecessor rows before preparation, without inventing a root opening.
+     * Journal integrity establishes the saved balance, not its source certification.
+     */
+    public function predecessor(int $periodId): array
+    {
+        if (DB::transactionLevel() === 0) throw new DomainException('opening_continuity_requires_gate');
+        DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->sole();
+        $current = DB::table('financial_periods')->where('scope_key', 'water')->where('id', $periodId)->lockForUpdate()->sole();
+        $prior = DB::table('financial_periods')->where('scope_key', 'water')
+            ->where('next_on', $current->start_on)->orderBy('id')->lockForUpdate()->get();
+        $base = ['period_id' => $periodId, 'opening_source_verified' => false, 'closure_authorized' => false];
+        if ($prior->count() !== 1 || $prior[0]->state !== 'CLOSED') {
+            return $base + ['predecessor_journal_verified' => false, 'predecessor_hash' => null,
+                'rows' => [], 'carries' => [], 'issues' => [['code' => $prior->count() !== 1
+                    ? 'independent_predecessor_required' : 'predecessor_not_closed']]];
+        }
+        $previous = $this->journal->inspect('water', (int) $prior[0]->id)['state'];
+        $snapshot = $this->snapshot($previous);
+        return $base + ['predecessor_journal_verified' => true, 'predecessor_hash' => $previous['closure']['hash'],
+            'rows' => $this->rows($snapshot), 'carries' => $this->carries($snapshot, $previous['next']), 'issues' => []];
+    }
+
     private function snapshot(array $state): array
     {
         $snapshot = $state['state'] === 'CLOSED' ? ($state['closure']['snapshot'] ?? null)
@@ -182,6 +204,17 @@ final class FinancialOpeningContinuityDiagnostic
                 throw new DomainException('opening_snapshot_conservation');
             }
             $rows[$key] = ['opening' => $opening, 'closing' => $closing];
+            if ($row['sector'] === 'allocation') {
+                if (! is_string($row['allocated'] ?? null) || ! is_string($row['surplus'] ?? null)) {
+                    throw new DomainException('opening_snapshot_allocation_invalid');
+                }
+                $allocated = SignedMinor::parseUnsigned($row['allocated']);
+                $surplus = SignedMinor::parseUnsigned($row['surplus']);
+                if ($opening < 0 || SignedMinor::add($allocated, $surplus) !== $closing) {
+                    throw new DomainException('opening_snapshot_allocation_conservation');
+                }
+                $rows[$key] += ['allocated' => $allocated, 'surplus' => $surplus];
+            }
         }
         ksort($rows, SORT_STRING);
         return $rows;

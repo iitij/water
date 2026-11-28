@@ -36,6 +36,7 @@ final class FinancialCloseCoordinatorTest extends TestCase
         }
         RefreshDatabaseState::$migrated = false;
         $this->artisan('migrate:fresh', ['--force' => true])->assertExitCode(0);
+        app(\App\Services\LedgerProtection::class)->install();
         DB::table('financial_scopes')->insert([
             'scope_key' => 'water', 'currency' => 'YER', 'timezone' => 'Asia/Aden',
             'mode' => 'ACTIVE', 'calendar_version' => 1, 'fence_epoch' => 10,
@@ -50,6 +51,7 @@ final class FinancialCloseCoordinatorTest extends TestCase
             public bool $enabled = true;
             public bool $coverage = true;
             public bool $replay = true;
+            public bool $disableConstraints = false;
             public ?string $predecessorHash = null;
             public ?array $nextRows = null;
             public ?array $nextCarries = null;
@@ -61,6 +63,10 @@ final class FinancialCloseCoordinatorTest extends TestCase
 
             public function evidence(string $action, array $period, int $actorId): array
             {
+                if ($this->disableConstraints) {
+                    DB::unprepared(DB::getDriverName() === 'sqlite'
+                        ? 'PRAGMA ignore_check_constraints = ON' : 'SET SESSION unique_checks = 0');
+                }
                 $h = str_repeat('a', 64);
                 $m = str_repeat('b', 64);
                 $facts = [
@@ -115,6 +121,117 @@ final class FinancialCloseCoordinatorTest extends TestCase
         } catch (DomainException $e) {
             $this->assertSame($reason, $e->getMessage());
         }
+    }
+
+    public function test_close_evidence_guard_loss_blocks_progress_but_preserves_abort(): void
+    {
+        $guard = app(\App\Services\CashCountPeriodProtection::class);
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(),
+            ['financial_scopes', 'financial_periods', 'financial_close_commands', 'financial_period_closures']);
+        $this->assertTrue($guard->active());
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_count_treasury_cash_counts_insert');
+        try {
+            $this->rejects('close_evidence_protection_missing', fn () => $this->freeze());
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            $guard->install();
+        }
+        $this->assertSame('FROZEN', $this->freeze()['current_state']);
+        $frozen = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_count_treasury_cash_counts_insert');
+        try {
+            $this->rejects('close_evidence_protection_missing', fn () => $this->prepare());
+            $this->assertEquals($frozen, $snapshot());
+        } finally {
+            $guard->install();
+        }
+        $prepared = $this->prepare();
+        $hash = $prepared['result']['attempt']['prepared']['hash'];
+        $before = $snapshot();
+        DB::unprepared('DROP TRIGGER fin_count_treasury_cash_counts_insert');
+        try {
+            $this->rejects('close_evidence_protection_missing', fn () => $this->command('approve', 3, $this->approval($hash)));
+            $this->assertEquals($before, $snapshot());
+            $this->assertSame('OPEN', $this->command('abort', 3, [
+                'uuid' => self::ABORT, 'version' => 2, 'attempt_uuid' => self::FREEZE,
+                'reason' => 'Evidence guard requires recovery',
+            ])['current_state']);
+            $this->assertNull(DB::table('financial_scopes')->value('active_freeze_uuid'));
+            $this->assertDatabaseCount('financial_period_closures', 0);
+            $this->assertDatabaseCount('financial_close_commands', 3);
+        } finally {
+            $guard->install();
+        }
+    }
+
+    public function test_close_rejects_disabled_connection_constraints_and_rolls_back(): void
+    {
+        $sqlite = DB::getDriverName() === 'sqlite';
+        $off = $sqlite ? 'PRAGMA ignore_check_constraints = ON' : 'SET SESSION unique_checks = 0';
+        $on = $sqlite ? 'PRAGMA ignore_check_constraints = OFF' : 'SET SESSION unique_checks = 1';
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(),
+            ['financial_scopes', 'financial_periods', 'financial_close_commands', 'financial_period_closures']);
+        $before = $snapshot();
+        DB::unprepared($off);
+        try {
+            $this->rejects('financial_connection_constraints_disabled', fn () => $this->freeze());
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            DB::unprepared($on);
+        }
+        $this->proof->disableConstraints = true;
+        try {
+            $this->rejects('financial_connection_constraints_disabled', fn () => $this->freeze());
+            $this->assertSame(0, DB::transactionLevel());
+            $this->assertEquals($before, $snapshot());
+        } finally {
+            $this->proof->disableConstraints = false;
+            DB::unprepared($on);
+        }
+        $this->assertSame('FROZEN', $this->freeze()['current_state']);
+        $frozen = $snapshot();
+        DB::unprepared($off);
+        try {
+            $this->rejects('financial_connection_constraints_disabled', fn () => $this->freeze());
+            $this->assertEquals($frozen, $snapshot());
+        } finally {
+            DB::unprepared($on);
+        }
+        $this->assertTrue($this->freeze()['replayed']);
+        $this->assertEquals($frozen, $snapshot());
+    }
+
+    public function test_close_refuses_missing_or_counterfeit_ledger_guard(): void
+    {
+        $guard = app(\App\Services\LedgerProtection::class);
+        $this->assertTrue($guard->active());
+        $before = DB::table('financial_scopes')->sole();
+        DB::unprepared('DROP TRIGGER ledger_reject_delete');
+        $this->rejects('close_ledger_protection_missing', fn () => $this->freeze());
+        $this->assertDatabaseCount('financial_close_commands', 0);
+        $this->assertEquals($before, DB::table('financial_scopes')->sole());
+        $fake = DB::getDriverName() === 'sqlite'
+            ? 'CREATE TRIGGER ledger_reject_delete BEFORE DELETE ON transactions FOR EACH ROW BEGIN SELECT 1; END'
+            : 'CREATE TRIGGER ledger_reject_delete BEFORE DELETE ON transactions FOR EACH ROW SET @qa_noop = 1';
+        DB::unprepared($fake);
+        try {
+            foreach ([fn () => $guard->active(), fn () => $guard->install(), fn () => $this->freeze()] as $call) {
+                try {
+                    $call();
+                    $this->fail('Counterfeit ledger guard accepted.');
+                } catch (\LogicException $error) {
+                    $this->assertSame('Unexpected ledger protection trigger: ledger_reject_delete', $error->getMessage());
+                }
+            }
+            $this->assertDatabaseCount('financial_close_commands', 0);
+            $this->assertEquals($before, DB::table('financial_scopes')->sole());
+        } finally {
+            DB::unprepared('DROP TRIGGER ledger_reject_delete');
+            $guard->install();
+        }
+        $this->assertTrue($guard->active());
+        $this->assertSame('FROZEN', $this->freeze()['current_state']);
     }
 
     public function test_freeze_prepare_approve_persists_exact_snapshot_and_replays_without_new_effects(): void
@@ -197,12 +314,114 @@ final class FinancialCloseCoordinatorTest extends TestCase
         $this->assertSame('CLOSED', $this->command('approve', 3, $approval)['current_state']);
     }
 
+    private function corruptJournalForDiagnostic(): void
+    {
+        // Simulate a privileged storage failure in the disposable test DB only.
+        DB::unprepared('DROP TRIGGER close_cmd_reject_update');
+        try {
+            DB::table('financial_close_commands')->where('command_uuid', self::FREEZE)
+                ->update(['result_state_hash' => str_repeat('0', 64)]);
+        } finally {
+            app(\App\Services\FinancialCloseJournalProtection::class)->install();
+        }
+    }
+
+    private function rejectsDirectCloseMutation(callable $attempt): void
+    {
+        try {
+            $attempt();
+            $this->fail('Close evidence unexpectedly mutable.');
+        } catch (\Illuminate\Database\QueryException $error) {
+            $this->assertStringContainsString('Financial close evidence is immutable', $error->getMessage());
+        }
+    }
+
+    public function test_permanent_close_journal_direct_mutations_and_replacements_are_rejected(): void
+    {
+        $protection = app(\App\Services\FinancialCloseJournalProtection::class);
+        $this->assertTrue($protection->active());
+        $this->freeze();
+        $prepared = $this->prepare();
+        $approval = $this->approval($prepared['result']['attempt']['prepared']['hash']);
+        $this->assertSame('CLOSED', $this->command('approve', 3, $approval)['current_state']);
+        $period = DB::table('financial_periods')->where('month', '2026-11')->sole();
+        $id = $period->id;
+        $tables = ['financial_scopes', 'financial_periods', 'financial_close_commands', 'financial_period_closures'];
+        $snapshot = fn () => array_map(fn ($table) => DB::table($table)->get()->toArray(), $tables);
+        $before = $snapshot();
+        $command = DB::table('financial_close_commands')->where('command_uuid', self::FREEZE)->sole();
+        $closure = DB::table('financial_period_closures')->where('period_id', $id)->sole();
+        foreach ([
+            fn () => DB::table('financial_close_commands')->where('command_uuid', self::FREEZE)->update(['result_state_hash' => str_repeat('0', 64)]),
+            fn () => DB::table('financial_close_commands')->where('command_uuid', self::FREEZE)->delete(),
+            fn () => DB::table('financial_period_closures')->where('period_id', $id)->update(['closure_hash' => str_repeat('0', 64)]),
+            fn () => DB::table('financial_period_closures')->where('period_id', $id)->delete(),
+            fn () => DB::table('financial_periods')->where('id', $id)->update(['state' => 'OPEN']),
+            fn () => DB::table('financial_periods')->where('id', $id)->update(['version' => 0]),
+            fn () => DB::table('financial_periods')->where('id', $id)->update(['month' => '2026-10']),
+            fn () => DB::table('financial_periods')->where('id', $id)->delete(),
+        ] as $attempt) {
+            $this->rejectsDirectCloseMutation($attempt);
+            $this->assertEquals($before, $snapshot());
+        }
+        if (DB::getDriverName() === 'sqlite') {
+            foreach ([
+                ['financial_close_commands', (array) $command],
+                ['financial_close_commands', array_replace((array) $command, ['command_uuid' => self::ABORT])],
+                ['financial_period_closures', (array) $closure],
+                ['financial_periods', array_replace((array) $period, ['state' => 'OPEN'])],
+                ['financial_periods', array_replace((array) $period, ['id' => 99, 'state' => 'OPEN'])],
+            ] as [$table, $row]) {
+                $columns = implode(', ', array_keys($row));
+                $parameters = implode(', ', array_fill(0, count($row), '?'));
+                $this->rejectsDirectCloseMutation(fn () =>
+                    DB::statement("INSERT OR REPLACE INTO {$table} ({$columns}) VALUES ({$parameters})", array_values($row)));
+                $this->assertEquals($before, $snapshot());
+            }
+        }
+        $this->assertTrue($this->command('approve', 3, $approval)['replayed']);
+        $this->assertEquals($before, $snapshot());
+    }
+
+    public function test_permanent_close_missing_protection_and_privileged_reopened_projection_fail_closed(): void
+    {
+        $protection = app(\App\Services\FinancialCloseJournalProtection::class);
+        DB::unprepared('DROP TRIGGER close_cmd_reject_delete');
+        try {
+            $this->assertFalse($protection->active());
+            $this->rejects('close_journal_protection_missing', fn () => $this->freeze());
+            $this->assertSame(0, DB::table('financial_close_commands')->count());
+        } finally {
+            $protection->install();
+        }
+        $this->freeze();
+        $prepared = $this->prepare();
+        $this->command('approve', 3, $this->approval($prepared['result']['attempt']['prepared']['hash']));
+        $id = DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        DB::unprepared('DROP TRIGGER close_period_reject_update');
+        try {
+            DB::table('financial_periods')->where('id', $id)->update(['state' => 'OPEN']);
+            $called = false;
+            $gate = app(FinancialWriteGate::class);
+            $this->rejects('financial_period_permanently_closed', fn () => $gate->withinOpenPeriod(
+                'water', '2026-11-25', new DateTimeImmutable('2026-12-01T00:00:00+03:00'),
+                function () use (&$called) { $called = true; }));
+            $this->assertFalse($called);
+            $this->assertSame(3, DB::table('financial_close_commands')->count());
+            $this->assertSame(1, DB::table('financial_period_closures')->count());
+        } finally {
+            // Restore the synthetic projection before reinstalling the guard.
+            DB::table('financial_periods')->where('id', $id)->update(['state' => 'CLOSED']);
+            $protection->install();
+        }
+        $this->assertTrue($protection->active());
+    }
+
     public function test_corrupt_journal_blocks_further_commands_and_no_production_proof_is_bound(): void
     {
         $this->assertFalse(app()->bound(FinancialCloseProofSource::class));
         $this->freeze();
-        DB::table('financial_close_commands')->where('command_uuid', self::FREEZE)
-            ->update(['result_state_hash' => str_repeat('0', 64)]);
+        $this->corruptJournalForDiagnostic();
         $this->rejects('close_journal_hash', fn () => $this->prepare());
         $this->assertSame(1, DB::table('financial_close_commands')->count());
         $this->assertSame('FROZEN', DB::table('financial_periods')->where('month', '2026-11')->value('state'));
@@ -240,6 +459,29 @@ final class FinancialCloseCoordinatorTest extends TestCase
             (int) DB::table('financial_periods')->where('month', $month)->value('id')));
     }
 
+    public function test_final_accounting_predecessor_readable_before_next_period_preparation(): void
+    {
+        $period = (int) DB::table('financial_periods')->where('month', '2026-12')->value('id');
+        $read = fn () => DB::transaction(fn () => app(\App\Services\FinancialOpeningContinuityDiagnostic::class)->predecessor($period));
+        $missing = $read();
+        $this->assertFalse($missing['predecessor_journal_verified']);
+        $this->assertSame([['code' => 'predecessor_not_closed']], $missing['issues']);
+        $this->freeze();
+        $prepared = $this->prepare();
+        $closed = $this->command('approve', 3, $this->approval($prepared['result']['attempt']['prepared']['hash']));
+        $result = $read();
+        $this->assertTrue($result['predecessor_journal_verified']);
+        $this->assertSame($closed['result']['closure']['hash'], $result['predecessor_hash']);
+        $this->assertSame(-10025, $result['rows']['subscriber:S1']['closing']);
+        $this->assertSame(10025, $result['rows']['subscriber:S2']['closing']);
+        $this->assertSame(101, $result['carries']['C1']['amount']);
+        $this->assertFalse($result['opening_source_verified']);
+        $this->assertFalse($result['closure_authorized']);
+        $this->assertSame('OPEN', DB::table('financial_periods')->where('id', $period)->value('state'));
+        $this->corruptJournalForDiagnostic();
+        $this->rejects('close_journal_hash', $read);
+    }
+
     public function test_round144_adjacent_openings_match_but_first_root_and_carry_are_unverified(): void
     {
         $closed = $this->prepareFollowingPeriod();
@@ -270,8 +512,7 @@ final class FinancialCloseCoordinatorTest extends TestCase
         $this->assertContains(['code' => 'opening_balance_mismatch', 'row' => 'subscriber:S2',
             'expected_minor' => 10025, 'actual_minor' => 10000], $result['issues']);
         $this->assertFalse($result['closure_authorized']);
-        DB::table('financial_close_commands')->where('command_uuid', self::FREEZE)
-            ->update(['result_state_hash' => str_repeat('0', 64)]);
+        $this->corruptJournalForDiagnostic();
         $this->rejects('close_journal_hash', fn () => $this->continuity('2026-12'));
     }
 

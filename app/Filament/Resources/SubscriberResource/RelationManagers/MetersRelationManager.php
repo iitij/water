@@ -74,7 +74,8 @@ class MetersRelationManager extends RelationManager
                             'meter_id' => $record->id,
                         ])),
 
-                \Filament\Actions\EditAction::make(),
+                \Filament\Actions\EditAction::make()
+                    ->using(fn (Meter $record, array $data): Meter => app(\App\Services\SingleMeterService::class)->update($record, $data)),
             ]);
     }
 }

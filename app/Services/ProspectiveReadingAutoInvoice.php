@@ -51,7 +51,7 @@ final class ProspectiveReadingAutoInvoice
     /** Caller holds subscriber and meter locks in the observation creation transaction. */
     public function capture(Reading $reading, User $actor, ?string $notes): void
     {
-        if (config('financial_candidate.invoices') !== true) return;
+        if (! app(ProspectiveInvoiceEntry::class)->enabled()) return;
         if (DB::transactionLevel() === 0 || (int) $reading->created_by !== (int) $actor->id || $this->intent((int) $reading->id, true)) {
             throw new DomainException('gated_auto_invoice_intent_conflict');
         }
@@ -74,7 +74,7 @@ final class ProspectiveReadingAutoInvoice
     /** Only the original authorized actor can resume an unposted null-notes intent from the web. */
     public function canResume(Reading $reading, User $actor): bool
     {
-        if (config('financial_candidate.invoices') !== true || $reading->is_invoiced
+        if (! app(ProspectiveInvoiceEntry::class)->enabled() || $reading->is_invoiced
             || (int) $reading->created_by !== (int) $actor->id || ! $this->allowed($actor)) return false;
         $audit = $this->intent((int) $reading->id);
         $data = $audit?->after;

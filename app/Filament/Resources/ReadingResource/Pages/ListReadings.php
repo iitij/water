@@ -30,6 +30,7 @@ class ListReadings extends ListRecords
                     Gate::authorize('create', Reading::class);
                     $actor = auth()->user();
                     return DB::transaction(function () use ($data, $actor): Reading {
+                        app(\App\Services\ReadingObservationFence::class)->lock();
                         $meter = Meter::findOrFail($data['meter_id']);
                         Subscriber::query()->lockForUpdate()->findOrFail($meter->subscriber_id);
                         $locked = Meter::query()->lockForUpdate()->findOrFail($meter->id);
@@ -47,7 +48,7 @@ class ListReadings extends ListRecords
                         try {
                             $reading = Reading::with('meter.subscriber')->findOrFail($readingId);
                             $auto = app(ProspectiveReadingAutoInvoice::class);
-                            if (config('financial_candidate.invoices') === true || $auto->hasIntent($reading)) {
+                            if (app(\App\Services\ProspectiveInvoiceEntry::class)->enabled() || $auto->hasIntent($reading)) {
                                 $invoice = $auto->attempt($reading, User::findOrFail($actorId), null);
                             } elseif (\App\Models\Setting::get('auto_issue_invoice_on_reading', '0') == '1') {
                                 $invoice = app(\App\Services\InvoiceService::class)->generateInvoice(

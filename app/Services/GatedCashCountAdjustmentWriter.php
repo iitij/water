@@ -18,6 +18,8 @@ use Illuminate\Support\Facades\DB;
  */
 final class GatedCashCountAdjustmentWriter
 {
+    private ?array $mutationIdentity = null;
+
     public function __construct(
         private FinancialWriteGate $gate,
         private TreasuryCashCountService $counts,
@@ -34,6 +36,14 @@ final class GatedCashCountAdjustmentWriter
         $date = $now->setTimezone(new DateTimeZone('Asia/Aden'))->format('Y-m-d');
         return $this->gate->withinOpenPeriod('water', $date, $now,
             function (array $context) use ($actor, $countId, $reference, $classification, $reason, $evidence, $uuid, $now): array {
+                app(TreasuryFinancialWriteProtection::class)->requireActive();
+                try {
+                    $active = app(CashCountPeriodProtection::class)->active()
+                        && app(FinancialEvidenceDestinationProtection::class)->active();
+                } catch (\LogicException $error) {
+                    throw new DomainException('cash_count_write_protection_missing', 0, $error);
+                }
+                $this->need($active, 'cash_count_write_protection_missing');
                 $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null,
                     'gated_cash_count_issuance_lock_missing');
@@ -113,7 +123,13 @@ final class GatedCashCountAdjustmentWriter
                     $this->verifier->verifyPeriod('water', $periodId);
                 }
 
-                $result = $this->counts->adjust($actor, $countId, $reference, $classification, $reason, $evidence);
+                $this->need($this->mutationIdentity === null && DB::transactionLevel() > 0, 'gated_cash_count_mutation_scope');
+                $this->mutationIdentity = [$countId, (int) $actor->id];
+                try {
+                    $result = $this->counts->adjust($actor, $countId, $reference, $classification, $reason, $evidence, $this);
+                } finally {
+                    $this->mutationIdentity = null;
+                }
                 $adjustment = $result['adjustment'];
                 $posting = $result['posting'];
                 $leg = $this->adjustments->leg((int) $posting['id']);
@@ -152,6 +168,11 @@ final class GatedCashCountAdjustmentWriter
                 }
                 return $result;
             });
+    }
+
+    public function allowsMutation(int $countId, int $actorId): bool
+    {
+        return DB::transactionLevel() > 0 && $this->mutationIdentity === [$countId, $actorId];
     }
 
     private function audit(string $event, string $type, int $id): AuditEvent

@@ -37,6 +37,17 @@ final class FinancialPostingRegistry
         $date = DateTimeImmutable::createFromFormat('!Y-m-d', $context['effective_on'], new DateTimeZone('UTC'));
         $this->need($date !== false && $date->format('Y-m-d') === $context['effective_on'], 'posting_date');
 
+        // The transaction and a plausible context are not a capability.
+        // Require the actual gate on this connection and its exact date/fence.
+        try {
+            $active = FinancialWriteGate::currentContext();
+        } catch (DomainException $error) {
+            throw new DomainException('posting_registry_requires_outer_gate', 0, $error);
+        }
+        $this->need($context === $active, 'posting_gate_context_mismatch');
+        app(FinancialConnectionIntegrity::class)->requireActive();
+
+        $this->need(app(FinancialPostingRegistryProtection::class)->active(), 'posting_registry_protection_missing');
         $canonicalLegs = $this->legs($legs);
         $payload = [
             'format' => 1, 'operation_uuid' => $uuid, 'scope' => $context['scope'],
@@ -60,6 +71,9 @@ final class FinancialPostingRegistry
                 && $context['effective_on'] >= $period->start_on && $context['effective_on'] < $period->next_on
                 && $context['effective_on'] <= $recordedAt->setTimezone(new DateTimeZone($gate->timezone))->format('Y-m-d'), 'posting_period_changed');
 
+            $this->need(! DB::table('financial_period_closures')->where('period_id', $period->id)->lockForUpdate()->first()
+                && ! DB::table('financial_close_commands')->where('period_id', $period->id)
+                    ->where('action', 'approve')->lockForUpdate()->first(), 'posting_period_permanently_closed');
             $existing = DB::table('financial_posting_operations')->where('operation_uuid', $uuid)->lockForUpdate()->first();
             if ($existing) {
                 $this->need($existing->operation_uuid === $uuid && $existing->scope_key === $context['scope']
@@ -113,6 +127,7 @@ final class FinancialPostingRegistry
         $this->need($period && $period->scope_key === $scope
             && in_array($period->state, ['OPEN', 'FROZEN', 'CLOSED'], true), 'posting_period_changed');
 
+        $this->need(app(FinancialPostingRegistryProtection::class)->active(), 'posting_registry_protection_missing');
         $epoch = $this->exactCounter($gate->fence_epoch);
         $version = $this->exactCounter($period->version);
         $expected = app(\App\Support\FinancialClosePolicy::class)->open($scope, $period->month, $gate->timezone);

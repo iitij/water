@@ -41,11 +41,23 @@ final class FinancialCloseCoordinator
             'action' => $action, 'actor' => $actorId, 'command' => $command]);
         $hash = hash('sha256', $bytes);
 
+        app(FinancialConnectionIntegrity::class)->requireActive();
         return DB::transaction(function () use ($scope, $month, $action, $actorId, $command, $now, $bytes, $hash): array {
             $gate = DB::table('financial_scopes')->where('scope_key', $scope)->lockForUpdate()->first();
             $this->need($gate && $gate->scope_key === $scope && $gate->mode === 'ACTIVE'
                 && $gate->currency === 'YER' && $gate->timezone === 'Asia/Aden'
                 && (string) $gate->calendar_version === '1', 'close_scope_inactive');
+            $this->need(app(LedgerProtection::class)->active(), 'close_ledger_protection_missing');
+            $this->need(app(FinancialCloseJournalProtection::class)->active(), 'close_journal_protection_missing');
+            $this->need(app(FinancialPostingRegistryProtection::class)->active(), 'close_registry_protection_missing');
+            $this->need(app(FinancialSourceInsertProtection::class)->active(), 'close_source_insert_protection_missing');
+            // A missing evidence guard must not be mistaken for complete proof.
+            // Keep abort available to recover from a freeze when an unrelated
+            // evidence guard is missing; the core journal guards still apply.
+            if ($action !== 'abort') {
+                $guards = app(FinancialGuardInventory::class)->inspect();
+                $this->need(! in_array(false, $guards, true), 'close_evidence_protection_missing');
+            }
             $epoch = $this->counter($gate->fence_epoch);
             $base = $this->policy->open($scope, $month, $gate->timezone);
             $period = DB::table('financial_periods')->where('scope_key', $scope)
@@ -71,6 +83,7 @@ final class FinancialCloseCoordinator
                     $this->need(($evidence['facts']['persisted_effects_verified'] ?? null) === true
                         && $state['state'] === 'CLOSED', 'close_replay_effects_unverified');
                 }
+                app(FinancialConnectionIntegrity::class)->requireActive();
                 return ['replayed' => true, 'result' => $history[$command['uuid']], 'current_state' => $state['state']];
             }
 
@@ -122,6 +135,7 @@ final class FinancialCloseCoordinator
                         'active_freeze_uuid' => $action === 'freeze' ? $next['attempt']['uuid'] : null,
                     ]) === 1, 'close_scope_update');
             }
+            app(FinancialConnectionIntegrity::class)->requireActive();
             return ['replayed' => false, 'result' => $next, 'current_state' => $next['state']];
         }, 1);
     }

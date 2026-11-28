@@ -2099,6 +2099,55 @@ final class CompletedCashRefundRequest
         return $approval;
     }
 
+    /** Read-only reverse coverage: a batch approval must have actual members,
+     * not merely be absent from the forward scan of refund requests.
+     * Caller holds the scope and issuance locks. Historical signed approvals
+     * use their persisted verification evidence, not current issuer trust.
+     */
+    public function verifyBatchAuditCoverage(): array
+    {
+        if (DB::transactionLevel() <= 0
+            || ! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
+            throw new DomainException('held_cash_reservation_context');
+        }
+        $this->guard();
+        $groups = $members = 0;
+        $seen = [];
+        $identities = [];
+        foreach (AuditEvent::query()->where('event', self::BATCH_APPROVED)->orderBy('id')->lockForUpdate()->get() as $group) {
+            $p = $group->after;
+            $countId = $p['count_id'] ?? null;
+            if (! is_int($countId) || $countId <= 0 || $group->entity_id !== (string) $countId
+                || ! is_string($p['proposal_ids_json'] ?? null)
+                || $this->batchAuditForCount($countId)?->id !== $group->id) {
+                throw new DomainException('completed_refund_batch_conflict');
+            }
+            $ids = json_decode($p['proposal_ids_json'], true, 512, JSON_THROW_ON_ERROR);
+            if (! is_array($ids) || count($ids) < 1 || count($ids) > 50
+                || count($ids) !== ($p['incident_count'] ?? null)) {
+                throw new DomainException('completed_refund_batch_conflict');
+            }
+            foreach ($ids as $uuid => $proposalId) {
+                if (! is_string($uuid) || ! is_int($proposalId) || $proposalId <= 0 || isset($seen[$uuid])) {
+                    throw new DomainException('completed_refund_batch_conflict');
+                }
+                $request = $this->find($uuid, true);
+                $closed = $request === null ? null : $this->decision($request);
+                if ($closed === null || $this->verifiedResolution($request, $closed)?->id !== $group->id) {
+                    throw new DomainException('completed_refund_batch_conflict');
+                }
+                $seen[$uuid] = true;
+                $members++;
+            }
+            $identities[] = ['audit_id' => (int) $group->id, 'actor_id' => (int) $group->actor_user_id,
+                'count_id' => $countId, 'evidence' => $p];
+            $groups++;
+        }
+        return ['groups' => $groups, 'members' => $members, 'batch_audits_verified' => true,
+            'verified_batch_identity_hash' => hash('sha256', json_encode($identities, JSON_THROW_ON_ERROR)),
+            'closure_authorized' => false];
+    }
+
     /** A closed review is not a cash recovery. Caller owns the issuance fence. */
     public function assertNoUnresolvedForAccount(int $accountId): void
     {

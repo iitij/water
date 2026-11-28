@@ -33,6 +33,12 @@ final class HistoricalInvoiceCorrectionService
     {
         abort_unless($actor->hasRole('super_admin') ||
             ($actor->can('delete', $invoice) && $actor->can('create', Invoice::class)), 403);
+        // No historical replacement writer is accepted by the prospective registry.
+        // Fail before touching source documents, allocations or ledger projections.
+        if (config('financial_candidate.invoices') === true) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException(
+                'التصحيح التاريخي للفواتير خارج نطاق النظام المحاسبي الجديد.');
+        }
         $reason = trim($reason);
         $evidence = trim($evidence);
         $validNumber = static fn ($v): bool => (is_string($v) || is_int($v) || is_float($v))
@@ -66,6 +72,13 @@ final class HistoricalInvoiceCorrectionService
         $confirmedPrice = $price === null ? null : $minor($price);
 
         return DB::transaction(function () use ($invoice, $actor, $reason, $evidence, $requested, $requestedUnits, $legacyUnits, $confirmedPrice, $minor, $decimal) {
+            // A configured financial scope must never admit this unregistered
+            // legacy correction, even when candidate switches are disabled.
+            // Use a current locking read before issuance and account locks.
+            if (DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException(
+                    'التصحيح التاريخي للفواتير خارج نطاق النظام المحاسبي الجديد.');
+            }
             // Serialize allocation-changing corrections before taking account locks.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');

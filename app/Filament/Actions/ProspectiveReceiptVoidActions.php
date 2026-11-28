@@ -14,6 +14,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Textarea;
 use Filament\Notifications\Notification;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -91,7 +92,9 @@ final class ProspectiveReceiptVoidActions
 
     private static function enabled(): bool
     {
-        return config('financial_candidate.void_api') === true && app()->environment(['testing', 'staging']);
+        return (config('financial_candidate.void_api') === true
+            || DB::table('financial_scopes')->where('scope_key', 'water')->exists())
+            && app()->environment(['testing', 'staging']);
     }
 
     private static function assertEnabled(): void

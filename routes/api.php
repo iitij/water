@@ -228,6 +228,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/cash-sessions/{id}/correct-duplicate', [CashSessionController::class, 'correctDuplicate'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/approve', [CashSessionController::class, 'approve'])->whereNumber('id');
     Route::post('/cash-sessions/{id}/handovers', [CashSessionController::class, 'recordHandover'])->whereNumber('id');
+    // Candidate shortage settlement: distinct proposal and independent decision.
+    Route::post('/cash-sessions/{id}/shortage/recovery-proposals', [\App\Http\Controllers\Api\CustodyShortageController::class, 'proposeRecovery'])->whereNumber('id');
+    Route::post('/cash-sessions/{id}/shortage/recovery-approval', [\App\Http\Controllers\Api\CustodyShortageController::class, 'approveRecovery'])->whereNumber('id');
+    Route::post('/cash-sessions/{id}/shortage/loss-proposal', [\App\Http\Controllers\Api\CustodyShortageController::class, 'proposeLoss'])->whereNumber('id');
+    Route::post('/cash-sessions/{id}/shortage/loss-approval', [\App\Http\Controllers\Api\CustodyShortageController::class, 'approveLoss'])->whereNumber('id');
     Route::get('/treasury/transfers', [\App\Http\Controllers\Api\TreasuryController::class, 'transfers']);
     Route::post('/treasury/transfers', [\App\Http\Controllers\Api\TreasuryController::class, 'dispatchTransfer']);
     Route::post('/treasury/transfers/{id}/receive', [\App\Http\Controllers\Api\TreasuryController::class, 'receiveTransfer'])->whereNumber('id');

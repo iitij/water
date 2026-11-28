@@ -241,6 +241,9 @@ class PaymentService
         }
 
         return DB::transaction(function () use ($payment, $reason, $userId, $source, $gatedWriter) {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw ValidationException::withMessages(['payment' => 'يجب تنفيذ إلغاء هذا السند عبر المسار المالي المعتمد.']);
+            }
             // Serialize allocation-changing corrections before taking account locks.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
@@ -370,6 +373,9 @@ class PaymentService
         ?GatedReceiptVoidWriter $gatedWriter = null,
     ): array {
         return DB::transaction(function () use ($payment, $reason, $userId, $source, $gatedWriter) {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw ValidationException::withMessages(['payment' => 'يجب تنفيذ إلغاء هذا السند عبر المسار المالي المعتمد.']);
+            }
             // Serialize allocation-changing corrections before taking account locks.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
@@ -449,6 +455,9 @@ class PaymentService
         ?GatedReceiptVoidWriter $gatedWriter = null,
     ): Payment {
         return DB::transaction(function () use ($payment, $approve, $actor, $notes, $source, $gatedWriter) {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw ValidationException::withMessages(['payment' => 'يجب تنفيذ إلغاء هذا السند عبر المسار المالي المعتمد.']);
+            }
             // Serialize allocation-changing corrections before taking account locks.
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Financial issuance lock is missing.');
@@ -583,6 +592,13 @@ class PaymentService
         }
         $amount = $money->decimal();
         return DB::transaction(function () use ($subscriber, $amount, $money, $invoiceId, $paymentMethod, $referenceNumber, $notes, $reason, $userId, $paymentDate, $requestedMeterId, $syncUuid, $requestedCashSessionId, $deferred, $lateReviewId, $clearedClaim, $gatedWriter, $settlementWriter) {
+            if ($paymentMethod === 'cash' && $lateReviewId !== null && ! $clearedClaim && $settlementWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_late_cash_writer_required');
+            }
+            if ($paymentMethod === 'cash' && $lateReviewId === null && ! $clearedClaim && $gatedWriter === null
+                && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_cash_writer_required');
+            }
             // Acquire the shared issuance fence before subscriber/business locks.
             // Scope-gated writers already hold it; nested acquisition is reentrant.
             $issuer = DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first();
@@ -767,6 +783,9 @@ class PaymentService
         $candidate = DB::table('noncash_collection_claims')->find($id);
         abort_unless($candidate, 404);
         return DB::transaction(function () use ($actor, $id, $statementId, $lineId, $reference, $evidence, $candidate, $gatedWriter): array {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_collection_writer_required');
+            }
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Payment issuance lock missing.');
             }
@@ -825,6 +844,9 @@ class PaymentService
         $candidate = DB::table('late_receipt_reviews')->find($id);
         abort_unless($candidate, 404);
         return DB::transaction(function () use ($actor, $id, $statementId, $lineId, $reviewReference, $bankReference, $evidence, $candidate, $gatedWriter): array {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_collection_writer_required');
+            }
             if (! DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first()) {
                 throw new \LogicException('Payment issuance lock missing.');
             }

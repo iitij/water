@@ -81,6 +81,7 @@ final class GatedRefundWriter
         $date = $now->setTimezone(new \DateTimeZone('Asia/Aden'))->format('Y-m-d');
         return $this->gate->withinOpenPeriod('water', $date, $now,
             function () use ($reviewer, $accountId, $proposalIds, $confirmation, $now, $date, $attestationIds): array {
+                $this->requireWriteProtection();
                 DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_refund_issuance_lock');
                 $reviewer = User::query()->lockForUpdate()->findOrFail($reviewer->id);
@@ -127,6 +128,7 @@ final class GatedRefundWriter
     {
         $reference = mb_strtoupper(trim($reference));
         $write = function (array $context) use ($actor, $paymentId, $accountId, $amount, $reference, $method, $date, $reason, $evidence, $uuid, $now, $reviewer, $confirmation, $resolution, $expectedProposalId, $batch): array {
+                $this->requireWriteProtection();
                 $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
                 DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
                 $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_refund_issuance_lock');
@@ -406,6 +408,20 @@ final class GatedRefundWriter
         $this->need($op !== null && $op->scope_key === 'water' && $op->effective_on === $date, 'gated_refund_prerequisite_unregistered');
         if ($verifyPeriod) $this->registry->verifyPeriod('water', (int) $op->period_id);
         return $op;
+    }
+
+    private function requireWriteProtection(): void
+    {
+        app(SubscriberFinancialWriteProtection::class)->requireActive();
+        app(TreasuryFinancialWriteProtection::class)->requireActive();
+        try {
+            $active = app(FinancialCorrectionDocumentProtection::class)->active()
+                && app(RefundReleasePeriodProtection::class)->active()
+                && app(FinancialApprovalAuditProtection::class)->active();
+        } catch (\LogicException $error) {
+            throw new DomainException('refund_financial_write_protection_missing', 0, $error);
+        }
+        $this->need($active, 'refund_financial_write_protection_missing');
     }
 
     private function need(bool $ok, string $reason): void

@@ -14,7 +14,8 @@ final class ProspectiveSettlementEntry
 {
     private function enabled(string $flag): bool
     {
-        if (config('financial_candidate.'.$flag) !== true) return false;
+        if (config('financial_candidate.'.$flag) !== true
+            && ! DB::table('financial_scopes')->where('scope_key', 'water')->exists()) return false;
         abort_unless(app()->environment(['testing', 'staging']), 503);
         return true;
     }

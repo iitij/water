@@ -102,6 +102,7 @@ final class GatedTreasuryOpeningFundingWriter
 
     private function lock(string $uuid): void
     {
+        app(TreasuryFinancialWriteProtection::class)->requireActive();
         $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1,
             'posting_uuid');
         $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null,

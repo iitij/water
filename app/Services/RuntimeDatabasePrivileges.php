@@ -12,12 +12,57 @@ final class RuntimeDatabasePrivileges
     public function inspect(): array
     {
         if (! in_array(DB::getDriverName(), ['mysql', 'mariadb'], true)) {
-            return ['accepted' => false, 'issues' => ['runtime_mysql_required']];
+            return ['accepted' => false, 'issues' => ['runtime_mysql_required'],
+                'close_control_write_isolated' => false, 'close_control_issues' => ['runtime_mysql_required']];
         }
         $pdo = DB::connection()->getPdo();
         $database = $pdo->query('SELECT DATABASE()')->fetchColumn();
         $grants = $pdo->query('SHOW GRANTS FOR CURRENT_USER()')->fetchAll(\PDO::FETCH_COLUMN);
-        return $this->evaluate((string) $database, $grants);
+        $result = $this->evaluate((string) $database, $grants);
+        // SHOW GRANTS alone is insufficient where server-mandatory roles
+        // or session roles add effective rights to the runtime identity.
+        $roles = $pdo->query('SELECT CURRENT_ROLE()')->fetchColumn();
+        if (! $this->noActiveRoles($roles)) {
+            $result['accepted'] = false;
+            $result['issues'][] = 'runtime_active_roles_unverified';
+        }
+        if (! app(FinancialConnectionIntegrity::class)->active()) {
+            $result['accepted'] = false;
+            $result['issues'][] = 'runtime_connection_constraints_disabled';
+        }
+        $isolation = $this->evaluateCloseControlIsolation((string) $database, $grants);
+        $result['close_control_write_isolated'] = $result['accepted'] && $isolation['accepted'];
+        $result['close_control_issues'] = array_values(array_unique(array_merge($result['issues'], $isolation['issues'])));
+        return $result;
+    }
+
+    /** Separate operational identity from the privileged close coordinator.
+     * A broad DML allowlist is deliberately insufficient for this check. */
+    public function evaluateCloseControlIsolation(string $database, array $grants): array
+    {
+        $base = $this->evaluate($database, $grants);
+        $issues = $base['issues'];
+        $protected = ['financial_scopes', 'financial_periods', 'financial_close_commands', 'financial_period_closures'];
+        foreach ($grants as $grant) {
+            if (! is_string($grant) || ! preg_match('/\\AGRANT ([A-Z ,]+) ON (\\S+) TO /', trim($grant), $parts)) continue;
+            $privileges = array_map('trim', explode(',', $parts[1]));
+            if (array_intersect($privileges, ['INSERT', 'UPDATE', 'DELETE']) === []) continue;
+            $scope = $parts[2];
+            if (str_ends_with($scope, '.*')) {
+                $issues[] = 'runtime_close_control_schema_write';
+                continue;
+            }
+            $table = strtolower(trim(substr($scope, strrpos($scope, '.') + 1), chr(96)));
+            if (in_array($table, $protected, true)) $issues[] = 'runtime_close_control_table_write';
+        }
+        $issues = array_values(array_unique($issues));
+        return ['accepted' => $issues === [], 'issues' => $issues];
+    }
+
+    public function noActiveRoles(mixed $roles): bool
+    {
+        // MySQL returns NONE; MariaDB may return SQL NULL.
+        return $roles === null || $roles === 'NONE';
     }
 
     /** No raw grant strings are returned: MariaDB can include credential hashes. */
@@ -40,6 +85,9 @@ final class RuntimeDatabasePrivileges
             $privileges = array_map('trim', explode(',', $parts[1]));
             $scope = $parts[2];
             if ($privileges === ['USAGE'] && $scope === '*.*') continue;
+            // MySQL FOR UPDATE requires SELECT plus UPDATE, DELETE or LOCK TABLES.
+            // Exact-schema LOCK TABLES does not grant a right to mutate control rows.
+            if ($privileges === ['LOCK TABLES'] && $scope === chr(96).$escapedSchema.chr(96).'.*') continue;
             if (array_diff($privileges, ['SELECT', 'INSERT', 'UPDATE', 'DELETE']) !== []) {
                 $issues[] = 'runtime_privilege_exceeds_dml';
                 continue;

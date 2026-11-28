@@ -45,6 +45,7 @@ final class GatedCountedCashWriterTest extends TestCase
         $this->travelTo(\Carbon\Carbon::instance($this->nowAt()));
         RefreshDatabaseState::$migrated = false;
         $this->artisan('migrate:fresh', ['--force' => true])->assertExitCode(0);
+        app(\App\Services\LedgerProtection::class)->install();
         DB::table('financial_scopes')->insert([
             'scope_key' => 'water', 'currency' => 'YER', 'timezone' => 'Asia/Aden',
             'mode' => 'ACTIVE', 'calendar_version' => 1, 'fence_epoch' => 5,
@@ -109,7 +110,7 @@ final class GatedCountedCashWriterTest extends TestCase
                 '5.00', self::UUID, $this->nowAt(), (int) $session->id)['payment']
             : app(PaymentService::class)->collectPayment($original, '5.00', userId: $collector->id,
                 paymentDate: '2026-11-25', syncUuid: self::UUID, requestedCashSessionId: (int) $session->id);
-        $session = $sessions->close($session->fresh(), $counted);
+        $session = $sessions->close($session->fresh(), $counted, null, $collector);
         if ($approved) $session = $sessions->decide($session, true, $reviewer);
         return [$collector, $reviewer, $session->fresh(), $original, $receipt->fresh()];
     }

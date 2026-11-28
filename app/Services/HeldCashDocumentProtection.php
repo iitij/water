@@ -46,8 +46,15 @@ final class HeldCashDocumentProtection
 
     public function install(): void
     {
+        $missing = [];
         foreach ($this->definitions() as $name => $definition) {
-            if (! $this->exists($name)) DB::unprepared("CREATE TRIGGER {$name} {$definition}");
+            $state = $this->state($name, $definition);
+            if ($state === 'mismatch') throw new \LogicException('Unexpected held cash protection: '.$name);
+            if ($state === 'missing') $missing[$name] = $definition;
+        }
+        // Validate all existing definitions before any DDL, including on MySQL.
+        foreach ($missing as $name => $definition) {
+            DB::unprepared("CREATE TRIGGER {$name} {$definition}");
         }
         if (! $this->active()) throw new \LogicException('Held cash protection missing after installation.');
     }
@@ -55,15 +62,27 @@ final class HeldCashDocumentProtection
     public function active(): bool
     {
         foreach ($this->definitions() as $name => $definition) {
-            if (! $this->exists($name)) return false;
+            if ($this->state($name, $definition) !== 'valid') return false;
         }
         return true;
     }
 
-    private function exists(string $name): bool
+    private function state(string $name, string $definition): string
     {
-        return DB::getDriverName() === 'sqlite'
-            ? DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)->exists()
-            : FinancialTriggerMetadata::query()->where('TRIGGER_NAME', $name)->isNotEmpty();
+        if (! preg_match('/\ABEFORE (INSERT|UPDATE|DELETE) ON ([a-z_]+)(?: FOR EACH ROW)?\s+(.+)\z/s', $definition, $parts)) {
+            throw new \LogicException('Invalid held cash protection definition.');
+        }
+        if (DB::getDriverName() === 'sqlite') {
+            $row = DB::table('sqlite_master')->where('type', 'trigger')->where('name', $name)->first();
+            if ($row === null) return 'missing';
+            $valid = $row->tbl_name === $parts[2] && $row->sql === "CREATE TRIGGER {$name} {$definition}";
+        } else {
+            $row = FinancialTriggerMetadata::query()->where('TRIGGER_NAME', $name)->first();
+            if ($row === null) return 'missing';
+            $normalize = static fn (string $sql): string => preg_replace('/\s+/', ' ', trim($sql));
+            $valid = $row->EVENT_OBJECT_TABLE === $parts[2] && $row->EVENT_MANIPULATION === $parts[1]
+                && $row->ACTION_TIMING === 'BEFORE' && $normalize($row->ACTION_STATEMENT) === $normalize($parts[3]);
+        }
+        return $valid ? 'valid' : 'mismatch';
     }
 }

@@ -29,7 +29,11 @@ final class BankReconciliationController extends ApiController
             'lines.*.amount' => ['required', 'regex:/^-?\d{1,12}(?:\.\d{1,2})?$/D'],
             'lines.*.description' => ['nullable', 'string', 'max:500'],
         ]);
-        return response()->json($service->import($request->user(), $id, $data));
+        try {
+            return response()->json($service->import($request->user(), $id, $data));
+        } catch (\DomainException $error) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException($error->getMessage(), $error);
+        }
     }
 
     public function show(Request $request, int $id, BankReconciliationService $service)
@@ -68,7 +72,8 @@ final class BankReconciliationController extends ApiController
             'amount' => ['prohibited'], 'effective_on' => ['prohibited'], 'account_id' => ['prohibited'],
         ]);
         try {
-            if (config('financial_candidate.bank_fees') === true) {
+            if (config('financial_candidate.bank_fees') === true
+                || \Illuminate\Support\Facades\DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
                 abort_unless(app()->environment(['testing', 'staging']), 503);
                 $request->validate(['operation_uuid' => ['required', 'uuid']]);
                 $line = \Illuminate\Support\Facades\DB::table('bank_statement_lines')
@@ -99,7 +104,11 @@ final class BankReconciliationController extends ApiController
             'posting_id' => ['required', 'integer', 'min:1'],
             'evidence' => ['required', 'string', 'min:10', 'max:2000'],
         ]);
-        return response()->json($service->matchLine($request->user(), $id, (int) $data['line_id'],
-            (int) $data['posting_id'], $data['evidence']));
+        try {
+            return response()->json($service->matchLine($request->user(), $id, (int) $data['line_id'],
+                (int) $data['posting_id'], $data['evidence']));
+        } catch (\DomainException $error) {
+            throw new \Symfony\Component\HttpKernel\Exception\ConflictHttpException($error->getMessage(), $error);
+        }
     }
 }

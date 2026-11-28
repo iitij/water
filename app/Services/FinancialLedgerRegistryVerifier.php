@@ -32,6 +32,7 @@ final class FinancialLedgerRegistryVerifier
         $result = $this->registry->verifyPeriod($scope, $periodId);
         $verified = 0;
         $unverified = 0;
+        $unverifiedSources = [];
         $treasuryVerified = 0;
         $openingVerified = 0;
         $heldVerified = 0;
@@ -61,6 +62,8 @@ final class FinancialLedgerRegistryVerifier
             }
             if (! in_array($event->source_type, ['ledger_transaction', 'treasury_posting', 'treasury_opening'], true)) {
                 $unverified++;
+                $unverifiedSources[] = ['source_type' => $event->source_type, 'source_id' => $event->source_id,
+                    'leg' => $event->leg, 'reason' => 'unsupported_source_type'];
                 continue;
             }
             $id = $event->source_id;
@@ -88,12 +91,16 @@ final class FinancialLedgerRegistryVerifier
                     $actual = $this->custody->leg((int) $id);
                 } elseif ($posting->kind === 'collector_funding') {
                     $actual = $this->openingFunding->funding((int) $id, $event->operation_effective_on);
+                } elseif ($posting->kind === 'custody_shortage_recovery') {
+                    $actual = app(CustodyShortageRecoveryWriter::class)->leg((int) $id);
                 } elseif (in_array($posting->kind, ['bank_fee', 'cash_count_adjustment'], true)) {
                     $actual = $this->adjustment->leg((int) $id);
                 } elseif (in_array($posting->kind, ['bank_collection', 'late_cash_receipt'], true)) {
                     $actual = $this->collection->leg((int) $id);
                 } else {
                     $unverified++;
+                    $unverifiedSources[] = ['source_type' => $event->source_type, 'source_id' => $event->source_id,
+                        'leg' => $event->leg, 'reason' => 'unsupported_treasury_kind'];
                     continue;
                 }
             } else {
@@ -124,6 +131,7 @@ final class FinancialLedgerRegistryVerifier
             'registered_opening_legs_verified' => $openingVerified,
             'registered_held_legs_verified' => $heldVerified,
             'other_registered_legs_unverified' => $unverified,
+            'unverified_registered_sources' => $unverifiedSources,
         ];
     }
 }

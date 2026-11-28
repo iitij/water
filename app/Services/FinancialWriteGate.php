@@ -54,6 +54,7 @@ final class FinancialWriteGate
             throw new DomainException('invalid_financial_destination');
         }
 
+        app(FinancialConnectionIntegrity::class)->requireActive();
         return DB::transaction(function () use ($scope, $effectiveOn, $asOf, $writer): mixed {
             $gate = DB::table('financial_scopes')->where('scope_key', $scope)->lockForUpdate()->first();
             if (! $gate || $gate->scope_key !== $scope || $gate->mode !== 'ACTIVE'
@@ -71,6 +72,13 @@ final class FinancialWriteGate
                 || $period->next_on !== $expected['next']) {
                 throw new DomainException('financial_period_not_open');
             }
+            // Even if the mutable projection were reopened by a privileged
+            // bypass, terminal evidence must never be treated as an open period.
+            if (DB::table('financial_period_closures')->where('period_id', $period->id)->lockForUpdate()->first()
+                || DB::table('financial_close_commands')->where('period_id', $period->id)
+                    ->where('action', 'approve')->lockForUpdate()->first()) {
+                throw new DomainException('financial_period_permanently_closed');
+            }
             $version = $this->counter($period->version);
             $id = $this->counter($period->id);
             if ($id === 0 || $effectiveOn > $asOf->setTimezone(new DateTimeZone($gate->timezone))->format('Y-m-d')) {
@@ -82,11 +90,42 @@ final class FinancialWriteGate
             if (self::$current !== null) throw new DomainException('financial_gate_context_conflict');
             self::$current = ['context' => $context, 'pdo' => spl_object_id(DB::connection()->getPdo())];
             try {
-                return $writer($context);
+                $result = $writer($context);
+                app(FinancialConnectionIntegrity::class)->requireActive();
+                $this->assertUnchanged($context, $expected);
+                return $result;
             } finally {
                 self::$current = null;
             }
         }, 1);
+    }
+
+    /** The callback must not mutate the financial control plane, including
+     * via an internal service on the same locked connection. Recheck before
+     * commit, not only when recording an individual posting.
+     */
+    private function assertUnchanged(array $context, array $expected): void
+    {
+        if (DB::transactionLevel() !== 1 || self::$current === null
+            || self::$current['pdo'] !== spl_object_id(DB::connection()->getPdo())) {
+            throw new DomainException('financial_gate_transaction_changed');
+        }
+        $gate = DB::table('financial_scopes')->where('scope_key', $context['scope'])->lockForUpdate()->first();
+        if (! $gate || $gate->mode !== 'ACTIVE' || $gate->active_freeze_uuid !== null
+            || $gate->currency !== 'YER' || $gate->timezone !== 'Asia/Aden'
+            || $this->counter($gate->calendar_version) !== 1
+            || $this->counter($gate->fence_epoch) !== $context['epoch']) {
+            throw new DomainException('financial_gate_scope_changed');
+        }
+        $period = DB::table('financial_periods')->where('id', $context['period_id'])->lockForUpdate()->first();
+        if (! $period || $period->scope_key !== $context['scope'] || $period->month !== substr($context['effective_on'], 0, 7)
+            || $period->state !== 'OPEN' || $period->start_on !== $expected['start']
+            || $period->next_on !== $expected['next'] || $this->counter($period->version) !== $context['version']
+            || DB::table('financial_period_closures')->where('period_id', $context['period_id'])->lockForUpdate()->first()
+            || DB::table('financial_close_commands')->where('period_id', $context['period_id'])
+                ->where('action', 'approve')->lockForUpdate()->first()) {
+            throw new DomainException('financial_gate_period_changed');
+        }
     }
 
     private function counter(mixed $raw): int

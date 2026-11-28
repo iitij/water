@@ -9,6 +9,7 @@ use App\Models\Subscriber;
 use App\Models\User;
 use App\Support\FinancialAmount;
 use DomainException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
@@ -20,7 +21,8 @@ final class ProspectiveCashReceiptEntry
 {
     public function enabled(): bool
     {
-        if (config('financial_candidate.cash_receipts') !== true) return false;
+        if (config('financial_candidate.cash_receipts') !== true
+            && ! DB::table('financial_scopes')->where('scope_key', 'water')->exists()) return false;
         abort_unless(app()->environment(['testing', 'staging']), 503, 'مسار التحصيل التجريبي غير متاح في الإنتاج.');
         return true;
     }

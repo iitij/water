@@ -41,6 +41,14 @@ final class GatedCashHandoverWriter
     {
         $reference = mb_strtoupper(trim($reference));
         return $this->gate->withinOpenPeriod('water', $date, $now, function (array $context) use ($actor, $sessionId, $accountId, $amount, $reference, $date, $evidence, $uuid, $now): array {
+            app(TreasuryFinancialWriteProtection::class)->requireActive();
+            try {
+                $active = app(LedgerSourceInsertProtection::class)->active()
+                    && app(RegisteredDocumentProtection::class)->active();
+            } catch (\LogicException $error) {
+                throw new DomainException('cash_handover_write_protection_missing', 0, $error);
+            }
+            $this->need($active, 'cash_handover_write_protection_missing');
             $this->need(preg_match('/\A[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/', $uuid) === 1, 'posting_uuid');
             DB::table('financial_periods')->where('scope_key', 'water')->orderBy('id')->lockForUpdate()->get();
             $this->need(DB::table('payment_issuance_locks')->where('id', 1)->lockForUpdate()->first() !== null, 'gated_handover_issuance_lock');

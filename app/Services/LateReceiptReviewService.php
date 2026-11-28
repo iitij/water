@@ -50,7 +50,11 @@ final class LateReceiptReviewService
             'reason' => $data['reason'] ?? null,
             'notes' => $data['notes'] ?? null,
         ];
-        return DB::transaction(function () use ($claim, $collector): array {
+        return app(CollectionEvidenceGate::class)->run($collector, function (User $current): void {
+            abort_unless($current->hasAnyRole(['super_admin', 'admin', 'collector'])
+                || $current->can('Create:Payment') || $current->can('create_payment')
+                || ($current->roles->isEmpty() && in_array($current->role, ['super_admin', 'admin', 'collector'], true)), 403);
+        }, function (User $collector) use ($claim): array {
             $this->lockIssuance();
             Subscriber::query()->lockForUpdate()->findOrFail($claim['subscriber_id']);
             $existing = DB::table('late_receipt_reviews')->where('sync_uuid', $claim['sync_uuid'])->lockForUpdate()->first();
@@ -80,7 +84,7 @@ final class LateReceiptReviewService
                 'actor_user_id' => $collector->id,
             ]);
             return (array) DB::table('late_receipt_reviews')->find($id);
-        }, 3);
+        });
     }
 
     private function requiredAudit(string $event, array $context): void
@@ -158,7 +162,10 @@ final class LateReceiptReviewService
             || ($approve && (mb_strlen($reference) < 3 || mb_strlen($reference) > 150))) {
             throw ValidationException::withMessages(['evidence' => 'يلزم دليل مستقل ومرجع تسوية صالح.']);
         }
-        return DB::transaction(function () use ($id, $actor, $candidate, $evidence, $approve, $reference, $method, $verifiedCashDestination, $gatedWriter): array {
+        $work = function (User $actor) use ($id, $candidate, $evidence, $approve, $reference, $method, $verifiedCashDestination, $gatedWriter): array {
+            if ($approve && $candidate->payment_method === 'cash' && $gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_late_cash_writer_required');
+            }
             $this->lockIssuance();
             $subscriber = Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();
@@ -221,7 +228,12 @@ final class LateReceiptReviewService
                     'counted_cash_allocation' => $approve && $method === 'already_counted'], 'actor_user_id' => $actor->id,
             ]);
             return (array) DB::table('late_receipt_reviews')->find($id);
-        }, 3);
+        };
+        if (! $approve) {
+            return app(CollectionEvidenceGate::class)->run($actor,
+                fn (User $current) => abort_unless($this->canDecide($current), 403), $work);
+        }
+        return DB::transaction(fn () => $work($actor), 3);
     }
 
     /** Separate physical receipt, outside the original counted till. */
@@ -239,6 +251,9 @@ final class LateReceiptReviewService
         $candidate = DB::table('late_receipt_reviews')->find($id);
         abort_unless($candidate, 404);
         return DB::transaction(function () use ($id, $actor, $accountId, $receivedOn, $reference, $evidence, $candidate, $gatedWriter): array {
+            if ($gatedWriter === null && DB::table('financial_scopes')->where('scope_key', 'water')->lockForUpdate()->first()) {
+                throw new \DomainException('gated_late_cash_writer_required');
+            }
             $this->lockIssuance();
             Subscriber::query()->lockForUpdate()->findOrFail($candidate->subscriber_id);
             $review = DB::table('late_receipt_reviews')->where('id', $id)->lockForUpdate()->first();

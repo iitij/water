@@ -71,7 +71,8 @@ final class TreasuryController extends ApiController
         try {
             $uuid = $data['operation_uuid'] ?? null;
             unset($data['operation_uuid']);
-            if (config('financial_candidate.treasury_opening_funding') === true) {
+            if (config('financial_candidate.treasury_opening_funding') === true
+                || DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
                 abort_unless(app()->environment(['testing', 'staging']), 503);
                 $request->validate(['operation_uuid' => ['required', 'uuid']]);
                 return response()->json($candidate(strtolower($uuid), $data));
@@ -121,7 +122,8 @@ final class TreasuryController extends ApiController
         try {
             $uuid = $data['operation_uuid'] ?? null;
             unset($data['operation_uuid']);
-            if (config('financial_candidate.treasury_transfers') === true) {
+            if (config('financial_candidate.treasury_transfers') === true
+                || DB::table('financial_scopes')->where('scope_key', 'water')->exists()) {
                 abort_unless(app()->environment(['testing', 'staging']), 503);
                 $request->validate(['operation_uuid' => ['required', 'uuid']]);
                 return response()->json(['transfer' => $candidate(strtolower($uuid), $data)]);
