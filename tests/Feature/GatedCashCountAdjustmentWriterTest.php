@@ -10170,6 +10170,13 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
                 ['uuid' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'version' => 0, 'reason' => 'Independent integrated accounting close review'], $now));
         $this->assertDatabaseCount('financial_close_commands', 0);
         $this->assertDatabaseCount('financial_period_closures', 0);
+        $opening = $report['predecessor_opening_reconciliation'];
+        $this->assertFalse($opening['matched']);
+        $this->assertSame([['code' => 'opening_predecessor_journal_unverified']], $opening['issues']);
+        $this->assertFalse($opening['closure_authorized']);
+        $this->assertSame(hash('sha256', json_encode($opening, JSON_THROW_ON_ERROR)),
+            $report['readiness_inventory']['predecessor_opening_rows_hash']);
+        $this->assertContains('predecessor_opening_rows_unmatched', $report['blockers']);
         $this->assertSame($report, $diagnostic->inspect($reviewer, $period, $now));
     }
 

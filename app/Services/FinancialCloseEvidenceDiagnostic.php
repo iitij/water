@@ -130,14 +130,19 @@ final class FinancialCloseEvidenceDiagnostic
         if ($heldMovements !== null && ! $heldMovements['matched']) $blockers[] = 'cutoff_held_movements_unmatched';
         $physicalMovements = $ended ? app(FinancialCutoffMovementReconciliation::class)->inspectPhysical($outstanding, $movement) : null;
         if ($physicalMovements !== null && ! $physicalMovements['matched']) $blockers[] = 'cutoff_physical_movements_unmatched';
+        $predecessorOpenings = $ended ? app(FinancialPredecessorOpeningReconciliation::class)->inspect(
+            $predecessor, $accountMovements, $outstanding, $physicalMovements, $heldMovements) : null;
+        if ($predecessorOpenings !== null && ! $predecessorOpenings['matched']) $blockers[] = 'predecessor_opening_rows_unmatched';
         sort($blockers, SORT_STRING);
         $manifest = $ended ? $this->cutoffManifest($period, $cashEvidence,
             $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements, $physicalMovements, $settlement) : null;
         // Keep operational readiness separate from the financial cutoff fingerprint.
         // This inventory is diagnostic, including when its blockers are nonempty.
-        $readiness = ['format_version' => 3, 'scope' => 'water', 'period_id' => $periodId,
+        $readiness = ['format_version' => 4, 'scope' => 'water', 'period_id' => $periodId,
             'predecessor_evidence_hash' => $predecessor === null ? null : hash('sha256', json_encode($predecessor, JSON_THROW_ON_ERROR)),
             'predecessor_journal_verified' => $predecessor['predecessor_journal_verified'] ?? false,
+            'predecessor_opening_rows_matched' => $predecessorOpenings['matched'] ?? false,
+            'predecessor_opening_rows_hash' => $predecessorOpenings === null ? null : hash('sha256', json_encode($predecessorOpenings, JSON_THROW_ON_ERROR)),
             'adjacent_carry_evidence_hash' => $outstanding === null ? null : hash('sha256', json_encode($outstanding['adjacent_carry'], JSON_THROW_ON_ERROR)),
             'adjacent_carry_recorded_matched' => $outstanding['adjacent_carry']['recorded_adjacent_rollforward_verified'] ?? false,
             'snapshot_continuity_hash' => $continuity === null ? null : hash('sha256', json_encode($continuity, JSON_THROW_ON_ERROR)),
@@ -155,6 +160,7 @@ final class FinancialCloseEvidenceDiagnostic
             'writer_coverage' => $writerCoverage, 'source' => $source, 'movements' => $movement, 'held_liabilities' => $heldPeriod, 'settlement' => $settlement, 'refund_incidents' => $incident, 'refund_batch_coverage' => $batchCoverage,
             'outstanding_period_evidence' => $outstanding, 'cash_period_evidence' => $cashEvidence, 'subscriber_period_evidence' => $subscriberCutoff, 'current_subscriber_diagnostic' => $subscriber, 'snapshot_continuity' => $continuity, 'predecessor_evidence' => $predecessor,
             'collection_period_evidence' => $claims,
+            'predecessor_opening_reconciliation' => $predecessorOpenings,
             'cutoff_account_movements' => $accountMovements, 'cutoff_held_movements' => $heldMovements, 'cutoff_physical_movements' => $physicalMovements, 'cutoff_evidence_manifest' => $manifest, 'readiness_inventory' => $readiness, 'blockers' => $blockers, 'source_coverage_verified' => false,
             'period_end_balances_verified' => false, 'closure_authorized' => false];
     }
