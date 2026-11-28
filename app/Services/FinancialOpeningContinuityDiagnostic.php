@@ -204,6 +204,17 @@ final class FinancialOpeningContinuityDiagnostic
                 throw new DomainException('opening_snapshot_conservation');
             }
             $rows[$key] = ['opening' => $opening, 'closing' => $closing];
+            if ($row['sector'] === 'allocation') {
+                if (! is_string($row['allocated'] ?? null) || ! is_string($row['surplus'] ?? null)) {
+                    throw new DomainException('opening_snapshot_allocation_invalid');
+                }
+                $allocated = SignedMinor::parseUnsigned($row['allocated']);
+                $surplus = SignedMinor::parseUnsigned($row['surplus']);
+                if ($opening < 0 || SignedMinor::add($allocated, $surplus) !== $closing) {
+                    throw new DomainException('opening_snapshot_allocation_conservation');
+                }
+                $rows[$key] += ['allocated' => $allocated, 'surplus' => $surplus];
+            }
         }
         ksort($rows, SORT_STRING);
         return $rows;

@@ -42,7 +42,7 @@ jobs:
       - name: Compare predecessor opening rows by sector and identity
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/FinancialPredecessorOpeningReconciliationTest.php
       - name: Verify actual close inventory and cross-period source evidence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -106,4 +106,4 @@ jobs:
       - name: Compare predecessor opening rows by sector and identity
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/FinancialPredecessorOpeningReconciliationTest.php
       - name: Verify actual close inventory and cross-period source evidence
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff|test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods' tests/Feature/GatedCashCountAdjustmentWriterTest.php

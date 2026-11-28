@@ -190,6 +190,9 @@ final class FinancialSubscriberPeriodEvidence
                 if ($saved !== null && $saved['closing'] !== $previous['recorded_balance_minor']) {
                     throw new DomainException('subscriber_cutoff_predecessor_mismatch');
                 }
+                $row['allocation_opening_available_minor'] = $previous['available_minor'];
+                $row['allocation_opening_allocated_minor'] = $previous['allocated_minor'];
+                $row['allocation_opening_unallocated_minor'] = $previous['unallocated_minor'];
                 $row['opening_minor'] = $previous['recorded_balance_minor'];
                 $row['net_movement_minor'] = $net;
                 $row['closing_minor'] = $row['recorded_balance_minor'];
@@ -305,6 +308,8 @@ final class FinancialSubscriberPeriodEvidence
             throw new DomainException('subscriber_cutoff_allocation_policy_mismatch');
         }
         $row = ['subscriber_id' => $id, 'billed_minor' => $billed, 'available_minor' => $available,
+            'allocation_opening_available_minor' => 0, 'allocation_opening_allocated_minor' => 0,
+            'allocation_opening_unallocated_minor' => 0,
             'allocated_minor' => $paid, 'unallocated_minor' => $unallocated,
             'recorded_balance_minor' => SignedMinor::subtract($available, $billed),
             'revision_id' => $revision ? (int) $revision->id : null,

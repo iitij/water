@@ -131,14 +131,14 @@ final class FinancialCloseEvidenceDiagnostic
         $physicalMovements = $ended ? app(FinancialCutoffMovementReconciliation::class)->inspectPhysical($outstanding, $movement) : null;
         if ($physicalMovements !== null && ! $physicalMovements['matched']) $blockers[] = 'cutoff_physical_movements_unmatched';
         $predecessorOpenings = $ended ? app(FinancialPredecessorOpeningReconciliation::class)->inspect(
-            $predecessor, $accountMovements, $outstanding, $physicalMovements, $heldMovements) : null;
+            $predecessor, $accountMovements, $outstanding, $physicalMovements, $heldMovements, $subscriberCutoff) : null;
         if ($predecessorOpenings !== null && ! $predecessorOpenings['matched']) $blockers[] = 'predecessor_opening_rows_unmatched';
         sort($blockers, SORT_STRING);
         $manifest = $ended ? $this->cutoffManifest($period, $cashEvidence,
             $settlement['bank_period_evidence'], $subscriberCutoff, $outstanding, $claims, $source, $movement, $accountMovements, $heldMovements, $physicalMovements, $settlement) : null;
         // Keep operational readiness separate from the financial cutoff fingerprint.
         // This inventory is diagnostic, including when its blockers are nonempty.
-        $readiness = ['format_version' => 4, 'scope' => 'water', 'period_id' => $periodId,
+        $readiness = ['format_version' => 5, 'scope' => 'water', 'period_id' => $periodId,
             'predecessor_evidence_hash' => $predecessor === null ? null : hash('sha256', json_encode($predecessor, JSON_THROW_ON_ERROR)),
             'predecessor_journal_verified' => $predecessor['predecessor_journal_verified'] ?? false,
             'predecessor_opening_rows_matched' => $predecessorOpenings['matched'] ?? false,

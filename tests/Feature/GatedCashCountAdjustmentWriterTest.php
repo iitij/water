@@ -10709,6 +10709,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(-60, $row['opening_minor']);
         $this->assertSame(80, $row['net_movement_minor']);
         $this->assertSame(20, $row['closing_minor']);
+        $this->assertSame(40, $row['allocation_opening_available_minor']);
+        $this->assertSame(40, $row['allocation_opening_allocated_minor']);
+        $this->assertSame(0, $row['allocation_opening_unallocated_minor']);
         $this->assertSame(100, $row['allocated_minor']);
         $this->assertSame(20, $row['unallocated_minor']);
         $this->assertSame($first['rows'][0]['source_hash'], $row['prior_source_hash']);
@@ -10726,6 +10729,9 @@ final class GatedCashCountAdjustmentWriterTest extends TestCase
         $this->assertSame(100, $last['net_movement_minor']);
         $this->assertSame(120, $last['closing_minor']);
         $this->assertSame(0, $last['billed_minor']);
+        $this->assertSame(120, $last['allocation_opening_available_minor']);
+        $this->assertSame(100, $last['allocation_opening_allocated_minor']);
+        $this->assertSame(20, $last['allocation_opening_unallocated_minor']);
         $this->assertSame(0, $last['allocated_minor']);
         $this->assertSame(120, $last['unallocated_minor']);
         $this->assertSame($row['source_hash'], $last['prior_source_hash']);
