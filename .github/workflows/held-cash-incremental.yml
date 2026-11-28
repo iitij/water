@@ -143,6 +143,16 @@ jobs:
           GRANT INSERT ON `water_test`.`audit_events` TO 'water_runtime_qa'@'%';
           GRANT INSERT ON `water_test`.`financial_posting_operations` TO 'water_runtime_qa'@'%';
           GRANT INSERT ON `water_test`.`financial_posting_events` TO 'water_runtime_qa'@'%';
+          GRANT INSERT, UPDATE ON `water_test`.`invoices` TO 'water_runtime_qa'@'%';
+          GRANT INSERT ON `water_test`.`invoice_items` TO 'water_runtime_qa'@'%';
+          GRANT INSERT ON `water_test`.`invoice_tariff_lines` TO 'water_runtime_qa'@'%';
+          GRANT UPDATE ON `water_test`.`readings` TO 'water_runtime_qa'@'%';
+          GRANT UPDATE ON `water_test`.`subscribers` TO 'water_runtime_qa'@'%';
+          GRANT UPDATE ON `water_test`.`meters` TO 'water_runtime_qa'@'%';
+          GRANT INSERT ON `water_test`.`transactions` TO 'water_runtime_qa'@'%';
+          GRANT INSERT ON `water_test`.`payment_allocation_revisions` TO 'water_runtime_qa'@'%';
+          GRANT INSERT ON `water_test`.`payment_allocations` TO 'water_runtime_qa'@'%';
+          GRANT INSERT, UPDATE ON `water_test`.`document_sequences` TO 'water_runtime_qa'@'%';
           GRANT EXECUTE ON PROCEDURE `water_test`.`financial_read_trigger_metadata` TO 'water_runtime_qa'@'%';
           SQL
       - name: Verify actual runtime locks and denied financial control writes
@@ -151,3 +161,9 @@ jobs:
           DB_PASSWORD: disposable_runtime_password
           FINANCIAL_TRIGGER_METADATA_ROUTINE: 'true'
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_restricted_runtime_can_' tests/Feature/RuntimeCloseControlIsolationTest.php
+      - name: Verify restricted subscriber invoice and collection cycle
+        env:
+          DB_USERNAME: water_runtime_qa
+          DB_PASSWORD: disposable_runtime_password
+          FINANCIAL_TRIGGER_METADATA_ROUTINE: 'true'
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_restricted_subscriber_invoice_receipt_and_allocation_cycle tests/Feature/RuntimeCloseControlIsolationTest.php

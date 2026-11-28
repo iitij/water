@@ -25,6 +25,14 @@ final class RuntimeCloseControlIsolationTest extends TestCase
         }
         $actor = \App\Models\User::factory()->create(['role' => 'admin', 'email' => 'runtime-posting@example.test']);
         $actor->assignRole(\Spatie\Permission\Models\Role::findOrCreate('super_admin', 'web'));
+        $this->travelTo(\Carbon\Carbon::parse('2026-11-25T08:30:00Z'));
+        app(\App\Services\LedgerProtection::class)->install();
+        $subscriber = \App\Models\Subscriber::create(['name' => 'Synthetic restricted subscriber',
+            'square_id' => \App\Models\Square::create(['name' => 'Restricted posting square'])->id, 'status' => 'active']);
+        \App\Models\Tariff::create(['name' => 'Restricted posting tariff', 'unit_price' => '1.00', 'is_active' => true]);
+        $meter = \App\Models\Meter::create(['subscriber_id' => $subscriber->id, 'unique_code' => 'QA-RESTRICTED-METER']);
+        $this->createMeasuredReading(['meter_id' => $meter->id, 'reading_date' => '2026-11-24',
+            'period_start' => '2026-11-01', 'period_end' => '2026-11-24', 'previous_reading' => 0, 'current_reading' => 1]);
         app(\App\Services\FinancialTriggerMetadata::class)->install();
         $this->assertTrue(app(\App\Services\FinancialTriggerMetadata::class)->deploymentVerified());
         $this->assertTrue($actor->hasRole('super_admin'));
@@ -62,6 +70,59 @@ final class RuntimeCloseControlIsolationTest extends TestCase
             'source_type' => 'treasury_opening', 'leg' => 'opening', 'amount_minor' => 123]);
         $this->assertDatabaseHas('audit_events', ['event' => 'treasury.opened', 'entity_id' => (string) $first['account']['id']]);
         $this->assertSame(0, DB::transactionLevel());
+        $this->assertDatabaseCount('financial_period_closures', 0);
+        $this->assertDatabaseHas('financial_periods', ['month' => '2026-11', 'state' => 'OPEN', 'version' => 2]);
+    }
+
+    public function test_restricted_subscriber_invoice_receipt_and_allocation_cycle(): void
+    {
+        if (! app()->environment('testing') || DB::getDriverName() !== 'mysql'
+            || DB::getDatabaseName() !== 'water_test'
+            || config('database.connections.mysql.username') !== 'water_runtime_qa') {
+            $this->markTestSkipped('Requires restricted disposable MySQL runtime identity.');
+        }
+        $this->assertTrue(app(RuntimeDatabasePrivileges::class)->inspect()['close_control_write_isolated']);
+        app(\App\Services\SubscriberFinancialWriteProtection::class)->requireActive();
+        $actor = \App\Models\User::query()->where('email', 'runtime-posting@example.test')->sole();
+        $meter = \App\Models\Meter::query()->where('unique_code', 'QA-RESTRICTED-METER')->sole();
+        $subscriber = $meter->subscriber;
+        $now = new DateTimeImmutable('2026-11-25T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($now));
+        $invoiceUuid = 'e138e336-1c32-4ab4-8c46-68dbdb5f6720';
+        $receiptUuid = 'e138e337-1c32-4ab4-8c46-68dbdb5f6720';
+        $invoices = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $receiptWriter = app(\App\Services\GatedCashReceiptWriter::class);
+        $issue = fn () => $invoices->issue($actor, (int) $subscriber->id, (int) $meter->id, $invoiceUuid, $now);
+        $first = $issue();
+        $invoice = $first['invoice'];
+        $this->assertTrue($first['registry_created']);
+        $this->assertSame('1.00', $invoice->total_amount);
+        $this->assertSame(-100, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertFalse($issue()['registry_created']);
+        $collect = fn () => $receiptWriter->collect($actor, (int) $subscriber->id, '0.40', $receiptUuid,
+            $now, invoiceId: (int) $invoice->id);
+        $receipt = $collect();
+        $this->assertTrue($receipt['registry_created']);
+        $this->assertFalse($collect()['registry_created']);
+        $this->assertSame(-60, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertSame('0.40', $invoice->fresh()->amount_paid);
+        $this->assertDatabaseCount('invoices', 1);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertDatabaseHas('readings', ['meter_id' => $meter->id, 'invoice_id' => $invoice->id, 'is_invoiced' => 1]);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $invoiceUuid,
+            'source_type' => 'ledger_transaction', 'leg' => 'subscriber', 'amount_minor' => -100]);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $receiptUuid,
+            'source_type' => 'ledger_transaction', 'leg' => 'subscriber', 'amount_minor' => 40]);
+        $this->assertSame(2, DB::table('financial_posting_operations')->whereIn('operation_uuid', [$invoiceUuid, $receiptUuid])->count());
+        $this->assertSame(2, DB::table('financial_posting_events')->whereIn('operation_uuid', [$invoiceUuid, $receiptUuid])->count());
+        $period = (int) DB::table('financial_periods')->where('month', '2026-11')->value('id');
+        $this->travelTo(\Carbon\Carbon::parse('2026-12-01T00:00:00+03:00'));
+        $proof = DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($period));
+        $this->assertTrue($proof['all_cutoff_accounts_match'], json_encode($proof));
+        $this->assertTrue($proof['allocation_policy_verified']);
+        $this->assertSame(40, $proof['rows'][0]['allocated_minor']);
+        $this->assertSame(-60, $proof['rows'][0]['closing_minor']);
+        $this->assertFalse($proof['closure_authorized']);
         $this->assertDatabaseCount('financial_period_closures', 0);
         $this->assertDatabaseHas('financial_periods', ['month' => '2026-11', 'state' => 'OPEN', 'version' => 2]);
     }
