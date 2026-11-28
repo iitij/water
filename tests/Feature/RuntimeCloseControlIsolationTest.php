@@ -129,7 +129,7 @@ final class RuntimeCloseControlIsolationTest extends TestCase
         $this->assertDatabaseHas('financial_periods', ['month' => '2026-11', 'state' => 'OPEN', 'version' => 2]);
     }
 
-    public function test_restricted_runtime_reversal_in_next_period_preserves_prior_cutoff(): void
+    public function test_restricted_runtime_reversal_preserves_prior_cutoff_and_rejects_uncertified_predecessor(): void
     {
         if (! app()->environment('testing') || DB::getDriverName() !== 'mysql'
             || DB::getDatabaseName() !== 'water_test'
@@ -184,17 +184,20 @@ final class RuntimeCloseControlIsolationTest extends TestCase
         $this->assertEquals($priorLegs, DB::table('financial_posting_events')->whereIn('operation_uuid', array_column($priorOperations, 'operation_uuid'))->orderBy('id')->get()->all());
         $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
         $this->assertSame($before, $inspect((int) $nov->id));
-        $after = $inspect((int) $dec->id);
-        $this->assertTrue($after['all_cutoff_accounts_match'], json_encode($after));
-        $this->assertTrue($after['allocation_policy_verified']);
-        $row = $after['rows'][0];
-        $this->assertSame(-60, $row['opening_minor']);
-        $this->assertSame(100, $row['net_movement_minor']);
-        $this->assertSame(40, $row['closing_minor']);
-        $this->assertSame(0, $row['allocated_minor']);
-        $this->assertSame(40, $row['unallocated_minor']);
-        $this->assertSame($before['rows'][0]['source_hash'], $row['prior_source_hash']);
-        $this->assertFalse($after['closure_authorized']);
+        // A CLOSED projection without its journal cannot establish an
+        // independently verified opening. This is a required rejection,
+        // separate from the successful operational reversal above.
+        try {
+            $inspect((int) $dec->id);
+            $this->fail('Uncertified predecessor projection was accepted.');
+        } catch (\DomainException $error) {
+            $this->assertSame('close_period_projection', $error->getMessage());
+        }
+        $this->assertSame(0, DB::transactionLevel());
+        $this->assertSame(40, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertSame('0.00', $invoice->fresh()->amount_paid);
+        $this->assertDatabaseCount('payments', 1);
+        $this->assertSame($before, $inspect((int) $nov->id));
         $this->assertDatabaseCount('financial_period_closures', 0);
         $this->assertEquals($nov, DB::table('financial_periods')->where('id', $nov->id)->sole());
     }

@@ -177,4 +177,4 @@ jobs:
           DB_USERNAME: water_runtime_qa
           DB_PASSWORD: disposable_runtime_password
           FINANCIAL_TRIGGER_METADATA_ROUTINE: 'true'
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_restricted_runtime_reversal_in_next_period_preserves_prior_cutoff tests/Feature/RuntimeCloseControlIsolationTest.php
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_restricted_runtime_reversal_preserves_prior_cutoff_and_rejects_uncertified_predecessor tests/Feature/RuntimeCloseControlIsolationTest.php
