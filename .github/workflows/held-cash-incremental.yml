@@ -39,8 +39,8 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify affected subscriber cutoff across three periods
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods|test_final_accounting_subscriber_cutoff_reports_prior_movements_without_inventing_opening' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Verify focused predecessor reconciliation
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite tests/Unit/FinancialPredecessorOpeningReconciliationTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,8 +101,7 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify affected subscriber cutoff across three periods
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods|test_final_accounting_subscriber_cutoff_reports_prior_movements_without_inventing_opening' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+
       - name: Prepare disposable financial control schema
         run: |
           set -euo pipefail
@@ -162,3 +161,20 @@ jobs:
           DB_PASSWORD: disposable_runtime_password
           FINANCIAL_TRIGGER_METADATA_ROUTINE: 'true'
         run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_restricted_subscriber_invoice_receipt_and_allocation_cycle tests/Feature/RuntimeCloseControlIsolationTest.php
+      - name: Establish disposable closed projection and next open period
+        env:
+          QA_CONTAINER: ${{ job.services.mysql.id }}
+        run: |
+          set -euo pipefail
+          test -n "$QA_CONTAINER"
+          docker exec -i "$QA_CONTAINER" mysql -uroot -pdisposable_root_password water_test <<'SQL'
+          UPDATE financial_periods SET state='CLOSED' WHERE scope_key='water' AND month='2026-11' AND state='OPEN';
+          INSERT INTO financial_periods (scope_key, month, start_on, next_on, state, version)
+            VALUES ('water', '2026-12', '2026-12-01', '2027-01-01', 'OPEN', 0);
+          SQL
+      - name: Verify restricted next-period reversal and immutable prior cutoff
+        env:
+          DB_USERNAME: water_runtime_qa
+          DB_PASSWORD: disposable_runtime_password
+          FINANCIAL_TRIGGER_METADATA_ROUTINE: 'true'
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter test_restricted_runtime_reversal_in_next_period_preserves_prior_cutoff tests/Feature/RuntimeCloseControlIsolationTest.php

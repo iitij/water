@@ -129,6 +129,76 @@ final class RuntimeCloseControlIsolationTest extends TestCase
         $this->assertDatabaseHas('financial_periods', ['month' => '2026-11', 'state' => 'OPEN', 'version' => 2]);
     }
 
+    public function test_restricted_runtime_reversal_in_next_period_preserves_prior_cutoff(): void
+    {
+        if (! app()->environment('testing') || DB::getDriverName() !== 'mysql'
+            || DB::getDatabaseName() !== 'water_test'
+            || config('database.connections.mysql.username') !== 'water_runtime_qa') {
+            $this->markTestSkipped('Requires restricted disposable MySQL runtime identity.');
+        }
+        $this->assertTrue(app(RuntimeDatabasePrivileges::class)->inspect()['close_control_write_isolated']);
+        $actor = \App\Models\User::query()->where('email', 'runtime-posting@example.test')->sole();
+        $meter = \App\Models\Meter::query()->where('unique_code', 'QA-RESTRICTED-METER')->sole();
+        $subscriber = $meter->subscriber;
+        $invoice = \App\Models\Invoice::query()->where('subscriber_id', $subscriber->id)->sole();
+        $nov = DB::table('financial_periods')->where('month', '2026-11')->sole();
+        $dec = DB::table('financial_periods')->where('month', '2026-12')->sole();
+        // The isolated migration identity establishes a CLOSED projection only.
+        // It is not a certified journal or an authorized close transition.
+        $this->assertSame('CLOSED', $nov->state);
+        $this->assertSame('OPEN', $dec->state);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+        $now = new DateTimeImmutable('2026-12-02T08:30:00Z');
+        $this->travelTo(\Carbon\Carbon::instance($now));
+        $inspect = fn (int $id) => DB::transaction(fn () => app(\App\Services\FinancialSubscriberPeriodEvidence::class)->inspect($id));
+        $before = $inspect((int) $nov->id);
+        $this->assertTrue($before['all_cutoff_accounts_match'], json_encode($before));
+        $this->assertSame(-60, $before['rows'][0]['closing_minor']);
+        $this->assertSame(40, $before['rows'][0]['allocated_minor']);
+        $priorTransactions = DB::table('transactions')->where('subscriber_id', $subscriber->id)->orderBy('id')->get()->all();
+        $priorOperations = DB::table('financial_posting_operations')->where('period_id', $nov->id)->orderBy('operation_uuid')->get()->all();
+        $priorLegs = DB::table('financial_posting_events')->whereIn('operation_uuid', array_column($priorOperations, 'operation_uuid'))->orderBy('id')->get()->all();
+        $receipt = app(\App\Services\GatedCashReceiptWriter::class);
+        try {
+            $receipt->collect($actor, (int) $subscriber->id, '0.10', 'e138e338-1c32-4ab4-8c46-68dbdb5f6720',
+                $now, invoiceId: (int) $invoice->id, effectiveOn: '2026-11-30');
+            $this->fail('Closed period accepted a new receipt.');
+        } catch (\DomainException $error) {
+            $this->assertSame('financial_period_not_open', $error->getMessage());
+        }
+        $this->assertDatabaseCount('payments', 1);
+        $writer = app(\App\Services\GatedInvoiceTransferWriter::class);
+        $uuid = 'e138e339-1c32-4ab4-8c46-68dbdb5f6720';
+        $cancel = fn () => $writer->cancel($actor, (int) $invoice->id,
+            'Independent documented prospective invoice cancellation', $uuid, $now);
+        $this->assertTrue($cancel()['registry_created']);
+        $this->assertFalse($cancel()['registry_created']);
+        $this->assertSame('cancelled', $invoice->fresh()->status);
+        $this->assertSame(40, $subscriber->fresh()->getAccountBalanceMinor());
+        $this->assertDatabaseHas('financial_posting_operations', ['operation_uuid' => $uuid, 'period_id' => $dec->id, 'effective_on' => '2026-12-02']);
+        $this->assertDatabaseHas('financial_posting_events', ['operation_uuid' => $uuid, 'amount_minor' => 100, 'leg' => 'subscriber']);
+        $this->assertDatabaseHas('audit_events', ['event' => 'invoice.cancelled', 'entity_id' => (string) $invoice->id]);
+        $this->assertSame(1, DB::table('financial_posting_events')->where('operation_uuid', $uuid)->count());
+        $this->assertEquals($priorTransactions, DB::table('transactions')->whereIn('id', array_column($priorTransactions, 'id'))->orderBy('id')->get()->all());
+        $this->assertEquals($priorOperations, DB::table('financial_posting_operations')->where('period_id', $nov->id)->orderBy('operation_uuid')->get()->all());
+        $this->assertEquals($priorLegs, DB::table('financial_posting_events')->whereIn('operation_uuid', array_column($priorOperations, 'operation_uuid'))->orderBy('id')->get()->all());
+        $this->travelTo(\Carbon\Carbon::parse('2027-01-01T00:00:00+03:00'));
+        $this->assertSame($before, $inspect((int) $nov->id));
+        $after = $inspect((int) $dec->id);
+        $this->assertTrue($after['all_cutoff_accounts_match'], json_encode($after));
+        $this->assertTrue($after['allocation_policy_verified']);
+        $row = $after['rows'][0];
+        $this->assertSame(-60, $row['opening_minor']);
+        $this->assertSame(100, $row['net_movement_minor']);
+        $this->assertSame(40, $row['closing_minor']);
+        $this->assertSame(0, $row['allocated_minor']);
+        $this->assertSame(40, $row['unallocated_minor']);
+        $this->assertSame($before['rows'][0]['source_hash'], $row['prior_source_hash']);
+        $this->assertFalse($after['closure_authorized']);
+        $this->assertDatabaseCount('financial_period_closures', 0);
+        $this->assertEquals($nov, DB::table('financial_periods')->where('id', $nov->id)->sole());
+    }
+
     public function test_restricted_runtime_can_lock_control_rows_but_cannot_write_them(): void
     {
         if (! app()->environment('testing') || DB::getDriverName() !== 'mysql'
