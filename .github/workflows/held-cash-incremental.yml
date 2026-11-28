@@ -39,8 +39,10 @@ jobs:
           mkdir -p bootstrap/cache storage/framework/views storage/framework/cache/data storage/framework/sessions storage/framework/testing storage/logs
           composer install --no-interaction --no-progress --prefer-dist
           git diff --exit-code -- composer.lock
-      - name: Verify terminal subscriber cutoff and dependent source fences
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_subscriber_birth_insert_cannot_change_closed_cutoff_inventory|test_source_allocation_fence_preserves_closed_revisions_and_allows_later_reinstatement|test_source_graph_fence_protects_square_cascade_and_parent_replacement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Integrated accounting cycle and cross-period reconciliation
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss|test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Actual close boundary and writer coverage acceptance
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime|test_close_evidence_actual_coordinator_refuses_incomplete_proof|test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure' tests/Feature/GatedCashCountAdjustmentWriterTest.php
   mysql:
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'release/resume-175-final-accounting-integration'
     runs-on: ubuntu-24.04
@@ -101,5 +103,7 @@ jobs:
           test -n "$QA_CONTAINER"
           docker exec "$QA_CONTAINER" mysql -uroot -pdisposable_root_password -e 'SET GLOBAL log_bin_trust_function_creators=1; SELECT @@global.log_bin_trust_function_creators;'
 
-      - name: Verify terminal subscriber cutoff and dependent source fences
-        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_subscriber_birth_insert_cannot_change_closed_cutoff_inventory|test_source_allocation_fence_preserves_closed_revisions_and_allows_later_reinstatement|test_source_graph_fence_protects_square_cascade_and_parent_replacement' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Integrated accounting cycle and cross-period reconciliation
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_integrated_registered_cycle_reaches_actual_close_gate|test_final_accounting_integrated_cycle_with_shortage_recovery_and_residual_loss|test_final_accounting_subscriber_invoice_allocation_and_reversal_across_three_periods|test_outstanding_period_evidence_conserves_three_sectors_across_cutoff' tests/Feature/GatedCashCountAdjustmentWriterTest.php
+      - name: Actual close boundary and writer coverage acceptance
+        run: vendor/bin/phpunit --fail-on-skipped --fail-on-empty-test-suite --filter 'test_final_accounting_writer_inventory_detects_missing_guard_and_unsafe_runtime|test_close_evidence_actual_coordinator_refuses_incomplete_proof|test_close_evidence_ended_period_never_substitutes_current_balance_or_authorizes_closure' tests/Feature/GatedCashCountAdjustmentWriterTest.php
